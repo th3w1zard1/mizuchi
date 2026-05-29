@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "/home/brunner56/.cursor/plugins/local/matching-decompilation-re/hooks/decomp-match-claim-guard.sh",
+        "timeout": 5
+      }
+    ]
+  }
+}

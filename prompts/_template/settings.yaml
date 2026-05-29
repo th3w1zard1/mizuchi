@@ -1,0 +1,6 @@
+functionName: REPLACE_ME
+targetObjectPath: build/obj/REPLACE_ME.o
+asm: |
+  /* Export from Ghidra disassembly — full function, GAS syntax */
+  /* glabel REPLACE_ME */
+  /* ... */

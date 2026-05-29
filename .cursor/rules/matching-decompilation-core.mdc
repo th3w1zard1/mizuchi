@@ -1,0 +1,42 @@
+---
+description: Core matching decompilation discipline — objdiff gate, pipeline order, sandbox rules, evidence for match claims
+alwaysApply: true
+---
+
+# Matching Decompilation Core
+
+## Match definition
+
+A function is **matched** only when **objdiff reports 0 differences** between the target object file and the candidate compiled from submitted C.
+
+## Pipeline order
+
+1. Get Context (m2ctx)
+2. Programmatic: m2c → compile → objdiff → permuter — **stop on 0 diff**
+3. AI agent loop — only if programmatic did not match
+4. Integrator — only after verified 0 diff and user intent to land in repo
+
+## Agent sandbox
+
+- Do not modify project source files during the matching loop unless explicitly in integrate phase
+- Test candidates via compile + objdiff (or `compile_and_view_assembly`)
+- Feed compiler errors and objdiff output into the next attempt
+
+## Forbidden claims
+
+Never say "matched", "done", or "byte-identical" without running objdiff and reporting **0** diffs.
+
+Ghidra pseudocode ≠ proof. m2c output ≠ proof.
+
+## Skills to load
+
+| Task | Skill |
+|------|-------|
+| Overview | `matching-decompilation-overview` |
+| Ghidra | `ghidra-re-workflow` |
+| Pipeline | `decomp-pipeline` |
+| Verify | `decomp-verify-match` |
+
+## Out of scope
+
+Benchmark methodology, model scoring studies, and task-set selection for evaluation papers.
