@@ -4,8 +4,10 @@
 
 1. User instruction — RE workflow only, no benchmarks
 2. Plugin `matching-decompilation-re` artifacts
-3. [Research brief](https://github.com/macabeus/mizuchi) via plugin `docs/research-brief.md`
-4. Mizuchi upstream README / integrator docs
+3. [Chris Lewis one-shot decompilation article](https://blog.chrislewis.au/the-unexpected-effectiveness-of-one-shot-decompilation-with-claude/)
+4. [Macabeus matching decompilation article](https://macabeus.medium.com/can-llms-really-do-matching-decompilation-i-tested-60-functions-to-find-out-4e39b0ae4288)
+5. [Research brief](https://github.com/macabeus/mizuchi) via plugin `docs/research-brief.md`
+6. Mizuchi upstream README / integrator docs
 
 ## Caveat register
 

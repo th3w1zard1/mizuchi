@@ -18,6 +18,9 @@ Matching decompilation for reverse-engineered binaries (KOTOR / Odyssey focus). 
 | `/decomp-function` | Run full pipeline (programmatic → AI) |
 | `/decomp-integrate` | Land verified match into source tree |
 
+Local command specs live in `.cursor/commands/`.
+CLI mirror for shell execution: `./scripts/decomp-cli.sh`.
+
 ## Skills (plugin)
 
 Load via `@matching-decompilation-overview` or by name:
@@ -31,6 +34,8 @@ Load via `@matching-decompilation-overview` or by name:
 - `decomp-verify-match` — objdiff gate before integrate
 - `decomp-integrator` — post-match landing
 - `decomp-workflow-checklist` — end-to-end per-function checklist
+
+Workspace skill stubs and quick references: `.cursor/skills/`.
 
 ## Agents
 
@@ -47,6 +52,7 @@ Plugin reference: `docs/reference/agent-pitfalls.md` in the matching-decompilati
 - Local project: `agentdecompile_projects/my_project`
 
 Use MCP `agdec-http` tools; see plugin `docs/reference/mcp-tools.md`.
+Workspace MCP wiring template: `.cursor/mcp.json`.
 
 ## Mizuchi upstream
 
@@ -81,5 +87,7 @@ When a full decomp project uses [macabeus/mizuchi](https://github.com/macabeus/m
 4. Ghidra decomp is exploration only
 
 ## Research source
+
+[The Unexpected Effectiveness of One-Shot Decompilation with Claude](https://blog.chrislewis.au/the-unexpected-effectiveness-of-one-shot-decompilation-with-claude/) — one-shot workflow framing and lessons learned.
 
 [Can LLMs Really Do Matching Decompilation?](https://macabeus.medium.com/can-llms-really-do-matching-decompilation-i-tested-60-functions-to-find-out-4e39b0ae4288) — workflow packaged here; benchmark scoring excluded.

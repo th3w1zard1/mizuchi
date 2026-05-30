@@ -1,0 +1,42 @@
+{
+  "mcpServers": {
+    "agdec-http": {
+      "transport": "http",
+      "url": "http://170.9.241.140:13100/mcp"
+    },
+    "mizuchi": {
+      "transport": "stdio",
+      "command": "mizuchi",
+      "args": [
+        "mcp",
+        "--config",
+        "mizuchi.yaml"
+      ],
+      "env": {}
+    },
+    "workspace-context": {
+      "transport": "stdio",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/scripts/get-workspace-context.sh"
+      ],
+      "env": {}
+    },
+    "list-prompts": {
+      "transport": "stdio",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/scripts/list-prompts.sh"
+      ],
+      "env": {}
+    },
+    "run-objdiff": {
+      "transport": "stdio",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/scripts/run-objdiff.sh"
+      ],
+      "env": {}
+    }
+  }
+}

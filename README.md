@@ -7,7 +7,9 @@ Cursor workspace for **matching decompilation** on reverse-engineered game binar
 1. Enable plugin **matching-decompilation-re** in Cursor → Settings → Plugins  
    Path: `~/.cursor/plugins/local/matching-decompilation-re/`
 2. Read `AGENTS.md` for commands, skills, Ghidra MCP, and invariants.
-3. For a new function:
+3. Check local command specs in `.cursor/commands/` and MCP config in `.cursor/mcp.json`.
+4. Use `./scripts/decomp-cli.sh verify-surface` to assert subagents/hooks/rules/skills/commands/MCP/CLI surfaces.
+5. For a new function:
    - `./scripts/bootstrap-re-pipeline.sh --prompt prompts/<fn>/` — initialize required prompt files
    - `/ghidra-scout` — find function, export asm + types
    - `/decomp-prompt` — scaffold or refine `prompts/<fn>/` (or copy `prompts/_template/` manually)

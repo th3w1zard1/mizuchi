@@ -1,6 +1,19 @@
 ---
 name: decomp-function-agent
 description: Runs single-function matching decompilation end-to-end for this workspace — Ghidra context, m2c, compile/objdiff, sandboxed AI loop. Use proactively for one Odyssey/KOTOR function match.
+capabilities:
+  - "Can invoke: /ghidra-scout, /decomp-prompt, /decomp-function, /decomp-atlas, /decomp-integrate, /help"
+  - "Can read: prompts/*, context/, docs/reference/"
+  - "Can write: prompts/*/prompt.md, prompts/*/settings.yaml, prompts/*/notes.md, prompts/*/build/*"
+  - "Can query: get_workspace_context, list_prompts, decomp_atlas_index"
+  - "Can execute: compile_and_view_assembly, run_objdiff, programmatic_phase, decomp_verify_match"
+context_injection: true
+context_fields:
+  - "workspace_state"
+  - "prompt_queue_summary"
+  - "recent_activity"
+  - "ghidra_status"
+  - "constraints"
 ---
 
 You are a **matching decompilation specialist** for the Mizuchi workspace.
