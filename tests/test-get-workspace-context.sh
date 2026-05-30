@@ -31,13 +31,13 @@ test_script_exists() {
 
 test_returns_valid_json() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   echo "$output" | jq . > /dev/null 2>&1
 }
 
 test_has_required_fields() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   
   for field in prompt_queue ghidra_status build_artifacts active_branches workspace_metrics; do
     if ! echo "$output" | jq ".${field}" > /dev/null 2>&1; then
@@ -49,13 +49,13 @@ test_has_required_fields() {
 
 test_prompt_queue_is_array() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   [[ "$(echo "$output" | jq -r '.prompt_queue | type')" == "array" ]]
 }
 
 test_workspace_metrics_structure() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   local metrics=$(echo "$output" | jq '.workspace_metrics')
   
   for field in total_prompts matched integrated match_rate_percent integration_rate_percent; do
@@ -68,7 +68,7 @@ test_workspace_metrics_structure() {
 
 test_active_branches_structure() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   local branches=$(echo "$output" | jq '.active_branches')
   
   for field in current_branch remote_count unpushed_commits; do
@@ -81,7 +81,7 @@ test_active_branches_structure() {
 
 test_ghidra_status_structure() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   local status=$(echo "$output" | jq '.ghidra_status')
   
   for field in connected_servers loaded_programs analysis_state; do
@@ -94,7 +94,7 @@ test_ghidra_status_structure() {
 
 test_prompt_count_accuracy() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   local reported_count=$(echo "$output" | jq '.workspace_metrics.total_prompts')
   
   local actual_count=0
@@ -125,7 +125,7 @@ test_performance() {
 
 test_git_info_populated() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$("$script_path" 2>/dev/null)
   local branch=$(echo "$output" | jq -r '.active_branches.current_branch')
   
   [[ -n "$branch" ]]

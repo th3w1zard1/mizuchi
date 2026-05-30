@@ -123,8 +123,8 @@ extract_context_field() {
       ;;
     prompt_queue_summary)
       echo "$context_json" | jq -c '{
-        total: (.prompt_queue | length),
-        recent: (.prompt_queue | sort_by(.last_updated_mtime) | reverse | .[0:3] | map({name: .name, status: .status}))
+        total: ((.prompt_queue // []) | length),
+        recent: ((.prompt_queue // []) | sort_by(.last_updated_mtime // 0) | reverse | .[0:3] | map({name: .name, status: .status}))
       }'
       ;;
     recent_activity)

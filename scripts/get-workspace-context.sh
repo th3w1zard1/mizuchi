@@ -96,18 +96,19 @@ build_prompt_queue() {
 
 # Get git branch and status
 get_active_branches() {
-  local current_branch
-  current_branch=$(cd "$root_dir" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  
-  local remotes
-  remotes=$(cd "$root_dir" && git remote 2>/dev/null | wc -l || echo "0")
-  
-  # Count unpushed commits
+  local current_branch="unknown"
+  local remotes=0
   local unpushed=0
-  if [[ "$current_branch" != "unknown" ]]; then
-    unpushed=$(cd "$root_dir" && git log "origin/$current_branch..HEAD" --oneline 2>/dev/null | wc -l || echo "0")
+
+  if (cd "$root_dir" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+    current_branch=$(cd "$root_dir" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    remotes=$(cd "$root_dir" && git remote 2>/dev/null | wc -l | tr -d '[:space:]')
+    if [[ "$current_branch" != "unknown" ]] && \
+       (cd "$root_dir" && git rev-parse --verify "origin/$current_branch" >/dev/null 2>&1); then
+      unpushed=$(cd "$root_dir" && git log "origin/$current_branch..HEAD" --oneline 2>/dev/null | wc -l | tr -d '[:space:]')
+    fi
   fi
-  
+
   jq -n \
     --arg branch "$current_branch" \
     --arg remotes "$remotes" \
