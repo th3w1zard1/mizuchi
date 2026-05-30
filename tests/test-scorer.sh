@@ -11,6 +11,8 @@ cp "$root_dir/scripts/lib/queue-schema.sh" "$work_dir/scripts/lib/"
 cp "$root_dir/scripts/lib/queue-state.sh" "$work_dir/scripts/lib/"
 cp "$root_dir/scripts/lib/scorer-heuristic.sh" "$work_dir/scripts/lib/"
 cp "$root_dir/scripts/lib/scorer-ml-hooks.sh" "$work_dir/scripts/lib/"
+cp "$root_dir/scripts/lib/check-log.sh" "$work_dir/scripts/lib/"
+cp "$root_dir/scripts/lib/guide-manifest.sh" "$work_dir/scripts/lib/"
 
 cat >"$work_dir/prompts/fun_easy/prompt.md" <<'EOF'
 ```asm

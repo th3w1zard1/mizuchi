@@ -5,6 +5,11 @@
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 script_path="$root_dir/scripts/list-prompts.sh"
 
+# JSON is stdout; verbose logging is stderr (default).
+list_prompts_stdout() {
+  "$script_path" "$@" 2>/dev/null
+}
+
 tests_run=0
 tests_passed=0
 tests_failed=0
@@ -31,25 +36,25 @@ test_script_exists() {
 
 test_returns_valid_json() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   echo "$output" | jq . > /dev/null 2>&1
 }
 
 test_has_prompts_field() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   echo "$output" | jq ".prompts" > /dev/null 2>&1
 }
 
 test_prompts_is_array() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   [[ "$(echo "$output" | jq -r '.prompts | type')" == "array" ]]
 }
 
 test_prompt_items_have_required_fields() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   local prompt_count=$(echo "$output" | jq '.prompts | length')
   
   if [[ $prompt_count -eq 0 ]]; then
@@ -68,7 +73,7 @@ test_prompt_items_have_required_fields() {
 
 test_happy_path_lists_all_prompts() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   
   local reported_count=$(echo "$output" | jq '.prompts | length')
   local actual_count=0
@@ -90,7 +95,7 @@ test_happy_path_lists_all_prompts() {
 
 test_prompt_name_matches_folder() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   
   # Check that reported names match actual folders
   local reported_names=$(echo "$output" | jq -r '.prompts[].name' | sort)
@@ -116,7 +121,7 @@ test_prompt_name_matches_folder() {
 
 test_status_values_are_valid() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   
   # All status values should be one of: pending, matched, in_progress, integrated, blocked
   local statuses=$(echo "$output" | jq -r '.prompts[].status' | sort -u)
@@ -137,7 +142,7 @@ test_status_values_are_valid() {
 
 test_function_name_is_present() {
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   local prompt_count=$(echo "$output" | jq '.prompts | length')
   
   if [[ $prompt_count -eq 0 ]]; then
@@ -151,7 +156,7 @@ test_function_name_is_present() {
 
 test_filter_by_status_matched() {
   local output
-  output=$("$script_path" status=matched 2>&1)
+  output=$(list_prompts_stdout status=matched)
   
   local filtered_statuses=$(echo "$output" | jq -r '.prompts[].status' | sort -u)
   
@@ -166,7 +171,7 @@ test_filter_by_status_matched() {
 
 test_filter_by_status_in_progress() {
   local output
-  output=$("$script_path" status=in_progress 2>&1)
+  output=$(list_prompts_stdout status=in_progress)
   
   # Should return valid JSON regardless
   echo "$output" | jq . > /dev/null 2>&1
@@ -174,7 +179,7 @@ test_filter_by_status_in_progress() {
 
 test_filter_by_status_integrated() {
   local output
-  output=$("$script_path" status=integrated 2>&1)
+  output=$(list_prompts_stdout status=integrated)
   
   # Should return valid JSON regardless
   echo "$output" | jq . > /dev/null 2>&1
@@ -182,7 +187,7 @@ test_filter_by_status_integrated() {
 
 test_filter_by_status_pending() {
   local output
-  output=$("$script_path" status=pending 2>&1)
+  output=$(list_prompts_stdout status=pending)
   
   # Should return valid JSON regardless
   echo "$output" | jq . > /dev/null 2>&1
@@ -190,7 +195,7 @@ test_filter_by_status_pending() {
 
 test_filter_by_status_blocked() {
   local output
-  output=$("$script_path" status=blocked 2>&1)
+  output=$(list_prompts_stdout status=blocked)
 
   # Should return valid JSON regardless
   echo "$output" | jq . > /dev/null 2>&1
@@ -199,7 +204,7 @@ test_filter_by_status_blocked() {
 test_invalid_status_filter_returns_error() {
   local output
   set +e
-  output=$("$script_path" status=invalid_status 2>&1)
+  output=$(list_prompts_stdout status=invalid_status)
   local rc=$?
   set -e
 
@@ -212,7 +217,7 @@ test_empty_queue_returns_empty_array() {
   # This test would require temporarily removing prompts
   # For now, just verify that the structure is correct
   local output
-  output=$("$script_path" 2>&1)
+  output=$(list_prompts_stdout)
   
   # Even if empty, should be an array
   [[ "$(echo "$output" | jq -r '.prompts | type')" == "array" ]]
@@ -220,7 +225,7 @@ test_empty_queue_returns_empty_array() {
 
 test_performance() {
   local start_time=$(date +%s%N)
-  "$script_path" > /dev/null 2>&1
+  "$script_path" > /dev/null
   local end_time=$(date +%s%N)
   local elapsed_ms=$(( (end_time - start_time) / 1000000 ))
   
@@ -229,7 +234,7 @@ test_performance() {
 
 test_filter_does_not_break_structure() {
   local output
-  output=$("$script_path" status=matched 2>&1)
+  output=$(list_prompts_stdout status=matched)
   
   # Even when filtered, structure should have prompts field
   echo "$output" | jq '.prompts' > /dev/null 2>&1

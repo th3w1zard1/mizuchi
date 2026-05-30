@@ -5,7 +5,37 @@ set -euo pipefail
 # Returns JSON array of available prompt folders with metadata
 # Optional filter: status=matched|in_progress|integrated|pending|blocked
 
-root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/check-log.sh
+source "$ROOT/scripts/lib/check-log.sh"
+# shellcheck source=scripts/lib/guide-manifest.sh
+source "$ROOT/scripts/lib/guide-manifest.sh"
+
+quiet=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quiet) quiet=1; shift ;;
+    -h|--help)
+      cat <<EOF
+Usage: list-prompts.sh [status=<filter>] [--quiet]
+
+JSON output on stdout; verbose trace on stderr (default).
+
+Examples:
+  ./scripts/list-prompts.sh
+  ./scripts/list-prompts.sh status=matched
+  ./scripts/list-prompts.sh --quiet
+EOF
+      exit 0
+      ;;
+    *) break ;;
+  esac
+done
+
+CHECK_LOG_QUIET=$quiet
+check_log_init "list-prompts"
+guide_manifest_load "$ROOT"
+guide_manifest_trace_defaults "$ROOT"
 
 # Helper: extract status from notes.md
 get_prompt_status() {
@@ -70,13 +100,13 @@ get_last_updated() {
 
 # Build prompts array
 build_prompts_array() {
-  local prompts_dir="$root_dir/prompts"
+  local prompts_dir="$GUIDE_PROMPTS_DIR"
   local prompts=()
-  
-  if [[ ! -d "$prompts_dir" ]]; then
+
+  check_log_read_dir "$prompts_dir" "$(guide_manifest_rel "$ROOT" "$prompts_dir")" "prompts root" || {
     echo "[]"
     return
-  fi
+  }
   
   for prompt_dir in "$prompts_dir"/*; do
     # Skip non-directories and _template
@@ -93,10 +123,11 @@ build_prompts_array() {
     
     local status
     status=$(get_prompt_status "$prompt_dir")
-    
+    check_log_trace "read  prompt/${prompt_name} status=${status}"
+
     local function_name
     function_name=$(get_function_name "$prompt_dir" "$prompt_name")
-    
+
     local last_updated
     last_updated=$(get_last_updated "$prompt_dir")
     
@@ -171,7 +202,12 @@ main() {
   
   local filtered_prompts
   filtered_prompts=$(filter_by_status "$prompts_array" "$status_filter")
-  
+
+  local count
+  count="$(echo "$filtered_prompts" | jq 'length')"
+  check_log_trace "ok    listed ${count} prompt(s)"
+  check_log_summary "LIST_PROMPTS_OK"
+
   jq -n --argjson prompts "$filtered_prompts" '{prompts: $prompts}'
 }
 

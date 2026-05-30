@@ -28,9 +28,9 @@ done
 
 CHECK_LOG_QUIET=$quiet
 check_log_init "verify-workspace-surface"
-check_log_trace "root  ${ROOT#${HOME}/}"
 
 guide_manifest_load "$ROOT"
+guide_manifest_trace_defaults "$ROOT"
 
 required_files=(
   "$ROOT/scripts/decomp-cli.sh"

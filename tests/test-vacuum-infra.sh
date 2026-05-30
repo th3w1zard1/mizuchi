@@ -9,7 +9,6 @@ mkdir -p "$work_dir/scripts/lib" "$work_dir/prompts/fun_001" "$work_dir/state"
 cp "$root_dir/scripts/vacuum.sh" "$work_dir/scripts/"
 cp "$root_dir/scripts/matcher.sh" "$work_dir/scripts/"
 cp "$root_dir/scripts/build-and-verify.sh" "$work_dir/scripts/"
-cp "$root_dir/scripts/run-objdiff.sh" "$work_dir/scripts/"
 cp "$root_dir/scripts/init-vacuum-state.sh" "$work_dir/scripts/"
 cp "$root_dir/scripts/scorer.sh" "$work_dir/scripts/"
 cp "$root_dir/scripts/lib/queue-schema.sh" "$work_dir/scripts/lib/"
@@ -22,6 +21,9 @@ cp "$root_dir/scripts/lib/build-defensive.sh" "$work_dir/scripts/lib/"
 cp "$root_dir/scripts/lib/verify-objdiff.sh" "$work_dir/scripts/lib/"
 cp "$root_dir/scripts/lib/scorer-heuristic.sh" "$work_dir/scripts/lib/"
 cp "$root_dir/scripts/lib/scorer-ml-hooks.sh" "$work_dir/scripts/lib/"
+cp "$root_dir/scripts/lib/check-log.sh" "$work_dir/scripts/lib/"
+cp "$root_dir/scripts/lib/guide-manifest.sh" "$work_dir/scripts/lib/"
+cp "$root_dir/scripts/lib/cli-agent.sh" "$work_dir/scripts/lib/"
 
 cat >"$work_dir/prompts/fun_001/prompt.md" <<'EOF'
 ```asm

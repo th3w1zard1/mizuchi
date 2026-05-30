@@ -13,10 +13,19 @@ set -euo pipefail
 #   --json: JSON object with all context fields
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/check-log.sh
+source "$root_dir/scripts/lib/check-log.sh"
+# shellcheck source=scripts/lib/guide-manifest.sh
+source "$root_dir/scripts/lib/guide-manifest.sh"
 
-# Logging helper (to stderr)
+CHECK_LOG_QUIET=0
+check_log_init "inject-context"
+guide_manifest_load "$root_dir"
+guide_manifest_trace_defaults "$root_dir"
+
+# Logging helper (to stderr) — legacy alias
 log_debug() {
-  echo "DEBUG: $*" >&2
+  check_log_trace "$*"
 }
 
 # Parse arguments
@@ -56,9 +65,13 @@ load_agent_metadata() {
   local agent_file="$root_dir/.cursor/agents/${agent_name}.md"
   
   if [[ ! -f "$agent_file" ]]; then
+    check_log_fail "agent file not found: $(guide_manifest_rel "$root_dir" "$agent_file")"
+    check_log_summary "INJECT_CONTEXT_FAIL"
     echo "Error: Agent file not found: $agent_file" >&2
     exit 1
   fi
+
+  check_log_read_file "$agent_file" "$(guide_manifest_rel "$root_dir" "$agent_file")" "agent metadata"
   
   # Extract frontmatter fields (between --- markers)
   # Fields we care about: capabilities, context_injection, context_fields
@@ -98,11 +111,13 @@ get_workspace_context_data() {
   local context_script="$root_dir/scripts/get-workspace-context.sh"
   
   if [[ ! -f "$context_script" ]]; then
+    check_log_fail "context script missing: $(guide_manifest_rel "$root_dir" "$context_script")"
+    check_log_summary "INJECT_CONTEXT_FAIL"
     echo "Error: Context script not found: $context_script" >&2
     exit 1
   fi
-  
-  # Execute and capture output
+
+  check_log_run_cmd "get-workspace-context.sh" "$(guide_manifest_rel "$root_dir" "$context_script")"
   bash "$context_script" 2>/dev/null || jq -n '{error: "failed to get workspace context"}'
 }
 
@@ -280,6 +295,8 @@ main() {
   context_injection=$(echo "$agent_metadata" | jq -r '.context_injection')
   
   if [[ "$context_injection" != "true" ]]; then
+    check_log_trace "warn  context injection disabled for agent: $AGENT_NAME"
+    check_log_summary "INJECT_CONTEXT_SKIP"
     echo "Warning: Context injection not enabled for agent: $AGENT_NAME" >&2
     exit 0
   fi
@@ -297,10 +314,13 @@ main() {
       build_json_context "$agent_metadata" "$workspace_context"
       ;;
     *)
+      check_log_fail "unknown output format: $OUTPUT_FORMAT"
+      check_log_summary "INJECT_CONTEXT_FAIL"
       echo "Error: Unknown output format: $OUTPUT_FORMAT" >&2
       exit 1
       ;;
   esac
+  check_log_summary "INJECT_CONTEXT_OK"
 }
 
 main "$@"

@@ -2,20 +2,62 @@
 # Validate Mizuchi prompt folder: settings.yaml has exactly functionName, targetObjectPath, asm.
 set -euo pipefail
 
-dir="${1:-}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/check-log.sh
+source "$ROOT/scripts/lib/check-log.sh"
+# shellcheck source=scripts/lib/guide-manifest.sh
+source "$ROOT/scripts/lib/guide-manifest.sh"
+# shellcheck source=scripts/lib/cli-agent.sh
+source "$ROOT/scripts/lib/cli-agent.sh"
+
+usage() {
+  cat <<EOF
+Usage: validate-prompt-settings.sh <prompts/<name>/> [--quiet]
+
+Checks settings.yaml has exactly functionName, targetObjectPath, asm (non-empty).
+
+Examples:
+  ./scripts/validate-prompt-settings.sh prompts/fun_00148020/
+  ./scripts/validate-prompt-settings.sh prompts/fun_00148020/ --quiet
+EOF
+}
+
+dir=""
+quiet=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quiet) quiet=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      if [[ -z "$dir" ]]; then dir="$1"; shift
+      else cli_agent_missing_arg "validate-prompt-settings.sh" "unexpected argument: $1" "./scripts/validate-prompt-settings.sh prompts/fun_00148020/"
+      fi
+      ;;
+  esac
+done
+
+CHECK_LOG_QUIET=$quiet
+check_log_init "validate-prompt-settings"
+guide_manifest_load "$ROOT"
+
 if [[ -z "$dir" || ! -d "$dir" ]]; then
-  echo "usage: $0 <prompts/<name>/>" >&2
-  exit 2
+  check_log_fail "missing or invalid prompt directory"
+  check_log_summary "VALIDATE_PROMPT_SETTINGS_FAIL"
+  cli_agent_missing_arg "validate-prompt-settings.sh" "missing prompt directory" "./scripts/validate-prompt-settings.sh prompts/fun_00148020/"
 fi
+
+dir="$(cd "$dir" && pwd)"
+check_log_trace "prompt $(guide_manifest_rel "$ROOT" "$dir")"
 
 settings="$dir/settings.yaml"
 prompt="$dir/prompt.md"
 
 for f in "$settings" "$prompt"; do
-  if [[ ! -f "$f" ]]; then
-    echo "missing: $f" >&2
+  check_log_read_file "$f" "$(guide_manifest_rel "$ROOT" "$f")" "prompt artifact" || {
+    check_log_summary "VALIDATE_PROMPT_SETTINGS_FAIL"
     exit 1
-  fi
+  }
 done
 
 validate_with_ruby() {
@@ -96,13 +138,27 @@ PY
 }
 
 if command -v ruby >/dev/null 2>&1; then
-  validate_with_ruby
+  if validate_with_ruby; then
+    check_log_pass "settings.yaml schema"
+    check_log_summary "VALIDATE_PROMPT_SETTINGS_OK"
+    echo "VALIDATE_PROMPT_SETTINGS_OK prompt=$(guide_manifest_rel "$ROOT" "$dir")"
+    exit 0
+  fi
+  check_log_fail "settings.yaml validation failed"
+  check_log_summary "VALIDATE_PROMPT_SETTINGS_FAIL"
+  exit 1
 elif validate_with_python; then
-  :
+  check_log_pass "settings.yaml schema"
+  check_log_summary "VALIDATE_PROMPT_SETTINGS_OK"
+  echo "VALIDATE_PROMPT_SETTINGS_OK prompt=$(guide_manifest_rel "$ROOT" "$dir")"
+  exit 0
 else
   code=$?
   if [[ "$code" -eq 2 ]]; then
-    echo "install PyYAML: pip install pyyaml (or install ruby for built-in YAML)" >&2
+    check_log_fail "install PyYAML or ruby for YAML validation"
+  else
+    check_log_fail "settings.yaml validation failed"
   fi
+  check_log_summary "VALIDATE_PROMPT_SETTINGS_FAIL"
   exit "$code"
 fi

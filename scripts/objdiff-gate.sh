@@ -45,6 +45,7 @@ done
 CHECK_LOG_QUIET=$quiet
 check_log_init "objdiff-gate"
 guide_manifest_load "$ROOT"
+guide_manifest_trace_defaults "$ROOT"
 
 if [[ -z "$target" || -z "$candidate" ]]; then
   check_log_fail "missing target.o or candidate.o"

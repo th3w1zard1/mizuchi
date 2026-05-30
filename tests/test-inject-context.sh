@@ -7,6 +7,11 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 script="$root_dir/scripts/inject-context.sh"
 
+# Markdown/JSON on stdout; verbose logging on stderr (default).
+inject_stdout() {
+  "$script" "$@" 2>/dev/null
+}
+
 # Test counters
 TESTS_TOTAL=0
 TESTS_PASSED=0
@@ -86,7 +91,7 @@ test_assert_contains "$output" "Usage: inject-context.sh"
 
 # Test 3: Script works for ghidra-binary-scout agent
 test_start "Script works for ghidra-binary-scout agent"
-output=$("$script" ghidra-binary-scout 2>&1)
+output=$(inject_stdout ghidra-binary-scout)
 if [[ -n "$output" ]]; then
   test_pass
 else
@@ -95,7 +100,7 @@ fi
 
 # Test 4: Script works for decomp-prompt-architect agent
 test_start "Script works for decomp-prompt-architect agent"
-output=$("$script" decomp-prompt-architect 2>&1)
+output=$(inject_stdout decomp-prompt-architect)
 if [[ -n "$output" ]]; then
   test_pass
 else
@@ -104,7 +109,7 @@ fi
 
 # Test 5: Script works for decomp-function-agent
 test_start "Script works for decomp-function-agent"
-output=$("$script" decomp-function-agent 2>&1)
+output=$(inject_stdout decomp-function-agent)
 if [[ -n "$output" ]]; then
   test_pass
 else
@@ -113,22 +118,22 @@ fi
 
 # Test 6: Markdown output contains workspace context section
 test_start "Markdown output contains workspace context section"
-output=$("$script" ghidra-binary-scout 2>&1)
+output=$(inject_stdout ghidra-binary-scout)
 test_assert_contains "$output" "Workspace Context"
 
 # Test 7: Markdown output contains capabilities
 test_start "Markdown output contains capabilities section"
-output=$("$script" ghidra-binary-scout 2>&1)
+output=$(inject_stdout ghidra-binary-scout)
 test_assert_contains "$output" "Capabilities"
 
 # Test 8: JSON output is valid JSON
 test_start "JSON output is valid JSON"
-output=$("$script" ghidra-binary-scout --json 2>&1)
+output=$(inject_stdout ghidra-binary-scout --json)
 test_assert_valid_json "$output"
 
 # Test 9: JSON output has required fields
 test_start "JSON output has required fields (agent, timestamp, fields)"
-output=$("$script" decomp-function-agent --json 2>&1)
+output=$(inject_stdout decomp-function-agent --json)
 if echo "$output" | jq -e '.agent' > /dev/null 2>&1 && \
    echo "$output" | jq -e '.timestamp' > /dev/null 2>&1 && \
    echo "$output" | jq -e '.fields' > /dev/null 2>&1; then
@@ -139,13 +144,13 @@ fi
 
 # Test 10: JSON output agent name matches input
 test_start "JSON output agent name matches input"
-output=$("$script" ghidra-binary-scout --json 2>&1)
+output=$(inject_stdout ghidra-binary-scout --json)
 agent_name=$(echo "$output" | jq -r '.agent')
 test_assert_equals "ghidra-binary-scout" "$agent_name"
 
 # Test 11: JSON output has workspace_state field for agents with context_injection
 test_start "JSON output has workspace_state field"
-output=$("$script" decomp-function-agent --json 2>&1)
+output=$(inject_stdout decomp-function-agent --json)
 if echo "$output" | jq -e '.fields.workspace_state' > /dev/null 2>&1; then
   test_pass
 else
@@ -154,12 +159,12 @@ fi
 
 # Test 12: Markdown output contains constraints section
 test_start "Markdown output contains constraints section"
-output=$("$script" decomp-function-agent 2>&1)
+output=$(inject_stdout decomp-function-agent)
 test_assert_contains "$output" "Constraints"
 
 # Test 13: Markdown output does not contain error markers
 test_start "Markdown output does not contain error markers"
-output=$("$script" ghidra-binary-scout 2>&1)
+output=$(inject_stdout ghidra-binary-scout)
 if echo "$output" | grep -q "Error:" || echo "$output" | grep -q "error:"; then
   test_fail "Output contains error messages"
 else
@@ -168,7 +173,7 @@ fi
 
 # Test 14: JSON workspace_state has expected fields
 test_start "JSON workspace_state has expected fields"
-output=$("$script" decomp-prompt-architect --json 2>&1)
+output=$(inject_stdout decomp-prompt-architect --json)
 if echo "$output" | jq -e '.fields.workspace_state.total_prompts' > /dev/null 2>&1 && \
    echo "$output" | jq -e '.fields.workspace_state.matched' > /dev/null 2>&1 && \
    echo "$output" | jq -e '.fields.workspace_state.integrated' > /dev/null 2>&1; then
@@ -189,7 +194,7 @@ fi
 # Test 16: Script execution time is reasonable (<2 seconds)
 test_start "Script execution time is reasonable (<2 seconds)"
 start_time=$(date +%s)
-"$script" ghidra-binary-scout > /dev/null 2>&1
+"$script" ghidra-binary-scout > /dev/null
 end_time=$(date +%s)
 elapsed=$((end_time - start_time))
 if (( elapsed < 2 )); then
@@ -200,13 +205,13 @@ fi
 
 # Test 17: Markdown output includes reference to CAPABILITY_MATRIX.md
 test_start "Markdown output references CAPABILITY_MATRIX.md"
-output=$("$script" ghidra-binary-scout 2>&1)
+output=$(inject_stdout ghidra-binary-scout)
 test_assert_contains "$output" "CAPABILITY_MATRIX.md"
 
 # Test 18: Different agents have different capabilities in output
 test_start "Different agents have different capabilities in output"
-out1=$("$script" ghidra-binary-scout 2>&1)
-out2=$("$script" decomp-function-agent 2>&1)
+out1=$(inject_stdout ghidra-binary-scout)
+out2=$(inject_stdout decomp-function-agent)
 # Function agent should have more capabilities listed
 if echo "$out2" | grep -q "/decomp-function" && ! echo "$out1" | grep -q "/decomp-function"; then
   test_pass
@@ -216,7 +221,7 @@ fi
 
 # Test 19: JSON output has timestamp in ISO format
 test_start "JSON output has timestamp in ISO format"
-output=$("$script" decomp-function-agent --json 2>&1)
+output=$(inject_stdout decomp-function-agent --json)
 timestamp=$(echo "$output" | jq -r '.timestamp')
 if [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
   test_pass
@@ -226,8 +231,8 @@ fi
 
 # Test 20: Markdown output is consistent across runs
 test_start "Markdown output is deterministic (consistent)"
-out1=$("$script" ghidra-binary-scout 2>&1)
-out2=$("$script" ghidra-binary-scout 2>&1)
+out1=$(inject_stdout ghidra-binary-scout)
+out2=$(inject_stdout ghidra-binary-scout)
 # Content should be mostly the same (allowing for timestamp differences in workspace state)
 if diff <(echo "$out1" | grep -v timestamp | head -20) <(echo "$out2" | grep -v timestamp | head -20) > /dev/null 2>&1; then
   test_pass

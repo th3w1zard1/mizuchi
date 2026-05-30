@@ -28,9 +28,9 @@ done
 
 CHECK_LOG_QUIET=$quiet
 check_log_init "validate-guide-coverage"
-check_log_trace "root  ${ROOT#${HOME}/}"
 
 guide_manifest_load "$ROOT"
+guide_manifest_trace_defaults "$ROOT"
 
 failures=0
 record_fail() {

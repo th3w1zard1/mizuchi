@@ -54,8 +54,7 @@ done
 CHECK_LOG_QUIET=$quiet
 check_log_init "run-programmatic-phase"
 guide_manifest_load "$ROOT"
-check_log_trace "root  $(guide_manifest_rel "$ROOT" "$ROOT")"
-check_log_trace "output prompts=$(guide_manifest_rel "$ROOT" "${GUIDE_OUTPUT_DIRS[0]}") context=$(guide_manifest_rel "$ROOT" "${GUIDE_OUTPUT_DIRS[1]}")"
+guide_manifest_trace_defaults "$ROOT"
 
 if [[ -z "$PROMPT_DIR" ]]; then
   check_log_fail "missing --prompt"
@@ -79,12 +78,12 @@ fi
 
 if [[ "$SKIP_M2C" -eq 0 ]]; then
   check_log_run_step "m2c"
-  if "$ROOT/scripts/run-m2c.sh" --prompt "$PROMPT_DIR"; then
+  if "$ROOT/scripts/run-m2c.sh" --prompt "$PROMPT_DIR" ${quiet:+--quiet}; then
     M2C_OUT="$PROMPT_DIR/build/m2c.c"
     if [[ -f "$M2C_OUT" ]]; then
       check_log_file_op "$(guide_manifest_rel "$ROOT" "$M2C_OUT")" "read"
       check_log_run_step "compile+objdiff (m2c)"
-      if "$ROOT/scripts/compile-trial.sh" "$PROMPT_DIR" "$M2C_OUT"; then
+      if "$ROOT/scripts/compile-trial.sh" "$PROMPT_DIR" "$M2C_OUT" ${quiet:+--quiet}; then
         check_log_summary "PROGRAMMATIC_PHASE_OK"
         echo "PROGRAMMATIC_PHASE_OK match=m2c prompt=$(guide_manifest_rel "$ROOT" "$PROMPT_DIR")"
         exit 0
@@ -108,7 +107,7 @@ fi
 
 check_log_run_step "decomp-permuter"
 PERM_OUT="$PROMPT_DIR/build/permuter-best.c"
-if "$ROOT/scripts/run-permuter.sh" --prompt "$PROMPT_DIR" --out "$PERM_OUT"; then
+if "$ROOT/scripts/run-permuter.sh" --prompt "$PROMPT_DIR" --out "$PERM_OUT" ${quiet:+--quiet}; then
   perm_rc=0
 else
   perm_rc=$?
@@ -117,7 +116,7 @@ fi
 if [[ -f "$PERM_OUT" ]]; then
   check_log_file_op "$(guide_manifest_rel "$ROOT" "$PERM_OUT")" "read"
   check_log_run_step "compile+objdiff (permuter)"
-  if "$ROOT/scripts/compile-trial.sh" "$PROMPT_DIR" "$PERM_OUT"; then
+  if "$ROOT/scripts/compile-trial.sh" "$PROMPT_DIR" "$PERM_OUT" ${quiet:+--quiet}; then
     check_log_summary "PROGRAMMATIC_PHASE_OK"
     echo "PROGRAMMATIC_PHASE_OK match=permuter prompt=$(guide_manifest_rel "$ROOT" "$PROMPT_DIR")"
     exit 0

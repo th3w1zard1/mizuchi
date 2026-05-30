@@ -9,6 +9,16 @@
 declare -a CHECK_LOG_FAILURES=()
 declare -a CHECK_LOG_CHANGES=()
 
+_check_log_rel() {
+  local root="$1"
+  local abs_path="$2"
+  if [[ -n "$root" && "$abs_path" == "$root/"* ]]; then
+    printf '%s\n' "${abs_path#"$root/"}"
+  else
+    printf '%s\n' "$abs_path"
+  fi
+}
+
 check_log_init() {
   CHECK_LOG_SCRIPT="${1:-check}"
   CHECK_LOG_PASSED=0
@@ -98,9 +108,55 @@ check_log_mcp_server() {
 check_log_file_op() {
   local rel_path="$1"
   local op="$2"
-  check_log_trace "io    ${op} ${rel_path}"
-  CHECK_LOG_CHANGES+=("${op} ${rel_path}")
-  check_log_pass "io ${op} ${rel_path}"
+  local detail="${3:-}"
+  if [[ -n "$detail" ]]; then
+    check_log_trace "io    ${op} ${rel_path} (${detail})"
+    CHECK_LOG_CHANGES+=("${op} ${rel_path} (${detail})")
+    check_log_pass "io ${op} ${rel_path} (${detail})"
+  else
+    check_log_trace "io    ${op} ${rel_path}"
+    CHECK_LOG_CHANGES+=("${op} ${rel_path}")
+    check_log_pass "io ${op} ${rel_path}"
+  fi
+}
+
+# Record write after the fact; existed=1 means overwrite, 0 means new file.
+check_log_file_written() {
+  local abs_path="$1"
+  local root="$2"
+  local existed="$3"
+  local rel_path
+  rel_path="$(_check_log_rel "$root" "$abs_path")"
+  local detail=""
+  if [[ -f "$abs_path" ]]; then
+    detail="$(wc -c <"$abs_path" | tr -d '[:space:]') bytes"
+  fi
+  if [[ "$existed" -eq 1 ]]; then
+    check_log_file_op "$rel_path" "wrote" "$detail"
+  else
+    check_log_file_op "$rel_path" "created" "$detail"
+  fi
+}
+
+check_log_file_appended() {
+  local abs_path="$1"
+  local root="$2"
+  local detail="${3:-}"
+  check_log_file_op "$(_check_log_rel "$root" "$abs_path")" "appended" "$detail"
+}
+
+check_log_file_removed() {
+  local abs_path="$1"
+  local root="$2"
+  local detail="${3:-}"
+  check_log_file_op "$(_check_log_rel "$root" "$abs_path")" "removed" "$detail"
+}
+
+check_log_run_cmd() {
+  local label="$1"
+  shift
+  check_log_trace "run   ${label}: $*"
+  check_log_pass "run ${label}"
 }
 
 check_log_run_step() {

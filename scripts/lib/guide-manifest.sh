@@ -120,4 +120,31 @@ guide_manifest_load() {
   )
 
   GUIDE_MCP_CONFIG="$root/.cursor/mcp.json"
+
+  GUIDE_PROMPTS_DIR="$root/prompts"
+  GUIDE_CONTEXT_DIR="$root/context"
+  GUIDE_BUILD_DIR_NAME="build"
+}
+
+# Log guide defaults (servers, output dirs, MCP config) — verbose scripts call at startup.
+guide_manifest_trace_defaults() {
+  local root="$1"
+  check_log_trace "root  $(guide_manifest_rel "$root" "$root")"
+  check_log_trace "mcp   config=$(guide_manifest_rel "$root" "$GUIDE_MCP_CONFIG")"
+  local server
+  for server in "${GUIDE_MCP_SERVERS[@]}"; do
+    check_log_trace "mcp   server=${server}"
+  done
+  check_log_trace "dirs  prompts=$(guide_manifest_rel "$root" "$GUIDE_PROMPTS_DIR") context=$(guide_manifest_rel "$root" "$GUIDE_CONTEXT_DIR") build=${GUIDE_BUILD_DIR_NAME}/"
+}
+
+guide_prompt_build_path() {
+  local prompt_dir="$1"
+  local filename="$2"
+  printf '%s/%s/%s\n' "$prompt_dir" "$GUIDE_BUILD_DIR_NAME" "$filename"
+}
+
+guide_default_context_path() {
+  local root="$1"
+  printf '%s/context/ctx.h\n' "$root"
 }

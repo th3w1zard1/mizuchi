@@ -44,6 +44,7 @@ done
 CHECK_LOG_QUIET=$quiet
 check_log_init "get-context"
 guide_manifest_load "$ROOT"
+guide_manifest_trace_defaults "$ROOT"
 
 if [[ -z "$prompt_dir" ]]; then
   check_log_fail "missing --prompt"
@@ -62,7 +63,7 @@ targetObjectPath="${targetObjectPath//\{\{functionName\}\}/$functionName}"
 check_log_trace "prompt functionName=${functionName} targetObject=${targetObjectPath}"
 
 if [[ -z "$output" ]]; then
-  output="$ROOT/context/ctx.h"
+  output="$(guide_default_context_path "$ROOT")"
 fi
 
 script="$(mizuchi_config_get global.getContextScript)" || {
@@ -76,19 +77,26 @@ log="$prompt_dir/build/get-context.log"
 mkdir -p "$prompt_dir/build"
 check_log_file_op "$(guide_manifest_rel "$ROOT" "$prompt_dir/build")" "ensure-dir"
 
-check_log_trace "run   getContextScript -> $(guide_manifest_rel "$ROOT" "$output")"
+output_existed=0
+[[ -f "$output" ]] && output_existed=1
+log_existed=0
+[[ -f "$log" ]] && log_existed=1
+
+check_log_run_cmd "getContextScript" "-> $(guide_manifest_rel "$ROOT" "$output")"
 if ! bash -c "$(printf '%s' "$script" | mizuchi_expand_templates)" >"$output" 2>"$log"; then
+  check_log_file_written "$log" "$ROOT" "$log_existed"
   check_log_fail "getContextScript failed (see $(guide_manifest_rel "$ROOT" "$log"))"
   tail -n 30 "$log" >&2 || true
   check_log_summary "GET_CONTEXT_FAIL"
   exit 1
 fi
 
+check_log_file_written "$log" "$ROOT" "$log_existed"
 line_count="$(wc -l <"$output" | tr -d '[:space:]')"
 if [[ ! -s "$output" ]]; then
   check_log_trace "warn  output file is empty: $(guide_manifest_rel "$ROOT" "$output")"
 else
-  check_log_file_op "$(guide_manifest_rel "$ROOT" "$output")" "wrote"
+  check_log_file_written "$output" "$ROOT" "$output_existed"
 fi
 
 check_log_summary "GET_CONTEXT_OK"
