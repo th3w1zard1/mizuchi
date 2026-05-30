@@ -130,7 +130,7 @@ get_build_artifacts() {
         prompt_name=$(basename "$(dirname "$build_dir")")
         recent_builds+=("$(jq -n --arg prompt "$prompt_name" --arg mtime "$mtime" '{prompt: $prompt, mtime: ($mtime | tonumber)}')")
       fi
-    done < <(find "$artifacts_dir/*/build" -type d -name build 2>/dev/null | sort -rV | head -10)
+    done < <(find "$artifacts_dir" -path '*/build' -type d 2>/dev/null | sort -rV | head -10 || true)
   fi
   
   if [[ ${#recent_builds[@]} -eq 0 ]]; then

@@ -156,10 +156,10 @@ build_markdown_context() {
   agent_name=$(echo "$agent_metadata" | jq -r '.name')
   
   local capabilities
-  capabilities=$(echo "$agent_metadata" | jq -r '.capabilities[]' | tr '\n' '\n' | sed 's/^/  - /')
+  capabilities=$(echo "$agent_metadata" | jq -r '(.capabilities // [])[]' | sed 's/^/  - /')
   
   local context_fields
-  context_fields=$(echo "$agent_metadata" | jq -r '.context_fields[]')
+  context_fields=$(echo "$agent_metadata" | jq -r '(.context_fields // [])[]')
   
   # Build context summary from requested fields
   local context_summary=""
@@ -242,7 +242,7 @@ build_json_context() {
   agent_name=$(echo "$agent_metadata" | jq -r '.name')
   
   local context_fields
-  context_fields=$(echo "$agent_metadata" | jq -r '.context_fields[]')
+  context_fields=$(echo "$agent_metadata" | jq -r '(.context_fields // [])[]')
   
   # Build context object from requested fields
   local context_obj="{\"agent\": \"$agent_name\", \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"fields\": {"
