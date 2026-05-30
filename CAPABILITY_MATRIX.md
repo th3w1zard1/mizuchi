@@ -56,6 +56,7 @@ This matrix documents all operations available to agents in the Mizuchi matching
 
 ### Verify Operations
 - **Can invoke:** `run_objdiff` MCP tool
+- **CLI parity:** `./scripts/decomp-cli.sh run-objdiff <target.o> <candidate.o>`
 - **Can query:** `get_workspace_context` for current state
 - **Can read:** Build artifacts, target object files
 - **Gate behavior:** Stop and report on first mismatch
@@ -69,6 +70,8 @@ This matrix documents all operations available to agents in the Mizuchi matching
 ### Context Operations
 - **Can query:** `get_workspace_context()` on startup
 - **Can query:** `list_prompts()` to discover work queue
+- **CLI parity:** `./scripts/decomp-cli.sh list-prompts [status=...]`
+- **CLI parity:** `./scripts/decomp-cli.sh inject-context <agent-name> [--json]`
 - **Can read:** Workspace metrics and status
 - **Scope:** Read-only; no modifications via context queries
 

@@ -5,6 +5,21 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 required_files=(
   "$ROOT/scripts/decomp-cli.sh"
+  "$ROOT/scripts/lfg-smoke.sh"
+  "$ROOT/scripts/verify-workspace-surface.sh"
+  "$ROOT/scripts/validate-prompt-status.sh"
+  "$ROOT/scripts/validate-capability-parity.sh"
+  "$ROOT/scripts/validate-prompt-settings.sh"
+  "$ROOT/scripts/objdiff-gate.sh"
+  "$ROOT/scripts/run-objdiff.sh"
+  "$ROOT/scripts/inject-context.sh"
+  "$ROOT/scripts/list-prompts.sh"
+  "$ROOT/scripts/scorer.sh"
+  "$ROOT/scripts/init-vacuum-state.sh"
+  "$ROOT/scripts/vacuum-cli.sh"
+  "$ROOT/scripts/lib/queue-schema.sh"
+  "$ROOT/scripts/lib/queue-state.sh"
+  "$ROOT/scripts/lib/scorer-heuristic.sh"
   "$ROOT/.cursor/hooks.json"
   "$ROOT/.cursor/mcp.json"
   "$ROOT/.cursor/rules/matching-decompilation-core.mdc"
@@ -66,8 +81,25 @@ if ! grep -q 'macabeus.medium.com/can-llms-really-do-matching-decompilation' "$R
   exit 1
 fi
 
-if ! grep -q '/ghidra-scout' "$ROOT/AGENTS.md" || ! grep -q '/decomp-integrate' "$ROOT/AGENTS.md"; then
+if ! grep -q '/ghidra-scout' "$ROOT/AGENTS.md"; then
   echo "invalid: AGENTS.md missing slash-command entries" >&2
+  exit 1
+fi
+
+if ! grep -q '/decomp-integrate' "$ROOT/AGENTS.md"; then
+  echo "invalid: AGENTS.md missing slash-command entries" >&2
+  exit 1
+fi
+
+prompt_status="$("$ROOT/scripts/validate-prompt-status.sh" --quiet)"
+if [[ "$prompt_status" != "PROMPT_STATUS_OK" ]]; then
+  echo "invalid: validate-prompt-status.sh failed" >&2
+  exit 1
+fi
+
+capability_status="$("$ROOT/scripts/validate-capability-parity.sh")"
+if [[ "$capability_status" != "CAPABILITY_PARITY_OK" ]]; then
+  echo "invalid: validate-capability-parity.sh failed" >&2
   exit 1
 fi
 

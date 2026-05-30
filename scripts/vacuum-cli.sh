@@ -8,7 +8,7 @@ source "$root_dir/scripts/lib/queue-state.sh"
 
 usage() {
   cat <<EOF
-Usage: $0 <start|resume|status|next|score|inspect-queue|reset-queue> [--function <name>]
+Usage: $0 <status|next|score|inspect-queue|reset-queue|init> [--function <name>]
 EOF
 }
 
@@ -16,13 +16,12 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  start)
+  init)
     "$root_dir/scripts/init-vacuum-state.sh"
-    "$root_dir/scripts/vacuum.sh"
     ;;
-  resume)
-    queue_init
-    "$root_dir/scripts/vacuum.sh"
+  start|resume)
+    echo "Cycle 3 U5 (vacuum loop) is not in this slice — use init, status, next, score" >&2
+    exit 2
     ;;
   status)
     queue_init

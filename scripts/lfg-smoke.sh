@@ -26,4 +26,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$name" ]] || usage
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 printf 'LFG_SMOKE_OK name=%s\n' "$name"
+
+surface_out="$("$ROOT/scripts/verify-workspace-surface.sh")"
+[[ "$surface_out" == "WORKSPACE_SURFACE_OK" ]] || {
+  echo "unexpected surface output: $surface_out" >&2
+  exit 1
+}
+
+prompt_out="$("$ROOT/scripts/validate-prompt-status.sh" --quiet)"
+[[ "$prompt_out" == "PROMPT_STATUS_OK" ]] || {
+  echo "unexpected prompt status output: $prompt_out" >&2
+  exit 1
+}
+
+printf '%s\n' "$surface_out"
+printf '%s\n' "$prompt_out"

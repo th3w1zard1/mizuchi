@@ -5,8 +5,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT/scripts/lfg-smoke.sh"
 
 out="$("$SCRIPT" --name ci)"
-[[ "$out" == "LFG_SMOKE_OK name=ci" ]] || {
+[[ "$out" == *"LFG_SMOKE_OK name=ci"* ]] || {
   echo "unexpected output: $out" >&2
+  exit 1
+}
+[[ "$out" == *"WORKSPACE_SURFACE_OK"* ]] || {
+  echo "missing WORKSPACE_SURFACE_OK in output" >&2
+  exit 1
+}
+[[ "$out" == *"PROMPT_STATUS_OK"* ]] || {
+  echo "missing PROMPT_STATUS_OK in output" >&2
   exit 1
 }
 

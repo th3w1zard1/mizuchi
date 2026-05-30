@@ -6,11 +6,16 @@ usage() {
 Usage: ./scripts/decomp-cli.sh <command> [args]
 
 Commands:
+  help
   ghidra-scout <target>
   decomp-prompt <prompt-name>
   decomp-atlas <prompt-name>
   decomp-function <prompt-name>
   decomp-integrate <prompt-name> <target.o>
+  list-prompts [status=<matched|in_progress|integrated|pending>]
+  inject-context <agent-name> [--json]
+  run-objdiff <target.o> <candidate.o>
+  programmatic-phase --prompt <prompt-dir>
   verify-surface
 EOF
 }
@@ -25,6 +30,9 @@ fi
 shift || true
 
 case "$cmd" in
+  help)
+    "$root_dir/scripts/help-command.sh"
+    ;;
   ghidra-scout)
     target="${1:-}"
     if [[ -z "$target" ]]; then
@@ -65,6 +73,33 @@ case "$cmd" in
       exit 1
     fi
     "$root_dir/scripts/objdiff-gate.sh" "$target_obj" "$root_dir/prompts/$prompt_name/build/candidate.o"
+    ;;
+  list-prompts)
+    "$root_dir/scripts/list-prompts.sh" "$@"
+    ;;
+  inject-context)
+    agent_name="${1:-}"
+    if [[ -z "$agent_name" ]]; then
+      echo "usage: inject-context <agent-name> [--json]" >&2
+      exit 1
+    fi
+    "$root_dir/scripts/inject-context.sh" "$@"
+    ;;
+  run-objdiff)
+    target_obj="${1:-}"
+    candidate_obj="${2:-}"
+    if [[ -z "$target_obj" || -z "$candidate_obj" ]]; then
+      echo "usage: run-objdiff <target.o> <candidate.o>" >&2
+      exit 1
+    fi
+    "$root_dir/scripts/run-objdiff.sh" "$target_obj" "$candidate_obj"
+    ;;
+  programmatic-phase)
+    if [[ $# -lt 2 || "${1:-}" != "--prompt" || -z "${2:-}" ]]; then
+      echo "usage: programmatic-phase --prompt <prompt-dir>" >&2
+      exit 1
+    fi
+    "$root_dir/scripts/run-programmatic-phase.sh" "$@"
     ;;
   verify-surface)
     "$root_dir/scripts/verify-workspace-surface.sh"
