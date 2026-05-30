@@ -12,7 +12,7 @@ Commands:
   decomp-atlas <prompt-name>
   decomp-function <prompt-name>
   decomp-integrate <prompt-name> <target.o>
-  list-prompts [status=<matched|in_progress|integrated|pending>]
+  list-prompts [status=<matched|in_progress|integrated|pending|blocked>]
   inject-context <agent-name> [--json]
   run-objdiff <target.o> <candidate.o>
   programmatic-phase --prompt <prompt-dir>

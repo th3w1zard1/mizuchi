@@ -79,7 +79,7 @@ This matrix documents all operations available to agents in the Mizuchi matching
 
 All agents have access to:
 - `get_workspace_context()` — Query workspace state (no args)
-- `list_prompts(status=<matched|integrated|in_progress|blocked>)` — List prompts by status
+- `list_prompts(status=<matched|integrated|in_progress|pending|blocked>)` — List prompts by status
 - `run_objdiff(target_o, candidate_o)` — Verify match (returns JSON)
 
 Agent-specific tools:

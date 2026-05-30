@@ -118,12 +118,12 @@ test_status_values_are_valid() {
   local output
   output=$("$script_path" 2>&1)
   
-  # All status values should be one of: pending, matched, in_progress, integrated
+  # All status values should be one of: pending, matched, in_progress, integrated, blocked
   local statuses=$(echo "$output" | jq -r '.prompts[].status' | sort -u)
   
   while IFS= read -r status; do
     case "$status" in
-      pending|matched|in_progress|integrated)
+      pending|matched|in_progress|integrated|blocked)
         :  # Valid status
         ;;
       *)
@@ -188,12 +188,24 @@ test_filter_by_status_pending() {
   echo "$output" | jq . > /dev/null 2>&1
 }
 
-test_invalid_status_filter_gracefully_handled() {
+test_filter_by_status_blocked() {
   local output
-  output=$("$script_path" status=invalid_status 2>&1)
-  
-  # Should return valid JSON even with invalid status
+  output=$("$script_path" status=blocked 2>&1)
+
+  # Should return valid JSON regardless
   echo "$output" | jq . > /dev/null 2>&1
+}
+
+test_invalid_status_filter_returns_error() {
+  local output
+  set +e
+  output=$("$script_path" status=invalid_status 2>&1)
+  local rc=$?
+  set -e
+
+  [[ "$rc" -ne 0 ]] || return 1
+  echo "$output" | jq . > /dev/null 2>&1
+  [[ "$(echo "$output" | jq -r '.error')" == "Invalid status filter: invalid_status" ]]
 }
 
 test_empty_queue_returns_empty_array() {
@@ -240,7 +252,8 @@ run_test "Filter by status=matched" "test_filter_by_status_matched"
 run_test "Filter by status=in_progress" "test_filter_by_status_in_progress"
 run_test "Filter by status=integrated" "test_filter_by_status_integrated"
 run_test "Filter by status=pending" "test_filter_by_status_pending"
-run_test "Invalid status filter handled gracefully" "test_invalid_status_filter_gracefully_handled"
+run_test "Filter by status=blocked" "test_filter_by_status_blocked"
+run_test "Invalid status filter returns error" "test_invalid_status_filter_returns_error"
 run_test "Empty queue returns empty array" "test_empty_queue_returns_empty_array"
 run_test "Performance: <2 seconds" "test_performance"
 run_test "Filter preserves JSON structure" "test_filter_does_not_break_structure"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="${MIZUCHI_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 cli_file="$ROOT/scripts/decomp-cli.sh"
 matrix_file="$ROOT/CAPABILITY_MATRIX.md"
@@ -28,8 +28,13 @@ for cmd in "${required_cli_commands[@]}"; do
   fi
 done
 
+if ! grep -q "list-prompts \\[status=<matched|in_progress|integrated|pending|blocked>\\]" "$cli_file"; then
+  echo "missing CLI status enum contract for list-prompts" >&2
+  missing=1
+fi
+
 declare -A matrix_tokens=(
-  ["list_prompts"]="list-prompts"
+  ["list_prompts(status=<matched|integrated|in_progress|pending|blocked>)"]="list-prompts [status=<matched|in_progress|integrated|pending|blocked>]"
   ["run_objdiff"]="run-objdiff"
   ["inject-context"]="inject-context"
 )

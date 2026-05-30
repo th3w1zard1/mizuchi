@@ -3,7 +3,7 @@ set -euo pipefail
 
 # MCP tool: list_prompts
 # Returns JSON array of available prompt folders with metadata
-# Optional filter: status=matched|in_progress|integrated|pending
+# Optional filter: status=matched|in_progress|integrated|pending|blocked
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -23,6 +23,8 @@ get_prompt_status() {
       status="matched"
     elif grep -q "status.*in_progress\|status.*in-progress" "$notes_file" 2>/dev/null; then
       status="in_progress"
+    elif grep -q "status.*blocked" "$notes_file" 2>/dev/null; then
+      status="blocked"
     fi
   fi
   
@@ -127,15 +129,19 @@ filter_by_status() {
     return
   fi
   
-  # Validate status_filter (must be one of: matched, in_progress, integrated, pending)
+  echo "$prompts_json" | jq "[.[] | select(.status == \"$status_filter\")]"
+}
+
+validate_status_filter() {
+  local status_filter="$1"
+  [[ -z "$status_filter" ]] && return 0
+
   case "$status_filter" in
-    matched|in_progress|integrated|pending)
-      echo "$prompts_json" | jq "[.[] | select(.status == \"$status_filter\")]"
-      ;;
+    matched|in_progress|integrated|pending|blocked) return 0 ;;
     *)
-      # Invalid status: return all prompts but set a warning
-      # For now, return all prompts (graceful degradation)
-      echo "$prompts_json"
+      jq -n --arg status "$status_filter" \
+        '{error: ("Invalid status filter: " + $status), valid_statuses: ["matched","in_progress","integrated","pending","blocked"]}'
+      return 1
       ;;
   esac
 }
@@ -158,6 +164,7 @@ parse_arguments() {
 main() {
   local status_filter
   status_filter=$(parse_arguments "$@")
+  validate_status_filter "$status_filter" || exit 1
   
   local prompts_array
   prompts_array=$(build_prompts_array)
