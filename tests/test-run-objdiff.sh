@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Test suite for run-objdiff.sh MCP tool
 
-ROOT_DIR="/home/brunner56/Workspaces/Mizuchi"
-SCRIPT_PATH="$ROOT_DIR/scripts/run-objdiff.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_PATH="$ROOT/scripts/run-objdiff.sh"
 
 TESTS_RUN=0
 TESTS_PASSED=0

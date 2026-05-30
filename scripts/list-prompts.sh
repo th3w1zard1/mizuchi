@@ -43,7 +43,7 @@ get_function_name() {
   # Try to refine from prompt.md if available
   if [[ -f "$prompt_dir/prompt.md" ]]; then
     local from_md
-    from_md=$(grep -oP 'Decompile `\K[^`]+' "$prompt_dir/prompt.md" | head -1 || echo "")
+    from_md=$(grep -o 'Decompile `[^`]\+' "$prompt_dir/prompt.md" 2>/dev/null | head -1 | sed 's/Decompile `//;s/`$//' || echo "")
     if [[ -n "$from_md" ]]; then
       function_name="$from_md"
     fi

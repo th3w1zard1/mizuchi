@@ -114,11 +114,11 @@ extract_context_field() {
   case "$field_name" in
     workspace_state)
       echo "$context_json" | jq -c '{
-        total_prompts: .workspace_metrics.total_prompts,
-        matched: .workspace_metrics.matched,
-        integrated: .workspace_metrics.integrated,
-        in_progress: (.workspace_metrics.total_prompts - .workspace_metrics.matched - .workspace_metrics.integrated),
-        match_rate: .workspace_metrics.match_rate_percent
+        total_prompts: (.workspace_metrics.total_prompts // 0),
+        matched: (.workspace_metrics.matched // 0),
+        integrated: (.workspace_metrics.integrated // 0),
+        in_progress: ((.workspace_metrics.total_prompts // 0) - (.workspace_metrics.matched // 0) - (.workspace_metrics.integrated // 0)),
+        match_rate: (.workspace_metrics.match_rate_percent // 0)
       }'
       ;;
     prompt_queue_summary)

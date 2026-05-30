@@ -188,11 +188,11 @@ fi
 
 # Test 16: Script execution time is reasonable (<2 seconds)
 test_start "Script execution time is reasonable (<2 seconds)"
-start_time=$(date +%s.%N)
+start_time=$(date +%s)
 "$script" ghidra-binary-scout > /dev/null 2>&1
-end_time=$(date +%s.%N)
-elapsed=$(echo "$end_time - $start_time" | bc)
-if (( $(echo "$elapsed < 2.0" | bc -l) )); then
+end_time=$(date +%s)
+elapsed=$((end_time - start_time))
+if (( elapsed < 2 )); then
   test_pass
 else
   test_fail "Script took ${elapsed}s (should be <2s)"

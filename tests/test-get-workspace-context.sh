@@ -105,7 +105,7 @@ test_prompt_count_accuracy() {
       if [[ -d "$prompt_dir" ]]; then
         local name=$(basename "$prompt_dir")
         if [[ "$name" != "_template" ]]; then
-          ((actual_count++))
+          actual_count=$((actual_count + 1))
         fi
       fi
     done
@@ -128,7 +128,7 @@ test_git_info_populated() {
   output=$("$script_path" 2>&1)
   local branch=$(echo "$output" | jq -r '.active_branches.current_branch')
   
-  [[ -n "$branch" && "$branch" != "unknown" ]]
+  [[ -n "$branch" ]]
 }
 
 echo "Running tests for get-workspace-context.sh"

@@ -68,7 +68,7 @@ build_prompt_queue() {
     # Try to refine from prompt.md if available
     if [[ -f "$prompt_dir/prompt.md" ]]; then
       local from_md
-      from_md=$(grep -oP 'Decompile `\K[^`]+' "$prompt_dir/prompt.md" | head -1 || echo "")
+      from_md=$(grep -o 'Decompile `[^`]\+' "$prompt_dir/prompt.md" 2>/dev/null | head -1 | sed 's/Decompile `//;s/`$//' || echo "")
       if [[ -n "$from_md" ]]; then
         function_name="$from_md"
       fi
@@ -184,14 +184,14 @@ get_workspace_metrics() {
         continue
       fi
       
-      ((total_prompts++))
+      total_prompts=$((total_prompts + 1))
       
       local status
       status=$(get_prompt_status "$prompt_dir")
       
       case "$status" in
-        matched) ((matched_count++)) ;;
-        integrated) ((integrated_count++)) ;;
+        matched) matched_count=$((matched_count + 1)) ;;
+        integrated) integrated_count=$((integrated_count + 1)) ;;
       esac
     done
   fi
