@@ -2,6 +2,35 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$ROOT/scripts"
+
+# shellcheck source=scripts/lib/check-log.sh
+source "$SCRIPT_DIR/lib/check-log.sh"
+# shellcheck source=scripts/lib/guide-manifest.sh
+source "$SCRIPT_DIR/lib/guide-manifest.sh"
+
+quiet=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quiet) quiet=1; shift ;;
+    -h|--help)
+      cat <<EOF
+usage: verify-workspace-surface.sh [--quiet]
+
+Verifies workspace files, hooks, MCP servers, and nested guide validators.
+Verbose logging is the default; use --quiet for machine-only output.
+EOF
+      exit 0
+      ;;
+    *) echo "unexpected argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+CHECK_LOG_QUIET=$quiet
+check_log_init "verify-workspace-surface"
+check_log_trace "root  ${ROOT#${HOME}/}"
+
+guide_manifest_load "$ROOT"
 
 required_files=(
   "$ROOT/scripts/decomp-cli.sh"
@@ -10,6 +39,8 @@ required_files=(
   "$ROOT/scripts/validate-prompt-status.sh"
   "$ROOT/scripts/validate-guide-coverage.sh"
   "$ROOT/scripts/validate-capability-parity.sh"
+  "$ROOT/scripts/audit-plugin-readiness.sh"
+  "$ROOT/scripts/run-test-suite.sh"
   "$ROOT/scripts/validate-prompt-settings.sh"
   "$ROOT/scripts/objdiff-gate.sh"
   "$ROOT/scripts/run-objdiff.sh"
@@ -21,6 +52,8 @@ required_files=(
   "$ROOT/scripts/lib/queue-schema.sh"
   "$ROOT/scripts/lib/queue-state.sh"
   "$ROOT/scripts/lib/scorer-heuristic.sh"
+  "$ROOT/scripts/lib/check-log.sh"
+  "$ROOT/scripts/lib/guide-manifest.sh"
   "$ROOT/.cursor/hooks.json"
   "$ROOT/.cursor/mcp.json"
   "$ROOT/.cursor/rules/matching-decompilation-core.mdc"
@@ -44,70 +77,64 @@ required_files=(
   "$ROOT/.cursor/skills/decomp-workflow-checklist.md"
 )
 
-missing=0
+failures=0
+record_fail() { failures=1; }
+
 for file in "${required_files[@]}"; do
-  if [[ ! -f "$file" ]]; then
-    echo "missing: ${file#$ROOT/}" >&2
-    missing=1
-  fi
+  rel="${file#$ROOT/}"
+  check_log_read_file "$file" "$rel" "workspace surface" || record_fail
 done
 
-if [[ "$missing" -ne 0 ]]; then
+check_log_grep_file "$ROOT/.cursor/hooks.json" "$GUIDE_HOOK_PATTERN" "match-claim guard hook" || record_fail
+
+mcp_file="$ROOT/.cursor/mcp.json"
+for server in "${GUIDE_MCP_SERVERS[@]}"; do
+  check_log_mcp_server "$mcp_file" "$server" || record_fail
+done
+
+agents_file="$ROOT/AGENTS.md"
+for link in "${GUIDE_AGENTS_LINKS[@]}"; do
+  check_log_grep_file "$agents_file" "$link" "AGENTS research link" || record_fail
+done
+
+for cmd in "${GUIDE_SLASH_COMMANDS[@]}"; do
+  check_log_grep_file "$agents_file" "$cmd" "AGENTS slash command" || record_fail
+done
+
+sub_quiet=()
+[[ "$quiet" -eq 1 ]] && sub_quiet=(--quiet)
+
+check_log_trace "run   scripts/validate-prompt-status.sh ${sub_quiet[*]:-}"
+prompt_status="$("$ROOT/scripts/validate-prompt-status.sh" "${sub_quiet[@]}")"
+if [[ "$prompt_status" == "PROMPT_STATUS_OK" ]]; then
+  check_log_pass "validate-prompt-status.sh"
+else
+  check_log_fail "validate-prompt-status.sh returned: $prompt_status"
+  record_fail
+fi
+
+check_log_trace "run   scripts/validate-guide-coverage.sh ${sub_quiet[*]:-}"
+guide_status="$("$ROOT/scripts/validate-guide-coverage.sh" "${sub_quiet[@]}")"
+if [[ "$guide_status" == "GUIDE_COVERAGE_OK" ]]; then
+  check_log_pass "validate-guide-coverage.sh"
+else
+  check_log_fail "validate-guide-coverage.sh returned: $guide_status"
+  record_fail
+fi
+
+check_log_trace "run   scripts/validate-capability-parity.sh ${sub_quiet[*]:-}"
+capability_status="$("$ROOT/scripts/validate-capability-parity.sh" "${sub_quiet[@]}")"
+if [[ "$capability_status" == "CAPABILITY_PARITY_OK" ]]; then
+  check_log_pass "validate-capability-parity.sh"
+else
+  check_log_fail "validate-capability-parity.sh returned: $capability_status"
+  record_fail
+fi
+
+if [[ "$failures" -ne 0 ]]; then
+  check_log_summary "WORKSPACE_SURFACE_FAIL"
   exit 1
 fi
 
-required_agdec_hook='/hooks/decomp-match-claim-guard.sh'
-if ! grep -q "$required_agdec_hook" "$ROOT/.cursor/hooks.json"; then
-  echo "invalid: .cursor/hooks.json missing match-claim guard hook" >&2
-  exit 1
-fi
-
-if ! grep -q '"agdec-http"' "$ROOT/.cursor/mcp.json"; then
-  echo "invalid: .cursor/mcp.json missing agdec-http MCP server" >&2
-  exit 1
-fi
-
-if ! grep -q '"mizuchi"' "$ROOT/.cursor/mcp.json"; then
-  echo "invalid: .cursor/mcp.json missing mizuchi MCP server" >&2
-  exit 1
-fi
-
-if ! grep -q 'one-shot-decompilation-with-claude' "$ROOT/AGENTS.md"; then
-  echo "invalid: AGENTS.md missing Chris Lewis guide reference" >&2
-  exit 1
-fi
-
-if ! grep -q 'macabeus.medium.com/can-llms-really-do-matching-decompilation' "$ROOT/AGENTS.md"; then
-  echo "invalid: AGENTS.md missing Macabeus guide reference" >&2
-  exit 1
-fi
-
-if ! grep -q '/ghidra-scout' "$ROOT/AGENTS.md"; then
-  echo "invalid: AGENTS.md missing slash-command entries" >&2
-  exit 1
-fi
-
-if ! grep -q '/decomp-integrate' "$ROOT/AGENTS.md"; then
-  echo "invalid: AGENTS.md missing slash-command entries" >&2
-  exit 1
-fi
-
-prompt_status="$("$ROOT/scripts/validate-prompt-status.sh" --quiet)"
-if [[ "$prompt_status" != "PROMPT_STATUS_OK" ]]; then
-  echo "invalid: validate-prompt-status.sh failed" >&2
-  exit 1
-fi
-
-guide_status="$("$ROOT/scripts/validate-guide-coverage.sh")"
-if [[ "$guide_status" != "GUIDE_COVERAGE_OK" ]]; then
-  echo "invalid: validate-guide-coverage.sh failed" >&2
-  exit 1
-fi
-
-capability_status="$("$ROOT/scripts/validate-capability-parity.sh")"
-if [[ "$capability_status" != "CAPABILITY_PARITY_OK" ]]; then
-  echo "invalid: validate-capability-parity.sh failed" >&2
-  exit 1
-fi
-
+check_log_summary "WORKSPACE_SURFACE_OK"
 echo "WORKSPACE_SURFACE_OK"

@@ -1,0 +1,17 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  shell-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shell test suite
+        run: |
+          chmod +x scripts/*.sh scripts/lib/*.sh tests/*.sh tests/fixtures/plugin-readiness-pass/hooks/*.sh 2>/dev/null || true
+          ./scripts/run-test-suite.sh

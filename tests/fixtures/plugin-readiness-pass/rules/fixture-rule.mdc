@@ -1,0 +1,8 @@
+---
+description: Fixture rule for plugin readiness pass case.
+alwaysApply: false
+---
+
+# Fixture Rule
+
+Used only by tests.

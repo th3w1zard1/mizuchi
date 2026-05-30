@@ -21,18 +21,18 @@ NC='\033[0m' # No Color
 # Test helper functions
 test_start() {
   local test_name="$1"
-  ((TESTS_TOTAL++))
+  TESTS_TOTAL=$((TESTS_TOTAL + 1))
   echo -n "TEST: $test_name ... "
 }
 
 test_pass() {
-  ((TESTS_PASSED++))
+  TESTS_PASSED=$((TESTS_PASSED + 1))
   echo -e "${GREEN}PASS${NC}"
 }
 
 test_fail() {
   local reason="$1"
-  ((TESTS_FAILED++))
+  TESTS_FAILED=$((TESTS_FAILED + 1))
   echo -e "${RED}FAIL${NC}"
   echo "  Reason: $reason"
 }

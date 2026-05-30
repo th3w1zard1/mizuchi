@@ -17,6 +17,6 @@ neg_out="$(MIZUCHI_ROOT="$tmp" bash "$ROOT/scripts/validate-capability-parity.sh
 neg_rc=$?
 set -e
 [[ "$neg_rc" -ne 0 ]]
-grep -q "missing capability token in CAPABILITY_MATRIX.md" <<<"$neg_out"
+grep -q "matrix token list_prompts" <<<"$neg_out"
 
 echo "test-capability-parity: PASS"

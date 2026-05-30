@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "hooks/fixture-hook.sh",
+        "timeout": 1
+      }
+    ]
+  }
+}

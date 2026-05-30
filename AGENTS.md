@@ -62,6 +62,8 @@ When a full decomp project uses [macabeus/mizuchi](https://github.com/macabeus/m
 - Prompt folders: `prompts/<name>/` with `prompt.md` + `settings.yaml` (three fields only)
 - Example scaffold: `prompts/fun_00148020/` (Xbox `.xbe`, asm-only from Ghidra)
 - Validate prompt folder: `./scripts/validate-prompt-settings.sh prompts/<name>/`
+- Plugin marketplace audit: `./scripts/audit-plugin-readiness.sh` (see `docs/plugin-marketplace-readiness.md`)
+- Full test suite: `./scripts/run-test-suite.sh` (CI: `.github/workflows/test.yml`)
 - Run: `npm start -- run --config mizuchi.yaml`
 - AI tool (Mizuchi MCP): `compile_and_view_assembly({ code, function_name })`
 - AI tool (Cursor-native): `./scripts/compile-and-view-assembly.sh --prompt prompts/<name>/ --code-file trial.c`

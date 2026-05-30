@@ -1,0 +1,5 @@
+{
+  "name": "fixture-plugin-fail",
+  "version": "0.0.1",
+  "description": "Broken plugin fixture missing skill frontmatter."
+}
