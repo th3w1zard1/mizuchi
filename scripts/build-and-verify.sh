@@ -43,14 +43,34 @@ if [[ ! -f "$trial_c" ]]; then
   exit 1
 fi
 
-if ! build_compile_defensive "$trial_c" "$candidate_o"; then
+if ! build_compile_defensive "$trial_c" "$candidate_o" >/dev/null; then
   echo "{\"status\":\"compile_error\",\"message\":\"BUILD FAILED. Treat this as a failed attempt and retry with simpler code.\"}"
   exit 1
 fi
 
-verify_json="$(verify_with_objdiff "$target_obj" "$candidate_o")"
+set +e
+verify_json="$(verify_with_objdiff "$target_obj" "$candidate_o" 2>&1)"
+verify_rc=$?
+set -e
+if [[ "$verify_rc" -ne 0 ]]; then
+  jq -n \
+    --arg status "infra_error" \
+    --arg message "Verification tooling failed" \
+    --arg raw "$verify_json" \
+    '{status:$status,message:$message,raw:$raw}'
+  exit 2
+fi
+
 status="$(jq -r '.status // "unknown"' <<<"$verify_json")"
 diffs="$(jq -r '.differences // -1' <<<"$verify_json")"
+if [[ "$status" == "error" ]]; then
+  jq -n \
+    --arg status "infra_error" \
+    --arg message "$(jq -r '.message // "Verification tooling failed"' <<<"$verify_json")" \
+    --argjson upstream "$verify_json" \
+    '{status:$status,message:$message,upstream:$upstream}'
+  exit 2
+fi
 
 if [[ "$status" == "matched" && "$diffs" == "0" && "$commit_on_match" -eq 1 ]]; then
   git add "$trial_c" "$candidate_o" 2>/dev/null || true
