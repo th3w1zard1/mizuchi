@@ -8,6 +8,7 @@ required_files=(
   "$ROOT/scripts/lfg-smoke.sh"
   "$ROOT/scripts/verify-workspace-surface.sh"
   "$ROOT/scripts/validate-prompt-status.sh"
+  "$ROOT/scripts/validate-guide-coverage.sh"
   "$ROOT/scripts/validate-capability-parity.sh"
   "$ROOT/scripts/validate-prompt-settings.sh"
   "$ROOT/scripts/objdiff-gate.sh"
@@ -94,6 +95,12 @@ fi
 prompt_status="$("$ROOT/scripts/validate-prompt-status.sh" --quiet)"
 if [[ "$prompt_status" != "PROMPT_STATUS_OK" ]]; then
   echo "invalid: validate-prompt-status.sh failed" >&2
+  exit 1
+fi
+
+guide_status="$("$ROOT/scripts/validate-guide-coverage.sh")"
+if [[ "$guide_status" != "GUIDE_COVERAGE_OK" ]]; then
+  echo "invalid: validate-guide-coverage.sh failed" >&2
   exit 1
 fi
 
