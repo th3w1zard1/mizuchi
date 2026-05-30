@@ -7,12 +7,14 @@
 : "${CHECK_LOG_PASSED:=0}"
 : "${CHECK_LOG_FAILED:=0}"
 declare -a CHECK_LOG_FAILURES=()
+declare -a CHECK_LOG_CHANGES=()
 
 check_log_init() {
   CHECK_LOG_SCRIPT="${1:-check}"
   CHECK_LOG_PASSED=0
   CHECK_LOG_FAILED=0
   CHECK_LOG_FAILURES=()
+  CHECK_LOG_CHANGES=()
 }
 
 check_log_configure() {
@@ -97,13 +99,27 @@ check_log_file_op() {
   local rel_path="$1"
   local op="$2"
   check_log_trace "io    ${op} ${rel_path}"
+  CHECK_LOG_CHANGES+=("${op} ${rel_path}")
   check_log_pass "io ${op} ${rel_path}"
+}
+
+check_log_run_step() {
+  local step="$1"
+  check_log_trace "step  ${step}"
+  check_log_pass "step ${step}"
 }
 
 check_log_summary() {
   local status="${1:-done}"
   printf '\n--- %s summary (%s) ---\n' "$CHECK_LOG_SCRIPT" "$status" >&2
   printf 'passed=%d failed=%d\n' "$CHECK_LOG_PASSED" "$CHECK_LOG_FAILED" >&2
+  if [[ ${#CHECK_LOG_CHANGES[@]} -gt 0 ]]; then
+    printf 'changes:\n' >&2
+    local change
+    for change in "${CHECK_LOG_CHANGES[@]}"; do
+      printf '  - %s\n' "$change" >&2
+    done
+  fi
   if [[ ${#CHECK_LOG_FAILURES[@]} -gt 0 ]]; then
     printf 'failures:\n' >&2
     local item

@@ -10,7 +10,17 @@ check_log_init "test-check-log"
 check_log_read_file "$ROOT/AGENTS.md" "AGENTS.md" "fixture"
 check_log_mcp_server "$ROOT/.cursor/mcp.json" "agdec-http"
 check_log_file_op "prompts/example/prompt.md" "created"
-check_log_summary "TEST_OK"
+summary_out="$(
+  check_log_summary "TEST_OK" 2>&1
+)"
+[[ "$summary_out" == *"changes:"* ]] || {
+  echo "expected changes block in summary, got: $summary_out" >&2
+  exit 1
+}
+[[ "$summary_out" == *"created prompts/example/prompt.md"* ]] || {
+  echo "expected created entry in changes, got: $summary_out" >&2
+  exit 1
+}
 
 verbose_trace="$(
   {

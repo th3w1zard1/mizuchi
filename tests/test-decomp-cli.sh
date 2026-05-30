@@ -23,4 +23,12 @@ set -e
 [[ "$run_objdiff_rc" -ne 0 ]]
 [[ "$programmatic_rc" -ne 0 ]]
 
+help_run="$("$CLI" help run-objdiff 2>&1)"
+grep -q "Examples:" <<<"$help_run"
+grep -q "objdiff-gate.sh\|run-objdiff" <<<"$help_run"
+
+err_out="$("$CLI" run-objdiff 2>&1)" || true
+grep -q "Error:" <<<"$err_out"
+grep -q "decomp-cli.sh run-objdiff" <<<"$err_out"
+
 echo "test-decomp-cli: PASS"

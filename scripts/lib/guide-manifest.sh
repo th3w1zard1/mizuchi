@@ -5,6 +5,16 @@ guide_manifest_root() {
   printf '%s\n' "${MIZUCHI_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 }
 
+guide_manifest_rel() {
+  local root="$1"
+  local abs_path="$2"
+  if [[ "$abs_path" == "$root/"* ]]; then
+    printf '%s\n' "${abs_path#"$root/"}"
+  else
+    printf '%s\n' "$abs_path"
+  fi
+}
+
 guide_manifest_load() {
   local root="$1"
 
@@ -92,4 +102,22 @@ guide_manifest_load() {
   )
 
   GUIDE_HOOK_PATTERN='/hooks/decomp-match-claim-guard.sh'
+
+  GUIDE_OUTPUT_DIRS=(
+    "$root/prompts"
+    "$root/context"
+    "$root/prompts/*/build"
+  )
+
+  GUIDE_PIPELINE_SCRIPTS=(
+    "$root/scripts/run-programmatic-phase.sh"
+    "$root/scripts/get-context.sh"
+    "$root/scripts/run-m2c.sh"
+    "$root/scripts/compile-trial.sh"
+    "$root/scripts/objdiff-gate.sh"
+    "$root/scripts/run-permuter.sh"
+    "$root/scripts/bootstrap-re-pipeline.sh"
+  )
+
+  GUIDE_MCP_CONFIG="$root/.cursor/mcp.json"
 }
