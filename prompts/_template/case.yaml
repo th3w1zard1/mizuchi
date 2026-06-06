@@ -1,0 +1,14 @@
+schemaVersion: 1
+caseId: REPLACE_ME
+target:
+  family: REPLACE_ME
+  binary: REPLACE_ME
+  platform: REPLACE_ME
+symbol:
+  name: REPLACE_ME
+  locator: REPLACE_ME
+proof:
+  targetObjectPath: build/obj/REPLACE_ME.o
+workspace:
+  promptPath: prompts/REPLACE_ME
+  buildDir: build

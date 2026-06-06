@@ -159,14 +159,14 @@ while true; do
 
   target_obj="$(prompt_target_obj "$next")"
   if [[ -z "$target_obj" ]]; then
-    count="$(queue_increment_attempt "$next")"
-    log_queue_write "increment attempts $next → $count"
-    if (( count >= max_attempts )); then
-      queue_move "$next" pending difficult
-      log_queue_write "move $next pending→difficult (no target.o)"
-      vacuum_log "difficult: $next target.o missing"
+    infra_count="$(( ${infra_retries[$next]:-0} + 1 ))"
+    infra_retries["$next"]="$infra_count"
+    if (( infra_count >= max_infra_retries )); then
+      queue_move "$next" pending failed
+      log_queue_write "move $next pending→failed (no target.o)"
+      vacuum_log "failed: $next target.o missing ($infra_count/$max_infra_retries)"
     else
-      vacuum_log "retry: $next target.o missing"
+      vacuum_log "infra: target.o missing for $next ($infra_count/$max_infra_retries)"
     fi
     continue
   fi

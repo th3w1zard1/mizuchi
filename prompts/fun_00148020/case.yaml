@@ -1,0 +1,14 @@
+schemaVersion: 1
+caseId: fun_00148020
+target:
+  family: odyssey
+  binary: /TSL/k2_xbox_default.xbe
+  platform: xbox
+symbol:
+  name: FUN_00148020
+  locator: "0x00148020"
+proof:
+  targetObjectPath: build/xbox/fun_00148020.o
+workspace:
+  promptPath: prompts/fun_00148020
+  buildDir: build

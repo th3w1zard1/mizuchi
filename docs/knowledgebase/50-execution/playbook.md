@@ -10,6 +10,11 @@
 6. Confirm objdiff 0 via `decomp-verify-match`
 7. Integrate manually or Mizuchi integrator
 
+Every real prompt folder should contain both:
+
+- `case.yaml` for stable case identity
+- `settings.yaml` for the strict Mizuchi tool contract
+
 ## Per-phase commands (conceptual)
 
 | Phase | Skill / command |
@@ -43,6 +48,11 @@ See `cursor-native-bridge.md`. Quick path:
 ./scripts/validate-prompt-settings.sh prompts/<fn>/
 ./scripts/compile-and-view-assembly.sh --prompt prompts/<fn>/ --code-file trial.c
 ```
+
+Architecture source of truth:
+
+- `docs/knowledgebase/10-architecture-runtime/reference-pipeline.md`
+- `docs/knowledgebase/10-architecture-runtime/workspace-contract.md`
 
 ## Stall playbook
 

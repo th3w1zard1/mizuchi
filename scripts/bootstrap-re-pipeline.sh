@@ -11,8 +11,8 @@ usage() {
   cat <<'EOF'
 usage: bootstrap-re-pipeline.sh [--quiet] --prompt <prompts/<name>/>
 
-Creates prompt.md and settings.yaml when missing, then validates settings format.
-Existing files are preserved. Verbose logging is the default.
+Creates case.yaml, prompt.md, and settings.yaml when missing, then validates the
+prompt contract. Existing files are preserved. Verbose logging is the default.
 EOF
 }
 
@@ -44,6 +44,30 @@ check_log_file_op "$PROMPT_DIR" "ensure-dir"
 
 prompt_md="$PROMPT_DIR/prompt.md"
 settings_yaml="$PROMPT_DIR/settings.yaml"
+case_yaml="$PROMPT_DIR/case.yaml"
+prompt_name="$(basename "$PROMPT_DIR")"
+
+if [[ ! -f "$case_yaml" ]]; then
+  cat >"$case_yaml" <<EOF
+schemaVersion: 1
+caseId: $prompt_name
+target:
+  family: replace_me
+  binary: replace_me
+  platform: replace_me
+symbol:
+  name: replace_me
+  locator: replace_me
+proof:
+  targetObjectPath: path/to/{{functionName}}.o
+workspace:
+  promptPath: prompts/$prompt_name
+  buildDir: build
+EOF
+  check_log_file_op "${case_yaml#$ROOT/}" "created"
+else
+  check_log_file_op "${case_yaml#$ROOT/}" "preserved"
+fi
 
 if [[ ! -f "$prompt_md" ]]; then
   cat >"$prompt_md" <<'EOF'
@@ -79,6 +103,10 @@ fi
 check_log_trace "run   scripts/validate-prompt-settings.sh ${PROMPT_DIR}"
 "$ROOT/scripts/validate-prompt-settings.sh" "$PROMPT_DIR"
 check_log_pass "validate-prompt-settings.sh"
+
+check_log_trace "run   scripts/validate-case-manifests.sh --quiet"
+"$ROOT/scripts/validate-case-manifests.sh" --quiet >/dev/null
+check_log_pass "validate-case-manifests.sh"
 
 check_log_summary "RE_BOOTSTRAP_OK"
 echo "RE_BOOTSTRAP_OK prompt=$PROMPT_DIR"

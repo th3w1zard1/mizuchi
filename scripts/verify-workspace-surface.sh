@@ -37,6 +37,7 @@ required_files=(
   "$ROOT/scripts/lfg-smoke.sh"
   "$ROOT/scripts/verify-workspace-surface.sh"
   "$ROOT/scripts/validate-prompt-status.sh"
+  "$ROOT/scripts/validate-case-manifests.sh"
   "$ROOT/scripts/validate-guide-coverage.sh"
   "$ROOT/scripts/validate-capability-parity.sh"
   "$ROOT/scripts/audit-plugin-readiness.sh"
@@ -53,6 +54,7 @@ required_files=(
   "$ROOT/scripts/lib/queue-state.sh"
   "$ROOT/scripts/lib/scorer-heuristic.sh"
   "$ROOT/scripts/lib/check-log.sh"
+  "$ROOT/scripts/lib/case-manifest.sh"
   "$ROOT/scripts/lib/guide-manifest.sh"
   "$ROOT/.cursor/hooks.json"
   "$ROOT/.cursor/mcp.json"
@@ -75,6 +77,8 @@ required_files=(
   "$ROOT/.cursor/skills/decomp-verify-match.md"
   "$ROOT/.cursor/skills/decomp-integrator.md"
   "$ROOT/.cursor/skills/decomp-workflow-checklist.md"
+  "$ROOT/docs/knowledgebase/10-architecture-runtime/reference-pipeline.md"
+  "$ROOT/docs/knowledgebase/10-architecture-runtime/workspace-contract.md"
 )
 
 failures=0
@@ -110,6 +114,15 @@ if [[ "$prompt_status" == "PROMPT_STATUS_OK" ]]; then
   check_log_pass "validate-prompt-status.sh"
 else
   check_log_fail "validate-prompt-status.sh returned: $prompt_status"
+  record_fail
+fi
+
+check_log_trace "run   scripts/validate-case-manifests.sh ${sub_quiet[*]:-}"
+case_manifest_status="$("$ROOT/scripts/validate-case-manifests.sh" "${sub_quiet[@]}")"
+if [[ "$case_manifest_status" == "CASE_MANIFESTS_OK" ]]; then
+  check_log_pass "validate-case-manifests.sh"
+else
+  check_log_fail "validate-case-manifests.sh returned: $case_manifest_status"
   record_fail
 fi
 

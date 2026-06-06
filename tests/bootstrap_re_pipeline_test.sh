@@ -18,12 +18,21 @@ last_line="$(printf '%s\n' "$out" | tail -n 1)"
   echo "missing prompt.md" >&2
   exit 1
 }
+[[ -f "$PROMPT/case.yaml" ]] || {
+  echo "missing case.yaml" >&2
+  exit 1
+}
 [[ -f "$PROMPT/settings.yaml" ]] || {
   echo "missing settings.yaml" >&2
   exit 1
 }
+grep -q '^  targetObjectPath: path/to/{{functionName}}\.o$' "$PROMPT/case.yaml" || {
+  echo "case.yaml targetObjectPath placeholder mismatch" >&2
+  exit 1
+}
 
 orig_prompt_contents="$(cat "$PROMPT/prompt.md")"
+orig_case_contents="$(cat "$PROMPT/case.yaml")"
 out2="$("$SCRIPT" --prompt "$PROMPT")"
 last_line2="$(printf '%s\n' "$out2" | tail -n 1)"
 [[ "$last_line2" == "RE_BOOTSTRAP_OK prompt=$PROMPT" ]] || {
@@ -32,6 +41,10 @@ last_line2="$(printf '%s\n' "$out2" | tail -n 1)"
 }
 [[ "$(cat "$PROMPT/prompt.md")" == "$orig_prompt_contents" ]] || {
   echo "prompt.md was unexpectedly overwritten" >&2
+  exit 1
+}
+[[ "$(cat "$PROMPT/case.yaml")" == "$orig_case_contents" ]] || {
+  echo "case.yaml was unexpectedly overwritten" >&2
   exit 1
 }
 

@@ -10,6 +10,9 @@ Success = **0 objdiff differences**. Functional equivalence is not enough.
 
 <!-- Paste m2ctx / typedef / extern declarations from Get Context -->
 
+Case identity and proof metadata live in `case.yaml`. Keep `prompt.md` focused on the
+working brief for the current run.
+
 # Similar matched functions
 
 <!-- From Decomp Atlas or prior matches in this project -->
