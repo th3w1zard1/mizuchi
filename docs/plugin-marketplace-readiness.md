@@ -40,16 +40,18 @@ Aligned with the Cursor `review-plugin-submission` checklist:
 
 Optional items (not required to pass): `mcp.json`, marketplace registration in a multi-plugin repo.
 
-## Tests and CI
+## Manual verification
 
-Fixture-backed tests avoid depending on a local plugin install in GitHub Actions:
+Automated test suites are intentionally disabled during the current product
+buildout. Verify marketplace readiness manually by running the audit against a
+real plugin checkout:
 
 ```bash
-./tests/test-plugin-readiness-audit.sh
-./scripts/run-test-suite.sh
+./scripts/audit-plugin-readiness.sh --plugin-root ~/.cursor/plugins/local/matching-decompilation-re
 ```
 
-CI runs the full suite via `.github/workflows/test.yml` on push and pull requests to `main`.
+Record the command output in the work log or release notes. Do not treat fixture
+tests or CI status as proof while the platform is still being made functional.
 
 ## Related ideation
 

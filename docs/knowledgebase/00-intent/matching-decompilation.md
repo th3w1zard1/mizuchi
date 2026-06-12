@@ -2,17 +2,23 @@
 
 ## Target problem
 
-Reverse engineers need **verifiable** C recovery for legacy binaries (game ports, embedded firmware) where "looks right" decompilation is insufficient — only **byte-identical object code** proves equivalence.
+Reverse engineers need **verifiable** recovery for existing applications and binaries
+where "looks right" output is insufficient. In Mizuchi's current strongest workflow,
+that means recovering C that recompiles to **byte-identical object code**.
 
 ## Our approach
 
-Use a **phased pipeline**: gather types/asm (Get Context + Ghidra) → programmatic m2c/compile/objdiff/permuter → sandboxed AI iteration → optional integrator. **objdiff 0** is the sole match gate.
+Use a **phased pipeline** inside one runtime: intake and normalize a case, gather
+types/asm/context, run programmatic tooling, then use sandboxed AI iteration only when
+deterministic passes stall. In the matching-decompilation path, **objdiff 0** remains
+the sole match gate.
 
 ## Who it's for
 
 - Decomp project contributors matching functions in C
 - AI agents assisting matching under sandbox + verification rules
-- Odyssey/KOTOR-style workflows using shared Ghidra + Mizuchi patterns
+- Reverse-engineering workflows that need one proof-aware entrypoint rather than a
+  manually driven stack of tools
 
 ## Success signals
 
@@ -27,6 +33,7 @@ Use a **phased pipeline**: gather types/asm (Get Context + Ghidra) → programma
 - LLM benchmark leaderboards (excluded from this knowledgebase)
 - Replacing human review for **semantic** correctness beyond object match
 - Unsandboxed agent writes to main project tree
+- Treating Odyssey/KOTOR as the long-term product boundary
 
 ## Plugin anchor
 
@@ -38,3 +45,4 @@ Commands: `/decomp-function`, `/decomp-prompt`, `/ghidra-scout`
 
 - [OFFICIAL] Macabeus article + Mizuchi README — see `matching-decompilation-re/docs/research-brief.md`
 - [SYNTH] This workspace uses AgentDecompile MCP + optional Mizuchi CLI when installed
+- [SYNTH] The broader product/runtime boundary lives in `docs/knowledgebase/10-architecture-runtime/universal-entrypoint-architecture.md`

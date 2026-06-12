@@ -17,6 +17,8 @@ source "$root_dir/scripts/lib/queue-state.sh"
 source "$root_dir/scripts/lib/vacuum-backoff.sh"
 # shellcheck source=scripts/lib/vacuum-state.sh
 source "$root_dir/scripts/lib/vacuum-state.sh"
+# shellcheck source=scripts/lib/prompt-metadata.sh
+source "$root_dir/scripts/lib/prompt-metadata.sh"
 
 usage() {
   cat <<EOF
@@ -65,13 +67,32 @@ log_queue_write() {
 
 prompt_target_obj() {
   local prompt_name="${1:?missing prompt name}"
-  local path="$GUIDE_PROMPTS_DIR/$prompt_name/target.o"
-  if [[ -f "$path" ]]; then
-    check_log_read_file "$path" "$(guide_manifest_rel "$root_dir" "$path")" "target.o"
-    echo "$path"
+  local prompt_dir="$GUIDE_PROMPTS_DIR/$prompt_name"
+  local proof_target=""
+  proof_target="$(prompt_metadata_proof_target "$prompt_dir")"
+
+  if [[ -n "$proof_target" ]]; then
+    if [[ "$proof_target" != /* ]]; then
+      proof_target="$(target_adapter_resolve_path "$root_dir" "$proof_target")"
+    fi
+    if [[ -f "$proof_target" ]]; then
+      check_log_read_file "$proof_target" "$(guide_manifest_rel "$root_dir" "$proof_target")" "proof target"
+      echo "$proof_target"
+      return
+    fi
+    check_log_trace "read  $(guide_manifest_rel "$root_dir" "$proof_target") (missing proof target)"
+    echo ""
     return
   fi
-  check_log_trace "read  $(guide_manifest_rel "$root_dir" "$path") (missing target.o)"
+
+  local legacy_path="$prompt_dir/target.o"
+  if [[ -f "$legacy_path" ]]; then
+    check_log_read_file "$legacy_path" "$(guide_manifest_rel "$root_dir" "$legacy_path")" "target.o"
+    echo "$legacy_path"
+    return
+  fi
+
+  check_log_trace "read  $(guide_manifest_rel "$root_dir" "$legacy_path") (missing target.o)"
   echo ""
 }
 

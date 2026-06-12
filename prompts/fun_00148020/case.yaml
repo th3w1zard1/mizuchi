@@ -1,0 +1,27 @@
+schemaVersion: 1
+caseId: fun_00148020
+adapter:
+  id: odyssey
+  capabilitiesProfile: ghidra-mizuchi-v1
+ingest:
+  sourceType: binary
+  sourcePath: /TSL/k2_xbox_default.xbe
+  provenance: direct
+target:
+  family: odyssey
+  binary: /TSL/k2_xbox_default.xbe
+  platform: xbox
+load:
+  tool: agdec-http
+  programPath: /TSL/k2_xbox_default.xbe
+  contextPath: context/ctx.h
+symbol:
+  name: FUN_00148020
+  locator: "0x00148020"
+proof:
+  targetObjectPath: build/xbox/fun_00148020.o
+  source: golden-object
+  comparator: objdiff
+workspace:
+  promptPath: prompts/fun_00148020
+  buildDir: build

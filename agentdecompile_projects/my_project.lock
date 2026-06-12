@@ -1,9 +1,9 @@
 #Ghidra Lock File
-#Fri May 29 08:47:48 CDT 2026
+#Thu Jun 11 11:59:30 CDT 2026
 <META>\ Supports\ File\ Channel\ Locking=Channel Lock
 Hostname=BodenPC
 OS\ Architecture=amd64
 OS\ Name=Linux
-OS\ Version=7.0.9-205.fc44.x86_64
-Timestamp=5/29/26, 8\:47\u202FAM
+OS\ Version=7.0.11-200.fc44.x86_64
+Timestamp=6/11/26, 11\:59\u202FAM
 Username=brunner56

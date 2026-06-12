@@ -11,11 +11,15 @@ usage_top() {
   cat <<EOF
 Usage: ./scripts/decomp-cli.sh <command> [args]
 
-Agent-friendly entry point for Mizuchi matching-decompilation workflows.
-Verbose logging is the default on underlying scripts; pass --quiet where supported.
+Canonical shell entry point for Mizuchi intake, orchestration, status, and proof
+surfaces. Verbose logging is the default on underlying scripts; pass --quiet where
+supported.
 
 Commands:
   help [command]              Workspace help (JSON) or per-command examples
+  bootstrap-case --prompt <prompt-dir>
+                              Initialize prompt-local case contract files
+  status [status=...]         Alias for list-prompts; inspect queue/work state
   ghidra-scout <target>       Point agent at Ghidra MCP discovery
   decomp-prompt <name>        Validate prompts/<name>/settings.yaml
   decomp-atlas <name>         Point agent at Decomp Atlas for examples
@@ -26,10 +30,14 @@ Commands:
   inject-context <agent> [--json]
   run-objdiff <target.o> <candidate.o>
   programmatic-phase --prompt <prompt-dir>
+  validate-case-manifests [--quiet]
+                              Validate normalized case manifests under prompts/
   verify-surface              Run workspace surface + guide validators
 
 Examples:
   ./scripts/decomp-cli.sh help decomp-function
+  ./scripts/decomp-cli.sh bootstrap-case --prompt prompts/fun_00148020/
+  ./scripts/decomp-cli.sh status status=in_progress
   ./scripts/decomp-cli.sh list-prompts status=matched
   ./scripts/decomp-cli.sh inject-context ghidra-binary-scout
   ./scripts/decomp-cli.sh programmatic-phase --prompt prompts/fun_00148020/
@@ -50,6 +58,27 @@ command name is supplied.
 Examples:
   ./scripts/decomp-cli.sh help
   ./scripts/decomp-cli.sh help run-objdiff
+EOF
+      ;;
+    bootstrap-case)
+      cat <<EOF
+Usage: decomp-cli.sh bootstrap-case --prompt <prompt-dir> [--quiet]
+
+Initializes case.yaml, prompt.md, and settings.yaml for a normalized case workspace.
+
+Examples:
+  ./scripts/decomp-cli.sh bootstrap-case --prompt prompts/fun_00148020/
+EOF
+      ;;
+    status)
+      cat <<EOF
+Usage: decomp-cli.sh status [status=<matched|in_progress|integrated|pending|blocked>]
+
+Alias for list-prompts; returns case/work queue metadata.
+
+Examples:
+  ./scripts/decomp-cli.sh status
+  ./scripts/decomp-cli.sh status status=matched
 EOF
       ;;
     ghidra-scout)
@@ -147,6 +176,17 @@ Examples:
   ./scripts/decomp-cli.sh programmatic-phase --prompt prompts/fun_00148020/ --skip-permuter
 EOF
       ;;
+    validate-case-manifests)
+      cat <<EOF
+Usage: decomp-cli.sh validate-case-manifests [--quiet]
+
+Validates prompt-local case.yaml files against the workspace contract.
+
+Examples:
+  ./scripts/decomp-cli.sh validate-case-manifests
+  ./scripts/decomp-cli.sh validate-case-manifests --quiet
+EOF
+      ;;
     verify-surface)
       cat <<EOF
 Usage: decomp-cli.sh verify-surface [--quiet]
@@ -186,7 +226,14 @@ shift || true
 
 case "$cmd" in
   help)
-    "$ROOT/scripts/help-command.sh"
+    # Delegate-only: help-command.sh owns check-log trace/summary on stderr.
+    "$ROOT/scripts/help-command.sh" "$@"
+    ;;
+  bootstrap-case)
+    "$ROOT/scripts/bootstrap-re-pipeline.sh" "$@"
+    ;;
+  status)
+    "$ROOT/scripts/list-prompts.sh" "$@"
     ;;
   ghidra-scout)
     target="${1:-}"
@@ -256,6 +303,9 @@ case "$cmd" in
         "./scripts/decomp-cli.sh programmatic-phase --prompt prompts/fun_00148020/"
     fi
     "$ROOT/scripts/run-programmatic-phase.sh" "$@"
+    ;;
+  validate-case-manifests)
+    "$ROOT/scripts/validate-case-manifests.sh" "$@"
     ;;
   verify-surface)
     "$ROOT/scripts/verify-workspace-surface.sh" "$@"

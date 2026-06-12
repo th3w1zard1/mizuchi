@@ -1,6 +1,15 @@
 # Mizuchi workspace — agent guide
 
-Matching decompilation for reverse-engineered binaries (KOTOR / Odyssey focus). Success = **objdiff 0 differences** between target `.o` and recompiled C.
+Mizuchi is a proof-aware reverse-engineering workspace with Odyssey/KOTOR as the
+first strong adapter family, not the product boundary. The current gold-standard
+success path for matching workflows is still **objdiff 0 differences** between the
+target `.o` and recompiled C.
+
+## Primary entrypoint
+
+Use `./scripts/decomp-cli.sh` as the canonical shell surface for intake, orchestration,
+status, and verification. Cursor slash commands and MCP tools are parity surfaces around
+that runtime, not the source of truth.
 
 ## Enable the plugin
 
@@ -19,7 +28,7 @@ Matching decompilation for reverse-engineered binaries (KOTOR / Odyssey focus). 
 | `/decomp-integrate` | Land verified match into source tree |
 
 Local command specs live in `.cursor/commands/`.
-CLI mirror for shell execution: `./scripts/decomp-cli.sh`.
+Primary CLI/runtime surface: `./scripts/decomp-cli.sh`.
 
 ## Skills (plugin)
 
@@ -48,7 +57,7 @@ Plugin reference: `docs/reference/agent-pitfalls.md` in the matching-decompilati
 ## Ghidra / AgentDecompile
 
 - Programs: e.g. `/K1/k1_win_gog_swkotor.exe`, `/TSL/k2_win_gog_aspyr_swkotor2.exe`
-- Shared server: `170.9.241.140:13100/Odyssey` (when configured)
+- Current example shared server: `170.9.241.140:13100/Odyssey` (when configured)
 - Local project: `agentdecompile_projects/my_project`
 
 Use MCP `agdec-http` tools; see plugin `docs/reference/mcp-tools.md`.
@@ -63,7 +72,9 @@ When a full decomp project uses [macabeus/mizuchi](https://github.com/macabeus/m
 - Example scaffold: `prompts/fun_00148020/` (Xbox `.xbe`, asm-only from Ghidra)
 - Validate prompt folder: `./scripts/validate-prompt-settings.sh prompts/<name>/`
 - Plugin marketplace audit: `./scripts/audit-plugin-readiness.sh` (see `docs/plugin-marketplace-readiness.md`)
-- Full test suite: `./scripts/run-test-suite.sh` (CI: `.github/workflows/test.yml`)
+- Automated test suites are intentionally removed for the current buildout phase.
+  Verify manually with direct CLI/tool runs and captured proof artifacts until the
+  platform is functional end-to-end.
 - Run: `npm start -- run --config mizuchi.yaml`
 - AI tool (Mizuchi MCP): `compile_and_view_assembly({ code, function_name })`
 - AI tool (Cursor-native): `./scripts/compile-and-view-assembly.sh --prompt prompts/<name>/ --code-file trial.c`

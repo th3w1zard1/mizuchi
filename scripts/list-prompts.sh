@@ -10,6 +10,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/check-log.sh"
 # shellcheck source=scripts/lib/guide-manifest.sh
 source "$ROOT/scripts/lib/guide-manifest.sh"
+# shellcheck source=scripts/lib/prompt-metadata.sh
+source "$ROOT/scripts/lib/prompt-metadata.sh"
 
 quiet=0
 while [[ $# -gt 0 ]]; do
@@ -37,67 +39,6 @@ check_log_init "list-prompts"
 guide_manifest_load "$ROOT"
 guide_manifest_trace_defaults "$ROOT"
 
-# Helper: extract status from notes.md
-get_prompt_status() {
-  local prompt_dir="$1"
-  local notes_file="$prompt_dir/notes.md"
-  
-  # Default status
-  local status="pending"
-  
-  if [[ -f "$notes_file" ]]; then
-    # Look for patterns like "status: matched" or "status: in_progress" or "status: integrated"
-    if grep -q "status.*integrated" "$notes_file" 2>/dev/null; then
-      status="integrated"
-    elif grep -q "status.*matched" "$notes_file" 2>/dev/null; then
-      status="matched"
-    elif grep -q "status.*in_progress\|status.*in-progress" "$notes_file" 2>/dev/null; then
-      status="in_progress"
-    elif grep -q "status.*blocked" "$notes_file" 2>/dev/null; then
-      status="blocked"
-    fi
-  fi
-  
-  echo "$status"
-}
-
-# Helper: extract function name from prompt metadata
-get_function_name() {
-  local prompt_dir="$1"
-  local prompt_name="$2"
-  
-  # Default: derive from folder name (e.g., fun_00148020 -> FUN_00148020)
-  local function_name
-  function_name=$(echo "$prompt_name" | sed 's/fun_/FUN_/' | tr '[:lower:]' '[:upper:]')
-  
-  # Try to refine from prompt.md if available
-  if [[ -f "$prompt_dir/prompt.md" ]]; then
-    local from_md
-    from_md=$(grep -o 'Decompile `[^`]\+' "$prompt_dir/prompt.md" 2>/dev/null | head -1 | sed 's/Decompile `//;s/`$//' || echo "")
-    if [[ -n "$from_md" ]]; then
-      function_name="$from_md"
-    fi
-  fi
-  
-  echo "$function_name"
-}
-
-# Helper: format last_updated timestamp as ISO date
-get_last_updated() {
-  local prompt_dir="$1"
-  
-  # Get modification time of the prompt directory
-  local mtime
-  mtime=$(stat -c %Y "$prompt_dir" 2>/dev/null || echo "0")
-  
-  # Convert to ISO date format (YYYY-MM-DD)
-  if [[ "$mtime" != "0" ]]; then
-    date -u -d "@$mtime" +"%Y-%m-%d" 2>/dev/null || echo ""
-  else
-    echo ""
-  fi
-}
-
 # Build prompts array
 build_prompts_array() {
   local prompts_dir="$GUIDE_PROMPTS_DIR"
@@ -121,23 +62,22 @@ build_prompts_array() {
       continue
     fi
     
+    local metadata
+    metadata="$(prompt_metadata_summary_json "$prompt_dir")"
+
     local status
-    status=$(get_prompt_status "$prompt_dir")
+    status="$(jq -r '.status' <<<"$metadata")"
     check_log_trace "read  prompt/${prompt_name} status=${status}"
 
-    local function_name
-    function_name=$(get_function_name "$prompt_dir" "$prompt_name")
-
     local last_updated
-    last_updated=$(get_last_updated "$prompt_dir")
+    last_updated="$(prompt_metadata_last_updated_date "$prompt_dir")"
     
     local item
     item=$(jq -n \
       --arg name "$prompt_name" \
-      --arg status "$status" \
-      --arg func "$function_name" \
       --arg updated "$last_updated" \
-      '{name: $name, status: $status, function_name: $func, last_updated: $updated}')
+      --argjson metadata "$metadata" \
+      '$metadata + {name: $name, last_updated: $updated}')
     
     prompts+=("$item")
   done

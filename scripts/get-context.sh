@@ -14,6 +14,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/lib/check-log.sh"
 # shellcheck source=scripts/lib/guide-manifest.sh
 source "$ROOT/scripts/lib/guide-manifest.sh"
+# shellcheck source=scripts/lib/prompt-metadata.sh
+source "$ROOT/scripts/lib/prompt-metadata.sh"
 
 prompt_dir=""
 output=""
@@ -59,11 +61,15 @@ prompt_settings_require_dir "$prompt_dir" || exit $?
 functionName="$(prompt_settings_get "$prompt_dir" functionName)"
 targetObjectPath="$(prompt_settings_get "$prompt_dir" targetObjectPath)"
 targetObjectPath="${targetObjectPath//\{\{functionName\}\}/$functionName}"
+adapter_id="$(prompt_metadata_adapter_id "$prompt_dir")"
 
-check_log_trace "prompt functionName=${functionName} targetObject=${targetObjectPath}"
+check_log_trace "prompt functionName=${functionName} targetObject=${targetObjectPath} adapter=${adapter_id}"
 
 if [[ -z "$output" ]]; then
-  output="$(guide_default_context_path "$ROOT")"
+  output="$(target_adapter_case_context_path_abs "$ROOT" "$prompt_dir" "$adapter_id" 2>/dev/null || true)"
+  if [[ -z "$output" ]]; then
+    output="$(guide_default_context_path "$ROOT")"
+  fi
 fi
 
 script="$(mizuchi_config_get global.getContextScript)" || {

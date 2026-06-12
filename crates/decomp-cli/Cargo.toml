@@ -1,0 +1,15 @@
+[package]
+name = "decomp-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "decomp"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+decomp-core = { path = "../decomp-core" }
+serde_json.workspace = true

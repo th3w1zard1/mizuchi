@@ -7,6 +7,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/check-log.sh"
 # shellcheck source=scripts/lib/guide-manifest.sh
 source "$ROOT/scripts/lib/guide-manifest.sh"
+# shellcheck source=scripts/lib/prompt-metadata.sh
+source "$ROOT/scripts/lib/prompt-metadata.sh"
 
 usage() {
   cat <<'EOF'
@@ -67,12 +69,17 @@ PROMPT_DIR="$(cd "$PROMPT_DIR" && pwd)"
 mkdir -p "$PROMPT_DIR/build"
 check_log_file_op "$(guide_manifest_rel "$ROOT" "$PROMPT_DIR/build")" "ensure-dir"
 
+context_hint="$(prompt_metadata_context_path "$PROMPT_DIR" 2>/dev/null || true)"
+if [[ -n "$context_hint" ]]; then
+  check_log_trace "prompt contextPath=${context_hint}"
+fi
+
 if [[ "$SKIP_CONTEXT" -eq 0 ]]; then
   check_log_run_step "get-context"
   if "$ROOT/scripts/get-context.sh" --prompt "$PROMPT_DIR" ${quiet:+--quiet}; then
     check_log_pass "get-context.sh"
   else
-    check_log_trace "warn  get-context failed; continuing with context/ctx.h"
+    check_log_trace "warn  get-context failed; continuing with existing ${context_hint:-context/ctx.h}"
   fi
 fi
 

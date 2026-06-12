@@ -11,7 +11,9 @@ build_compile_defensive() {
   trap 'rm -f "$tmp_err" "$tmp_out"' RETURN
 
   set +e
-  gcc -c "$src" -o "$out" >"$tmp_out" 2>"$tmp_err"
+  # Avoid ccache-specific filesystem failures from being misclassified as
+  # source/compile failures. The compiler itself is the proof source here.
+  CCACHE_DISABLE=1 gcc -c "$src" -o "$out" >"$tmp_out" 2>"$tmp_err"
   rc=$?
   set -e
 

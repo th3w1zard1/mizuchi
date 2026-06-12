@@ -6,6 +6,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 quiet=0
 
+# shellcheck source=scripts/lib/prompt-metadata.sh
+source "$ROOT/scripts/lib/prompt-metadata.sh"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quiet) quiet=1; shift ;;
@@ -21,24 +24,6 @@ log() {
   [[ "$quiet" -eq 0 ]] && echo "$1" >&2
 }
 
-read_target_object_path() {
-  local settings="$1"
-  if [[ ! -f "$settings" ]]; then
-    echo ""
-    return 0
-  fi
-  if command -v ruby >/dev/null 2>&1; then
-    ruby -ryaml -e 'print YAML.load_file(ARGV[0])["targetObjectPath"].to_s' "$settings" 2>/dev/null || true
-    return 0
-  fi
-  grep -E '^targetObjectPath:' "$settings" | head -1 | sed 's/^targetObjectPath:[[:space:]]*//' || true
-}
-
-notes_claims_matched() {
-  local notes="$1"
-  grep -qiE '^[[:space:]]*\*?\*?status:[[:space:]]*matched\*?\*?[[:space:]]*$' "$notes"
-}
-
 errors=0
 
 for prompt_dir in "$ROOT"/prompts/*/; do
@@ -47,21 +32,24 @@ for prompt_dir in "$ROOT"/prompts/*/; do
   [[ "$name" == "_template" ]] && continue
 
   notes="$prompt_dir/notes.md"
-  settings="$prompt_dir/settings.yaml"
   [[ -f "$notes" ]] || continue
 
-  if ! notes_claims_matched "$notes"; then
+  if [[ "$(prompt_metadata_status "$prompt_dir")" != "matched" ]]; then
     continue
   fi
 
-  target_rel="$(read_target_object_path "$settings")"
+  target_rel="$(prompt_metadata_proof_target "$prompt_dir")"
   if [[ -z "$target_rel" ]]; then
-    log "invalid: prompts/$name claims matched but settings.yaml has no targetObjectPath"
+    log "invalid: prompts/$name claims matched but no canonical proof target is configured"
     errors=1
     continue
   fi
 
-  target_abs="$ROOT/$target_rel"
+  if [[ "$target_rel" == /* ]]; then
+    target_abs="$target_rel"
+  else
+    target_abs="$ROOT/$target_rel"
+  fi
   if [[ ! -f "$target_abs" ]]; then
     log "invalid: prompts/$name claims matched but golden object missing: $target_rel"
     errors=1

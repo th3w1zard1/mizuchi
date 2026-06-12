@@ -52,6 +52,13 @@ Without `mizuchi run`, workspace scripts mirror compile + objdiff + assembly vie
 
 Details: `docs/knowledgebase/50-execution/cursor-native-bridge.md`
 
+## Canonical runtime docs
+
+- `docs/knowledgebase/10-architecture-runtime/reference-pipeline.md` — article-faithful
+  reference runtime
+- `docs/knowledgebase/10-architecture-runtime/workspace-contract.md` — stable case and
+  artifact contract
+
 ## [OPEN]
 
 Mizuchi daemon not required for exploration; full plugin orchestration (m2c/permuter/integrator) still needs upstream Mizuchi or manual tool invocation. Golden `.o` files not yet wired for example prompt `fun_00148020`.

@@ -46,9 +46,15 @@ guide_manifest_load() {
     "$root/scripts/compile-and-view-assembly.sh"
     "$root/scripts/run-programmatic-phase.sh"
     "$root/scripts/objdiff-gate.sh"
+    "$root/scripts/validate-case-manifests.sh"
     "$root/scripts/validate-prompt-settings.sh"
     "$root/docs/knowledgebase/00-intent/matching-decompilation.md"
     "$root/docs/knowledgebase/10-architecture-runtime/pipeline-bridge.md"
+    "$root/docs/knowledgebase/10-architecture-runtime/reference-pipeline.md"
+    "$root/docs/knowledgebase/10-architecture-runtime/rust-core-orchestrator.md"
+    "$root/docs/knowledgebase/10-architecture-runtime/universal-entrypoint-architecture.md"
+    "$root/docs/knowledgebase/10-architecture-runtime/target-intake-contract.md"
+    "$root/docs/knowledgebase/10-architecture-runtime/workspace-contract.md"
     "$root/docs/knowledgebase/20-domain-theory/matching-decompilation-theory.md"
     "$root/docs/knowledgebase/50-execution/playbook.md"
     "$root/docs/knowledgebase/50-execution/cursor-native-bridge.md"
@@ -90,6 +96,8 @@ guide_manifest_load() {
 
   GUIDE_CLI_TOKENS=(
     ghidra-scout
+    bootstrap-case
+    status
     decomp-prompt
     decomp-atlas
     decomp-function
@@ -98,6 +106,7 @@ guide_manifest_load() {
     inject-context
     run-objdiff
     programmatic-phase
+    validate-case-manifests
     verify-surface
   )
 

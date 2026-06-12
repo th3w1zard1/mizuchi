@@ -40,3 +40,10 @@
 
 # plan_output: html              # md | html (default: md)
 # brainstorm_output: html        # md | html (default: md)
+# ideate_output: md              # md | html (default: html -- ideation docs are human-facing, so HTML is the default; set md to opt out)
+
+# --- ce-promote ---
+# Written automatically when you decline the Spiral setup offer in /ce-promote.
+# Suppresses that one-time setup nudge in this project. Remove the key to re-enable.
+
+# ce_promote_spiral_optout: true   # true | (absent) (default: absent -- offer once)

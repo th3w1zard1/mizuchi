@@ -1,0 +1,27 @@
+schemaVersion: 1
+caseId: REPLACE_ME
+adapter:
+  id: REPLACE_ME
+  capabilitiesProfile: REPLACE_ME
+ingest:
+  sourceType: REPLACE_ME
+  sourcePath: REPLACE_ME
+  provenance: REPLACE_ME
+target:
+  family: REPLACE_ME
+  binary: REPLACE_ME
+  platform: REPLACE_ME
+load:
+  tool: REPLACE_ME
+  programPath: REPLACE_ME
+  contextPath: REPLACE_ME
+symbol:
+  name: REPLACE_ME
+  locator: REPLACE_ME
+proof:
+  targetObjectPath: build/obj/REPLACE_ME.o
+  source: REPLACE_ME
+  comparator: REPLACE_ME
+workspace:
+  promptPath: prompts/REPLACE_ME
+  buildDir: build

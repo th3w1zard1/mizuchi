@@ -1,20 +1,25 @@
 # Mizuchi workspace
 
-Cursor workspace for **matching decompilation** on reverse-engineered game binaries (KOTOR / Odyssey). The goal is C that recompiles to **byte-identical** object code — verified with **objdiff 0 differences**, not Ghidra pseudocode alone.
+Mizuchi is a proof-aware reverse-engineering workspace that is evolving toward a
+single-entrypoint, self-contained product for source recovery across multiple target
+families. Today, the strongest implemented proof path is still matching decompilation:
+candidate C must recompile to **byte-identical** object code, verified with
+**objdiff 0 differences**.
 
 ## Quick start
 
-1. Enable plugin **matching-decompilation-re** in Cursor → Settings → Plugins  
-   Path: `~/.cursor/plugins/local/matching-decompilation-re/`
-2. Read `AGENTS.md` for commands, skills, Ghidra MCP, and invariants.
-3. Check local command specs in `.cursor/commands/` and MCP config in `.cursor/mcp.json`.
-4. Use `./scripts/decomp-cli.sh verify-surface` to assert subagents/hooks/rules/skills/commands/MCP/CLI surfaces.
-5. For a new function:
-   - `./scripts/bootstrap-re-pipeline.sh --prompt prompts/<fn>/` — initialize required prompt files
-   - `/ghidra-scout` — find function, export asm + types
-   - `/decomp-prompt` — scaffold or refine `prompts/<fn>/` (or copy `prompts/_template/` manually)
-   - `/decomp-function` — programmatic → AI matching loop
-   - `/decomp-integrate` — after objdiff 0, land C in the project
+1. Start with the primary shell surface:
+   - `./scripts/decomp-cli.sh help`
+   - `./scripts/decomp-cli.sh verify-surface`
+2. Read `AGENTS.md` for the current runtime invariants, adapters, and agent surfaces.
+3. Enable plugin **matching-decompilation-re** in Cursor if you want slash-command parity:
+   - Path: `~/.cursor/plugins/local/matching-decompilation-re/`
+4. For a new case:
+   - `./scripts/decomp-cli.sh bootstrap-case --prompt prompts/<case-id>/`
+   - `/ghidra-scout` or equivalent MCP flow for discovery
+   - `./scripts/decomp-cli.sh decomp-function <case-id>` for the programmatic-first loop
+   - `./scripts/decomp-cli.sh decomp-integrate <case-id> <target.o>` only after proof passes
+5. Use `./scripts/decomp-cli.sh status` to inspect queued or in-progress work.
 
 ## Knowledgebase
 

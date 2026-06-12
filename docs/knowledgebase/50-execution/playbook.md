@@ -2,13 +2,20 @@
 
 ## Quick start (Cursor)
 
-1. Enable plugin `matching-decompilation-re` in Cursor
-2. Open Ghidra program via AgentDecompile MCP
-3. `/ghidra-scout` — find function, export asm + types
-4. `/decomp-prompt` — create `prompts/<fn>/`
-5. `/decomp-function` — run pipeline (programmatic → AI)
-6. Confirm objdiff 0 via `decomp-verify-match`
-7. Integrate manually or Mizuchi integrator
+1. Start with `./scripts/decomp-cli.sh help`
+2. Initialize a case workspace with `./scripts/decomp-cli.sh bootstrap-case --prompt prompts/<case-id>/`
+3. Enable plugin `matching-decompilation-re` in Cursor if you want slash-command parity
+4. Open the target in Ghidra / AgentDecompile and run `/ghidra-scout`
+5. Refine the case context and prompt-local artifacts
+6. Run `./scripts/decomp-cli.sh decomp-function <case-id>`
+7. Confirm proof, then integrate through the verified path
+
+Every real prompt folder should contain both:
+
+- `case.yaml` for stable case identity
+- `settings.yaml` for the strict Mizuchi tool contract
+- `case.yaml` should now also capture adapter selection, intake provenance, load context,
+  and proof metadata explicitly
 
 ## Per-phase commands (conceptual)
 
@@ -43,6 +50,13 @@ See `cursor-native-bridge.md`. Quick path:
 ./scripts/validate-prompt-settings.sh prompts/<fn>/
 ./scripts/compile-and-view-assembly.sh --prompt prompts/<fn>/ --code-file trial.c
 ```
+
+Architecture source of truth:
+
+- `docs/knowledgebase/10-architecture-runtime/universal-entrypoint-architecture.md`
+- `docs/knowledgebase/10-architecture-runtime/reference-pipeline.md`
+- `docs/knowledgebase/10-architecture-runtime/workspace-contract.md`
+- `docs/knowledgebase/10-architecture-runtime/target-intake-contract.md`
 
 ## Stall playbook
 

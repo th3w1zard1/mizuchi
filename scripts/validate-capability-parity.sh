@@ -33,6 +33,8 @@ matrix_file="$ROOT/CAPABILITY_MATRIX.md"
 
 required_cli_commands=(
   help
+  bootstrap-case
+  status
   ghidra-scout
   decomp-prompt
   decomp-atlas
@@ -42,6 +44,7 @@ required_cli_commands=(
   inject-context
   run-objdiff
   programmatic-phase
+  validate-case-manifests
   verify-surface
 )
 

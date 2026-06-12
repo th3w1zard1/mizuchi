@@ -105,20 +105,126 @@ load_agent_metadata() {
     '{name: $name, context_injection: ($injection == "true"), capabilities: $capabilities, context_fields: $context_fields}'
 }
 
-# Get workspace context (all available fields)
+# Build a compact workspace context without shelling out to the full summary
+# script. The hook only needs a few fields, so we assemble them directly from
+# prompt folders, git state, and MCP config.
 get_workspace_context_data() {
-  # Use existing script to get structured context
-  local context_script="$root_dir/scripts/get-workspace-context.sh"
-  
-  if [[ ! -f "$context_script" ]]; then
-    check_log_fail "context script missing: $(guide_manifest_rel "$root_dir" "$context_script")"
-    check_log_summary "INJECT_CONTEXT_FAIL"
-    echo "Error: Context script not found: $context_script" >&2
-    exit 1
+  local prompts_dir="$GUIDE_PROMPTS_DIR"
+  local mcp_config="$GUIDE_MCP_CONFIG"
+  local prompt_items=()
+  local build_items=()
+  local matched=0
+  local integrated=0
+  local blocked=0
+  local total=0
+
+  if [[ -d "$prompts_dir" ]]; then
+    for prompt_dir in "$prompts_dir"/*; do
+      [[ -d "$prompt_dir" ]] || continue
+      local prompt_name notes_file status mtime
+      prompt_name="$(basename "$prompt_dir")"
+      [[ "$prompt_name" == "_template" ]] && continue
+
+      status="pending"
+      notes_file="$prompt_dir/notes.md"
+      if [[ -f "$notes_file" ]]; then
+        if grep -q "status.*integrated" "$notes_file" 2>/dev/null; then
+          status="integrated"
+        elif grep -q "status.*matched" "$notes_file" 2>/dev/null; then
+          status="matched"
+        elif grep -q "status.*in_progress\|status.*in-progress" "$notes_file" 2>/dev/null; then
+          status="in_progress"
+        elif grep -q "status.*blocked" "$notes_file" 2>/dev/null; then
+          status="blocked"
+        fi
+      fi
+
+      case "$status" in
+        matched) matched=$((matched + 1)) ;;
+        integrated) integrated=$((integrated + 1)) ;;
+        blocked) blocked=$((blocked + 1)) ;;
+      esac
+
+      mtime="$(stat -c %Y "$prompt_dir" 2>/dev/null || echo 0)"
+      prompt_items+=("$(jq -n \
+        --arg name "$prompt_name" \
+        --arg status "$status" \
+        --arg mtime "$mtime" \
+        '{name: $name, status: $status, last_updated_mtime: ($mtime | tonumber)}')")
+    done
   fi
 
-  check_log_run_cmd "get-workspace-context.sh" "$(guide_manifest_rel "$root_dir" "$context_script")"
-  bash "$context_script" 2>/dev/null || jq -n '{error: "failed to get workspace context"}'
+  total="${#prompt_items[@]}"
+
+  if [[ -d "$prompts_dir" ]]; then
+    while IFS= read -r build_dir; do
+      if [[ -f "$build_dir/candidate.o" ]]; then
+        local prompt_name mtime
+        prompt_name="$(basename "$(dirname "$build_dir")")"
+        mtime="$(stat -c %Y "$build_dir/candidate.o" 2>/dev/null || echo 0)"
+        build_items+=("$(jq -n --arg prompt "$prompt_name" --arg mtime "$mtime" '{prompt: $prompt, mtime: ($mtime | tonumber)}')")
+      fi
+    done < <(find "$prompts_dir" -path '*/build' -type d 2>/dev/null | sort -rV | head -10 || true)
+  fi
+
+  local current_branch="unknown"
+  local remote_count=0
+  local unpushed_commits=0
+  if [[ -f "$root_dir/.git/HEAD" ]]; then
+    local git_head
+    IFS= read -r git_head <"$root_dir/.git/HEAD" || git_head=""
+    case "$git_head" in
+      "ref: refs/heads/"*) current_branch="${git_head#ref: refs/heads/}" ;;
+      "") current_branch="unknown" ;;
+      *) current_branch="detached" ;;
+    esac
+  fi
+  if [[ -d "$root_dir/.git/refs/remotes" ]]; then
+    local remote_entry
+    for remote_entry in "$root_dir/.git/refs/remotes"/*; do
+      [[ -d "$remote_entry" ]] || continue
+      remote_count=$((remote_count + 1))
+    done
+  fi
+
+  local connected_servers=()
+  if [[ -f "$mcp_config" ]]; then
+    local agdec_url
+    agdec_url=$(jq -r '.mcpServers."agdec-http".url // empty' "$mcp_config" 2>/dev/null || echo "")
+    [[ -n "$agdec_url" && "$agdec_url" != "null" ]] && connected_servers+=("$agdec_url")
+  fi
+
+  local prompt_queue_json build_artifacts_json connected_servers_json
+  prompt_queue_json="$(printf '%s\n' "${prompt_items[@]}" | jq -s '.')"
+  build_artifacts_json="$(printf '%s\n' "${build_items[@]}" | jq -s '.')"
+  connected_servers_json="$(printf '%s\n' "${connected_servers[@]}" | jq -R . | jq -s .)"
+
+  jq -n \
+    --argjson prompt_queue "$prompt_queue_json" \
+    --argjson build_artifacts "$build_artifacts_json" \
+    --argjson connected_servers "$connected_servers_json" \
+    --arg branch "$current_branch" \
+    --arg remote_count "$remote_count" \
+    --arg unpushed_commits "$unpushed_commits" \
+    --arg total_prompts "$total" \
+    --arg matched "$matched" \
+    --arg integrated "$integrated" \
+    --arg blocked "$blocked" \
+    '{
+      prompt_queue: $prompt_queue,
+      ghidra_status: {connected_servers: $connected_servers, loaded_programs: [], analysis_state: "unavailable"},
+      build_artifacts: $build_artifacts,
+      active_branches: {current_branch: $branch, remote_count: ($remote_count | tonumber), unpushed_commits: ($unpushed_commits | tonumber)},
+      workspace_metrics: {
+        total_prompts: ($total_prompts | tonumber),
+        matched: ($matched | tonumber),
+        integrated: ($integrated | tonumber),
+        blocked: ($blocked | tonumber),
+        match_rate_percent: (if ($total_prompts | tonumber) > 0 then ((($matched | tonumber) * 100 / ($total_prompts | tonumber)) | floor) else 0 end),
+        integration_rate_percent: (if ($total_prompts | tonumber) > 0 then ((($integrated | tonumber) * 100 / ($total_prompts | tonumber)) | floor) else 0 end),
+        adapter_counts: {}
+      }
+    }'
 }
 
 # Extract specific fields from workspace context

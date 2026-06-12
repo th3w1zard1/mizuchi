@@ -1,5 +1,0 @@
-{
-  "name": "fixture-plugin-pass",
-  "version": "0.0.1",
-  "description": "Minimal plugin fixture for readiness audit tests."
-}

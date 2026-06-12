@@ -13,12 +13,15 @@ source "$root_dir/scripts/lib/check-log.sh"
 source "$root_dir/scripts/lib/guide-manifest.sh"
 # shellcheck source=scripts/lib/cli-agent.sh
 source "$root_dir/scripts/lib/cli-agent.sh"
+# shellcheck source=scripts/lib/prompt-metadata.sh
+source "$root_dir/scripts/lib/prompt-metadata.sh"
 
 usage() {
   cat <<EOF
-Usage: build-and-verify.sh --prompt <prompt-name> --target <target.o> [--commit] [--quiet]
+Usage: build-and-verify.sh --prompt <prompt-name> [--target <target.o>] [--commit] [--quiet]
 
 Compiles prompts/<name>/trial.c to build/candidate.o and runs objdiff verification.
+If --target is omitted, the script uses the prompt's canonical proof target.
 
 Options:
   --commit  git add/commit trial.c and candidate.o on 0-diff match
@@ -26,7 +29,7 @@ Options:
   -h, --help  Show help
 
 Examples:
-  ./scripts/build-and-verify.sh --prompt fun_00148020 --target path/to/target.o
+  ./scripts/build-and-verify.sh --prompt fun_00148020
   ./scripts/build-and-verify.sh --prompt fun_00148020 --target path/to/target.o --commit --quiet
 EOF
 }
@@ -52,9 +55,9 @@ check_log_init "build-and-verify"
 guide_manifest_load "$root_dir"
 guide_manifest_trace_defaults "$root_dir"
 
-if [[ -z "$prompt_name" || -z "$target_obj" ]]; then
-  cli_agent_missing_arg "build-and-verify.sh" "requires --prompt and --target" \
-    "./scripts/build-and-verify.sh --prompt fun_00148020 --target path/to/target.o"
+if [[ -z "$prompt_name" ]]; then
+  cli_agent_missing_arg "build-and-verify.sh" "requires --prompt" \
+    "./scripts/build-and-verify.sh --prompt fun_00148020"
 fi
 
 prompt_dir="$GUIDE_PROMPTS_DIR/$prompt_name"
@@ -72,6 +75,20 @@ if [[ ! -f "$trial_c" ]]; then
   exit 1
 fi
 check_log_read_file "$trial_c" "$(guide_manifest_rel "$root_dir" "$trial_c")" "trial.c"
+
+if [[ -z "$target_obj" ]]; then
+  target_obj="$(prompt_metadata_proof_target "$prompt_dir")"
+  if [[ -z "$target_obj" ]]; then
+    check_log_fail "missing canonical proof target for $prompt_name"
+    check_log_summary "BUILD_AND_VERIFY_FAIL"
+    echo "{\"status\":\"infra_error\",\"message\":\"proof target missing\"}"
+    exit 2
+  fi
+fi
+
+if [[ "$target_obj" != /* ]]; then
+  target_obj="$(target_adapter_resolve_path "$root_dir" "$target_obj")"
+fi
 
 candidate_existed=0
 [[ -f "$candidate_o" ]] && candidate_existed=1
