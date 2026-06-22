@@ -20,7 +20,7 @@ import {
 } from '~/shared/map-file/map-file';
 import { type DecompFunctionDoc, MIZUCHI_DB_VERSION, type MizuchiDbDump } from '~/shared/mizuchi-db/mizuchi-db';
 import { Objdiff } from '~/shared/objdiff';
-import { registerClangLanguage } from '~/shared/prompt-builder/ast-grep-utils';
+import { getFirstParentWithKind, registerClangLanguage } from '~/shared/prompt-builder/ast-grep-utils';
 
 import {
   countBodyLinesFromAsmFunction,
@@ -283,6 +283,13 @@ async function scanMatchedFunctions(
         // the function_definition.
         const prev = node.prev();
         if (prev && prev.kind() === 'ERROR' && prev.text().includes('NONMATCH(')) {
+          continue;
+        }
+
+        // Skip functions wrapped within a `#if 0` block — they aren't compiled,
+        // so their implementation still lives in assembly.
+        const preprocIf = getFirstParentWithKind(node, 'preproc_if');
+        if (preprocIf?.field('condition')?.text().trim() === '0') {
           continue;
         }
 
