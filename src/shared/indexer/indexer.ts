@@ -293,6 +293,16 @@ async function scanMatchedFunctions(
           continue;
         }
 
+        // Skip `static inline` functions — they're inlined,
+        // so they don't have a standalone object file.
+        const specifiers = node
+          .children()
+          .filter((c) => c.kind() === 'storage_class_specifier')
+          .map((c) => c.text());
+        if (specifiers.includes('static') && specifiers.includes('inline')) {
+          continue;
+        }
+
         // Extract function name from the declarator
         const declarator = node.find({ rule: { kind: 'function_declarator' } });
         if (!declarator) {
