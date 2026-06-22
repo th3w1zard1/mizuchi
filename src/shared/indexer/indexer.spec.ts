@@ -188,6 +188,65 @@ MyFunc:
     expect(result.dump.decompFunctions).toHaveLength(0);
   });
 
+  it('skips NONMATCH-wrapped functions', async () => {
+    const mapFilePath = path.join(projectRoot, 'test.map');
+    await fs.writeFile(mapFilePath, '');
+
+    // C source with two NONMATCH and one matching function.
+    const srcDir = path.join(projectRoot, 'src');
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(
+      path.join(srcDir, 'test.c'),
+      [
+        '#include "global.h"',
+        '',
+        'NONMATCH("asm/non_matching/NonMatchA.inc", void NonMatchA(void)) { }',
+        'END_NONMATCH',
+        '',
+        'NONMATCH("asm/non_matching/NonMatchB.inc", void NonMatchB(s32 *b)) { }',
+        'END_NONMATCH',
+        '',
+        'void NormalFunc(int a) { }',
+        '',
+      ].join('\n'),
+    );
+
+    // Create the respective assembly for NormalFunc
+    const matchingsDir = path.join(projectRoot, 'asm', 'matchings');
+    await fs.mkdir(matchingsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(matchingsDir, 'NormalFunc.s'),
+      ['\tthumb_func_start NormalFunc', 'NormalFunc:', '\tpush {lr}', '\tbx lr', '\tthumb_func_end NormalFunc'].join(
+        '\n',
+      ),
+    );
+
+    const result = await indexCodebase({
+      config: {
+        projectRoot,
+        mapFilePath,
+        target: 'gba',
+        nonMatchingAsmFolders: [],
+        matchingAsmFolders: ['asm/matchings'],
+        excludeFromScan: ['tools'],
+        maxRetries: 1,
+        outputDir: tempDir,
+        compilerScript: '',
+        getContextScript: '',
+        promptsDir: '',
+      },
+      objdiffDiffSettings: {},
+    });
+
+    const names = result.dump.decompFunctions.map((f) => f.name);
+    // The normal function is matched (positive control)...
+    expect(names).toContain('NormalFunc');
+    // ...while the NONMATCH-wrapped functions are skipped.
+    expect(names).not.toContain('NonMatchA');
+    expect(names).not.toContain('NonMatchB');
+    expect(result.stats.matchedFunctions).toBe(1);
+  });
+
   it('computes incremental diff against existing DB', async () => {
     const mapFilePath = path.join(projectRoot, 'test.map');
     await fs.writeFile(mapFilePath, '');
