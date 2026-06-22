@@ -232,7 +232,13 @@ export class Objdiff {
   async *#iterateSymbolRows(objDiffs: ObjectDiff[], symbolName: string, diffConfig: DiffConfig) {
     const objdiff = await Objdiff.#wasmModule!;
 
-    const symbols = objDiffs.map((objDiff) => objDiff.findSymbol(symbolName, undefined)!);
+    const symbols = objDiffs.map((objDiff) => {
+      const symbol = objDiff.findSymbol(symbolName, undefined);
+      if (!symbol) {
+        throw new Error(`Symbol "${symbolName}" not found in object file`);
+      }
+      return symbol;
+    });
     const displaySymbols = objDiffs.map((objDiff, index) => objdiff.display.displaySymbol(objDiff, symbols[index].id));
     const instructionsCount = Math.max(...displaySymbols.map((displaySymbol) => displaySymbol.rowCount));
 
