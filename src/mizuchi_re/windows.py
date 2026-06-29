@@ -230,11 +230,12 @@ def write_window_coverage(base_dir: Path, aggregate: dict[str, Any]) -> dict[str
     windows = aggregate.get("windows") if isinstance(aggregate.get("windows"), list) else []
     recoverable_total = int(aggregate.get("recoverableCandidateTotal") or 0)
     source_functions = int(package.get("functionCount") or 0)
+    matched_functions = int(semantic.get("matchedFunctions") or 0)
     semantic_matched = int(semantic.get("semanticMatchedFunctions") or 0)
     matched_rows, unmatched_rows = semantic_coverage_rows(sweep)
     coverage = {
         "schema": "mizuchi.recovery-window-coverage.v1",
-        "status": coverage_status(recoverable_total, source_functions, semantic_matched, semantic),
+        "status": coverage_status(recoverable_total, source_functions, matched_functions, semantic_matched, semantic),
         "generatedAt": now(),
         "input": aggregate.get("input"),
         "workDir": aggregate.get("workDir"),
@@ -262,8 +263,9 @@ def write_window_coverage(base_dir: Path, aggregate: dict[str, Any]) -> dict[str
             "enabled": bool(semantic.get("enabled")),
             "status": semantic.get("status"),
             "functionsSwept": int(semantic.get("functions") or 0),
-            "matchedFunctions": int(semantic.get("matchedFunctions") or 0),
+            "matchedFunctions": matched_functions,
             "semanticMatchedFunctions": semantic_matched,
+            "codeMatchPackagePercent": percent(matched_functions, source_functions),
             "semanticMatchPackagePercent": percent(semantic_matched, source_functions),
             "semanticMatchRecoverablePercent": percent(semantic_matched, recoverable_total),
             "attempts": int(semantic.get("attempts") or 0),
@@ -276,7 +278,7 @@ def write_window_coverage(base_dir: Path, aggregate: dict[str, Any]) -> dict[str
         },
         "matchedFunctions": matched_rows,
         "unmatchedFunctions": unmatched_rows,
-        "nextAction": coverage_next_action(aggregate, semantic, recoverable_total, source_functions, semantic_matched),
+        "nextAction": coverage_next_action(aggregate, semantic, recoverable_total, source_functions, matched_functions, semantic_matched),
         "claimBoundary": (
             "Coverage is per-function source-candidate and code-byte evidence only. "
             "Full source parity remains false until every recoverable function and required data/linker artifact is rebuilt and verified."
@@ -311,14 +313,14 @@ def semantic_coverage_rows(sweep: dict[str, Any]) -> tuple[list[dict[str, Any]],
             "score": attempt.get("score"),
             "firstDifference": attempt.get("firstDifference"),
         }
-        if row.get("semanticMatched"):
+        if row.get("matched"):
             matched.append(summary)
         else:
             unmatched.append(summary)
     return matched, unmatched
 
 
-def coverage_status(recoverable_total: int, source_functions: int, semantic_matched: int, semantic: dict[str, Any]) -> str:
+def coverage_status(recoverable_total: int, source_functions: int, matched_functions: int, semantic_matched: int, semantic: dict[str, Any]) -> str:
     if recoverable_total <= 0:
         return "no-recoverable-functions"
     if source_functions <= 0:
@@ -327,6 +329,10 @@ def coverage_status(recoverable_total: int, source_functions: int, semantic_matc
         return "partial-semantic-match"
     if semantic.get("enabled") and semantic_matched == recoverable_total:
         return "all-recoverable-functions-semantically-matched"
+    if semantic.get("enabled") and matched_functions == source_functions and matched_functions > semantic_matched:
+        return "partial-semantic-match-with-code-fallback" if semantic_matched else "code-matched-nonsemantic-fallback"
+    if semantic.get("enabled") and matched_functions > semantic_matched:
+        return "partial-code-match-with-semantic-gaps"
     if semantic.get("enabled") and semantic_matched:
         return "partial-semantic-match"
     if semantic.get("enabled"):
@@ -339,6 +345,7 @@ def coverage_next_action(
     semantic: dict[str, Any],
     recoverable_total: int,
     source_functions: int,
+    matched_functions: int,
     semantic_matched: int,
 ) -> dict[str, Any]:
     if source_functions < recoverable_total:
@@ -361,6 +368,14 @@ def coverage_next_action(
             ],
         }
     if semantic.get("enabled") and semantic_matched < source_functions:
+        if matched_functions > semantic_matched:
+            return {
+                "kind": "improve-semantic-source-generation",
+                "reason": "all packaged functions were swept, but some only matched through nonsemantic code-byte fallback",
+                "codeMatchedFunctions": matched_functions,
+                "semanticMatchedFunctions": semantic_matched,
+                "semanticUnmatchedFunctions": source_functions - semantic_matched,
+            }
         return {
             "kind": "improve-source-variant-generation",
             "reason": "all packaged functions were swept, but some did not match semantically",
@@ -398,6 +413,8 @@ def render_coverage_markdown(coverage: dict[str, Any]) -> str:
         "## Semantic Coverage",
         "",
         f"- Sweep status: `{semantic['status']}`",
+        f"- Code matches: `{semantic['matchedFunctions']}` / `{source['packagedFunctions']}` packaged functions",
+        f"- Code match package coverage: `{semantic['codeMatchPackagePercent']}%`",
         f"- Semantic matches: `{semantic['semanticMatchedFunctions']}` / `{source['packagedFunctions']}` packaged functions",
         f"- Semantic match over recoverable candidates: `{semantic['semanticMatchRecoverablePercent']}%`",
         f"- Attempts: `{semantic['attempts']}` compiled `{semantic['attemptsCompiled']}` reused `{semantic['attemptsReused']}`",
@@ -408,7 +425,10 @@ def render_coverage_markdown(coverage: dict[str, Any]) -> str:
     matched = coverage.get("matchedFunctions") or []
     if matched:
         for row in matched:
-            lines.append(f"- `{row.get('name')}` at `{row.get('address')}` via `{row.get('variant')}` `{row.get('codeCompareStatus')}`")
+            lines.append(
+                f"- `{row.get('name')}` at `{row.get('address')}` via `{row.get('variant')}` "
+                f"`{row.get('codeCompareStatus')}` semantic=`{str(bool(row.get('semanticMatched'))).lower()}`"
+            )
     else:
         lines.append("- None")
     lines.extend(["", "## Next Action", "", f"- Kind: `{coverage['nextAction']['kind']}`", f"- Reason: {coverage['nextAction']['reason']}", "", coverage["claimBoundary"], ""])
