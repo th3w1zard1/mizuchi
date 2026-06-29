@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,7 @@ def sweep_recovered_source_package(
                         clang=clang,
                         msvc_root=msvc_root,
                         wine=wine,
+                        wineprefix=wineprefix,
                         compiler_args=[*base_args, *profile_args],
                         clang_target=clang_target,
                     )
@@ -232,6 +234,7 @@ def attempt_cache_key(
     clang: str,
     msvc_root: Path | None,
     wine: str,
+    wineprefix: Path | None,
     compiler_args: list[str],
     clang_target: str | None,
 ) -> str:
@@ -244,7 +247,7 @@ def attempt_cache_key(
         "semanticSource": bool(variant.get("semanticSource", True)),
         "sourceSha256": source_sha256(str(variant.get("source") or "")),
         "compiler": compiler,
-        "compilerTool": compiler_tool_identity(compiler, clang, msvc_root, wine),
+        "compilerTool": compiler_tool_identity(compiler, clang, msvc_root, wine, wineprefix),
         "compilerArgs": compiler_args,
         "clangTarget": clang_target,
         "targetSliceSha256": target_slice_sha256(meta),
@@ -252,11 +255,13 @@ def attempt_cache_key(
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def compiler_tool_identity(compiler: str, clang: str, msvc_root: Path | None, wine: str) -> dict[str, str | None]:
+def compiler_tool_identity(compiler: str, clang: str, msvc_root: Path | None, wine: str, wineprefix: Path | None) -> dict[str, str | None]:
     if compiler == "msvc":
+        resolved_prefix = wineprefix or Path(os.environ.get("WINEPREFIX") or "target/toolchain-acquire/vctoolkit2003/wineprefix")
         return {
             "msvcRoot": str(resolve_msvc_root(msvc_root)),
             "wine": wine,
+            "wineprefix": str(resolved_prefix.expanduser().resolve()),
         }
     return {"clang": clang}
 

@@ -70,7 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("input", type=Path, help="Folder or binary path.")
     windows.add_argument("--preferred-name", help="Preferred executable basename when input is a folder.")
     windows.add_argument("--work-dir", type=Path, help="Window run/state directory. Defaults to target/mizuchi-recover/<stable-target-id>-windows.")
-    windows.add_argument("--resume", action="store_true", help="Reuse complete stage receipts with matching config inside each window.")
+    windows.add_argument("--resume", action="store_true", help="Reuse complete stage receipts and advance to incomplete windows while preserving prior windows in the recovered-source package.")
     windows.add_argument("--force", action="store_true", help="Rerun selected window stages even when receipts exist.")
     windows.add_argument("--json", action="store_true", help="Emit per-stage progress as JSON lines.")
     windows.add_argument("--progress-width", type=int, default=24)

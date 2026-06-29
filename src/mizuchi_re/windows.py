@@ -55,11 +55,18 @@ def run_recovery_windows(
     candidates_doc = json.loads(candidates_path.read_text(encoding="utf-8")) if candidates_path.exists() else {"candidates": []}
     recoverable_total = sum(1 for row in candidates_doc.get("candidates", []) if is_recoverable_candidate(row))
 
-    offsets = list(range(max(0, start_offset), recoverable_total, window_size))
+    summary_path = base_dir / "windows-summary.json"
+    previous_summary = load_resume_summary(summary_path, base_config, window_size)
+    window_by_offset = index_windows_by_offset(previous_summary.get("windows", [])) if base_config.resume else {}
+    all_offsets = list(range(max(0, start_offset), recoverable_total, window_size))
+    offsets = [
+        offset
+        for offset in all_offsets
+        if not (base_config.resume and window_is_complete(window_by_offset.get(offset)))
+    ]
     if max_windows is not None:
         offsets = offsets[: max(0, max_windows)]
 
-    windows: list[dict[str, Any]] = []
     aggregate = {
         "schema": "mizuchi.recovery-windows.v1",
         "status": "running",
@@ -73,10 +80,16 @@ def run_recovery_windows(
         "planReturnCode": plan_code,
         "candidateTotal": len(candidates_doc.get("candidates", [])),
         "recoverableCandidateTotal": recoverable_total,
+        "recoverableWindowTotal": len(all_offsets),
         "windowsPlanned": len(offsets),
-        "windows": windows,
+        "windowsKnownAtStart": len(window_by_offset),
+        "windowsSkippedComplete": sum(1 for offset in all_offsets if window_is_complete(window_by_offset.get(offset))),
+        "windowsScheduledThisRun": len(offsets),
+        "windowOffsetsScheduled": offsets,
+        "resumeSummaryLoaded": bool(previous_summary),
+        "windows": sorted_windows(window_by_offset),
     }
-    summary_path = base_dir / "windows-summary.json"
+    aggregate.update(summarize_aggregate(aggregate))
     atomic_write_json(summary_path, aggregate)
 
     for offset in offsets:
@@ -91,11 +104,13 @@ def run_recovery_windows(
         )
         return_code = RecoveryRunner(shard_config).run()
         window_summary = summarize_window(shard_dir, offset, limit, return_code)
-        windows.append(window_summary)
+        window_by_offset[offset] = window_summary
+        aggregate["windows"] = sorted_windows(window_by_offset)
         aggregate.update(summarize_aggregate(aggregate))
         atomic_write_json(summary_path, aggregate)
 
-    source_package = build_recovered_source_package(base_dir, windows)
+    aggregate["windows"] = sorted_windows(window_by_offset)
+    source_package = build_recovered_source_package(base_dir, aggregate["windows"])
     aggregate["sourcePackage"] = source_package
     aggregate["semanticSweep"] = run_source_package_semantic_sweep(
         source_package,
@@ -117,6 +132,44 @@ def run_recovery_windows(
     aggregate["completedAt"] = now()
     atomic_write_json(summary_path, aggregate)
     return aggregate
+
+
+def load_resume_summary(summary_path: Path, base_config: RecoveryConfig, window_size: int) -> dict[str, Any]:
+    summary = read_json(summary_path)
+    if not summary:
+        return {}
+    if summary.get("schema") != "mizuchi.recovery-windows.v1":
+        return {}
+    if str(summary.get("input") or "") != str(base_config.input_path):
+        return {}
+    if int(summary.get("windowSize") or -1) != window_size:
+        return {}
+    return summary
+
+
+def index_windows_by_offset(windows: Any) -> dict[int, dict[str, Any]]:
+    indexed: dict[int, dict[str, Any]] = {}
+    if not isinstance(windows, list):
+        return indexed
+    for window in windows:
+        if not isinstance(window, dict):
+            continue
+        try:
+            offset = int(window.get("offset"))
+        except (TypeError, ValueError):
+            continue
+        indexed[offset] = window
+    return indexed
+
+
+def sorted_windows(window_by_offset: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+    return [window_by_offset[offset] for offset in sorted(window_by_offset)]
+
+
+def window_is_complete(window: dict[str, Any] | None) -> bool:
+    if not window:
+        return False
+    return window.get("returnCode") == 0 and window.get("sourceStatus") not in {None, "blocked"}
 
 
 def summarize_window(shard_dir: Path, offset: int, limit: int, return_code: int) -> dict[str, Any]:

@@ -332,7 +332,7 @@ def resolve_msvc_root(msvc_root: Path | None) -> Path:
 def msvc_environment(msvc_root: Path, wineprefix: Path | None) -> dict[str, str]:
     env = dict(os.environ)
     prefix = wineprefix or Path(env.get("WINEPREFIX") or "target/toolchain-acquire/vctoolkit2003/wineprefix")
-    env["WINEPREFIX"] = str(prefix)
+    env["WINEPREFIX"] = str(prefix.expanduser().resolve())
     env["WINEDEBUG"] = env.get("WINEDEBUG", "-all")
     env["WINEPATH"] = str(msvc_root / "bin")
     include_dirs = [msvc_root / "include", msvc_root / "PlatformSDK" / "include"]
