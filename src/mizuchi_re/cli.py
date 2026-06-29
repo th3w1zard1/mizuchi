@@ -10,6 +10,7 @@ from pathlib import Path
 from .context_export import ExportConfig, export_context
 from .pipeline import RecoveryConfig, RecoveryRunner
 from .targets import identify_binary
+from .windows import run_recovery_windows
 
 
 def default_work_dir(target_path: Path) -> Path:
@@ -62,6 +63,29 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--context-max-depth", type=int, default=4, help="Maximum recursive container extraction depth for the recover context stage.")
     recover.add_argument("--context-strings-limit", type=int, default=500, help="Maximum unique strings retained per binary in the recover context stage.")
     recover.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
+
+    windows = sub.add_parser("recover-windows", help="Run recovery across deterministic function-candidate windows.")
+    windows.add_argument("input", type=Path, help="Folder or binary path.")
+    windows.add_argument("--preferred-name", help="Preferred executable basename when input is a folder.")
+    windows.add_argument("--work-dir", type=Path, help="Window run/state directory. Defaults to target/mizuchi-recover/<stable-target-id>-windows.")
+    windows.add_argument("--resume", action="store_true", help="Reuse complete stage receipts with matching config inside each window.")
+    windows.add_argument("--force", action="store_true", help="Rerun selected window stages even when receipts exist.")
+    windows.add_argument("--json", action="store_true", help="Emit per-stage progress as JSON lines.")
+    windows.add_argument("--progress-width", type=int, default=24)
+    windows.add_argument("--stage-timeout", type=int, default=300)
+    windows.add_argument("--window-size", type=int, default=25, help="Function candidates per recovery window.")
+    windows.add_argument("--start-offset", type=int, default=0, help="Recoverable candidate offset for the first window.")
+    windows.add_argument("--max-windows", type=int, help="Maximum number of windows to process in this invocation.")
+    windows.add_argument("--function-analysis", choices=["auto", "none", "objdump", "agentdecompile"], default="agentdecompile", help="Tool-backed function-boundary analysis mode for each window.")
+    windows.add_argument("--agentdecompile-server-url", help="Optional AgentDecompile MCP/CLI server URL. Omit to use uvx local mode.")
+    windows.add_argument("--agentdecompile-mode", choices=["auto", "local"], default="local", help="AgentDecompile execution mode.")
+    windows.add_argument("--agentdecompile-batch-size", type=int, default=25, help="Seed/decompile this many function candidates per AgentDecompile subprocess.")
+    windows.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
+    windows.add_argument("--context-format", choices=["json", "md"], default="json", help="LLM-readable context export format used by the recover pipeline.")
+    windows.add_argument("--context-max-files", type=int, default=1000, help="Maximum files exported by the recover context stage.")
+    windows.add_argument("--context-max-depth", type=int, default=4, help="Maximum recursive container extraction depth for the recover context stage.")
+    windows.add_argument("--context-strings-limit", type=int, default=500, help="Maximum unique strings retained per binary in the recover context stage.")
+    windows.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
     return parser
 
 
@@ -105,6 +129,42 @@ def run_recover(args: argparse.Namespace) -> int:
     return RecoveryRunner(config).run()
 
 
+def run_recover_windows(args: argparse.Namespace) -> int:
+    if args.force and args.resume:
+        raise SystemExit("--force and --resume are mutually exclusive")
+    identity = identify_binary(args.input, args.preferred_name)
+    work_dir = args.work_dir or Path("target/mizuchi-recover") / f"{identity.stable_id}-windows"
+    config = RecoveryConfig(
+        input_path=args.input,
+        work_dir=work_dir,
+        preferred_name=args.preferred_name,
+        resume=args.resume,
+        force=args.force,
+        stop_after=None,
+        json_output=args.json,
+        progress_width=args.progress_width,
+        stage_timeout=args.stage_timeout,
+        function_analysis=args.function_analysis,
+        agentdecompile_server_url=args.agentdecompile_server_url,
+        agentdecompile_mode=args.agentdecompile_mode,
+        agentdecompile_batch_size=args.agentdecompile_batch_size,
+        steamless_cli=args.steamless_cli,
+        context_format=args.context_format,
+        context_max_files=args.context_max_files,
+        context_max_depth=args.context_max_depth,
+        context_strings_limit=args.context_strings_limit,
+        context_extract_containers=not args.no_context_extract_containers,
+    )
+    summary = run_recovery_windows(
+        base_config=config,
+        window_size=args.window_size,
+        start_offset=args.start_offset,
+        max_windows=args.max_windows,
+    )
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0 if summary.get("status") == "complete" else 1
+
+
 def run_export_context(args: argparse.Namespace) -> int:
     manifest = export_context(
         ExportConfig(
@@ -132,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_export_context(args)
     if args.command == "recover":
         return run_recover(args)
+    if args.command == "recover-windows":
+        return run_recover_windows(args)
     parser.print_help()
     return 2
 
