@@ -27,6 +27,7 @@ DEFAULT_MSVC_PROFILES = [
 ]
 
 CONTROL_CALLS = {"if", "for", "while", "switch", "return", "sizeof"}
+X86_REGS = ["eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi"]
 
 
 def sweep_recovered_source_package(
@@ -197,7 +198,7 @@ def load_attempt_cache(path: Path) -> dict[str, dict[str, Any]]:
         key = row.get("attemptKey")
         if not isinstance(key, str) or not key:
             key = legacy_attempt_cache_key(row)
-        if key:
+        if key and row.get("status") == "object-ok":
             attempts[key] = row
     return attempts
 
@@ -316,6 +317,18 @@ def generate_source_variants(source: str, meta: dict[str, Any], max_variants: in
         if prototypes:
             add_semantic_variant({"name": "stdcall-dllimport-prototypes-byte-offset-pointer-normalized", "source": prototypes + "\n\n" + byte_offset, "sourceKind": "decompiler-c-with-prototypes-normalized", "semanticSource": True})
 
+    for recovered in target_global_argument_variants(source, meta):
+        add_semantic_variant(recovered)
+        if prototypes:
+            add_semantic_variant(
+                {
+                    "name": f"stdcall-dllimport-prototypes-{recovered['name']}",
+                    "source": prototypes + "\n\n" + recovered["source"],
+                    "sourceKind": f"decompiler-c-with-prototypes-{recovered['sourceKind'].removeprefix('decompiler-c-')}",
+                    "semanticSource": True,
+                }
+            )
+
     relational = normalize_positive_relations(source)
     if relational != source:
         add_semantic_variant({"name": "positive-relation-normalized", "source": relational, "sourceKind": "decompiler-c-normalized", "semanticSource": True})
@@ -407,18 +420,91 @@ def signed_candidate_stack_vars(source: str) -> list[str]:
     return sorted(address_taken & compared)
 
 
-def slice_lifted_c_variants(source: str, meta: dict[str, Any]) -> list[dict[str, Any]]:
+def target_global_argument_variants(source: str, meta: dict[str, Any]) -> list[dict[str, str]]:
+    rows = target_rows_from_meta(meta)
+    if rows is None:
+        return []
+    target_arg_pairs = target_mem_abs_two_arg_calls(rows)
+    if not target_arg_pairs:
+        return []
+
+    literal = r"(?:0x[0-9A-Fa-f]+|\d+)"
+    call_pattern = re.compile(
+        rf"\b(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*(?P<arg1>{literal})\s*,\s*(?P<arg2>{literal})\s*\)"
+    )
+    replacements: list[tuple[int, int, str]] = []
+    pair_index = 0
+    for match in call_pattern.finditer(source):
+        name = match.group("name")
+        if not looks_external_call(name) or name in CONTROL_CALLS:
+            continue
+        if pair_index >= len(target_arg_pairs):
+            break
+        first, second = target_arg_pairs[pair_index]
+        pair_index += 1
+        replacements.append((match.start(), match.end(), f"{name}({global_deref_expr(first)},{global_deref_expr(second)})"))
+    if not replacements:
+        return []
+
+    replaced = source
+    for start, end, text in reversed(replacements):
+        replaced = replaced[:start] + text + replaced[end:]
+    if replaced == source:
+        return []
+    return [
+        {
+            "name": "target-global-arguments-normalized",
+            "source": replaced,
+            "sourceKind": "decompiler-c-target-global-args",
+            "semanticSource": True,
+        }
+    ]
+
+
+def target_rows_from_meta(meta: dict[str, Any]) -> list[dict[str, Any]] | None:
     target_slice = meta.get("targetSlice")
     if isinstance(target_slice, dict):
         target_slice = {**target_slice, "metadataPath": str(meta.get("_metadataPath") or "")}
     verified = verify_target_slice(target_slice)
     if verified.get("status") != "complete":
-        return []
+        return None
     bytes_path = verified.get("resolvedBytesPath")
     if not bytes_path:
-        return []
-    body = strip_trailing_padding(Path(str(bytes_path)).read_bytes())
-    rows = decode_x86_rows(body)
+        return None
+    return decode_x86_rows(strip_trailing_padding(Path(str(bytes_path)).read_bytes()))
+
+
+def target_mem_abs_two_arg_calls(rows: list[dict[str, Any]]) -> list[tuple[int, int]]:
+    pairs: list[tuple[int, int]] = []
+    for index, row in enumerate(rows):
+        if row.get("op") != "call" or index < 4:
+            continue
+        push_second = rows[index - 2]
+        push_first = rows[index - 1]
+        load_second = rows[index - 4]
+        load_first = rows[index - 3]
+        if push_second.get("op") != "push" or push_first.get("op") != "push":
+            continue
+        if load_second.get("op") != "mov" or load_first.get("op") != "mov":
+            continue
+        if load_second.get("src_kind") != "mem_abs" or load_first.get("src_kind") != "mem_abs":
+            continue
+        if push_second.get("value") != load_second.get("dst") or push_first.get("value") != load_first.get("dst"):
+            continue
+        pairs.append((int(load_first["src"]), int(load_second["src"])))
+    return pairs
+
+
+def global_deref_expr(address: int) -> str:
+    return f"*(undefined4 *)&{absolute_global_name(address)}"
+
+
+def absolute_global_name(address: int) -> str:
+    return f"UNK_{address:08x}"
+
+
+def slice_lifted_c_variants(source: str, meta: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = target_rows_from_meta(meta)
     if rows is None:
         return []
     prototypes = infer_stdcall_prototypes(source, str(meta.get("name") or ""))
@@ -680,9 +766,12 @@ def decode_x86_rows(data: bytes) -> list[dict[str, Any]] | None:
         row: dict[str, Any] | None = None
         size = 1
 
-        if opcode in {0x50, 0x51, 0x56, 0x59, 0x5E}:
-            reg = {0x50: "eax", 0x51: "ecx", 0x56: "esi", 0x59: "ecx", 0x5E: "esi"}[opcode]
-            row = {"op": "push" if opcode in {0x50, 0x51, 0x56} else "pop", "value": reg}
+        if 0x50 <= opcode <= 0x57:
+            reg = X86_REGS[opcode - 0x50]
+            row = {"op": "push", "value": reg}
+        elif 0x58 <= opcode <= 0x5F:
+            reg = X86_REGS[opcode - 0x58]
+            row = {"op": "pop", "value": reg}
         elif opcode == 0x90:
             row = {"op": "nop"}
         elif opcode == 0xCC:
@@ -692,6 +781,9 @@ def decode_x86_rows(data: bytes) -> list[dict[str, Any]] | None:
         elif opcode == 0x6A and offset + 1 < len(data):
             row = {"op": "push", "value": signed_i8(data[offset + 1])}
             size = 2
+        elif opcode == 0x68 and offset + 4 < len(data):
+            row = {"op": "push", "value": read_u32(data, offset + 1)}
+            size = 5
         elif opcode == 0xA1 and offset + 4 < len(data):
             imm = read_u32(data, offset + 1)
             row = {"op": "mov", "dst": "eax", "dst_kind": "reg", "src": imm, "src_kind": "mem_abs"}
@@ -700,9 +792,10 @@ def decode_x86_rows(data: bytes) -> list[dict[str, Any]] | None:
             imm = read_u32(data, offset + 1)
             row = {"op": "mov", "dst": imm, "dst_kind": "mem_abs", "src": "eax", "src_kind": "reg"}
             size = 5
-        elif opcode == 0x8B and offset + 5 < len(data) and data[offset + 1] == 0x35:
+        elif opcode == 0x8B and offset + 5 < len(data) and data[offset + 1] in {0x05, 0x0D, 0x15, 0x1D, 0x25, 0x2D, 0x35, 0x3D}:
+            reg = {0x05: "eax", 0x0D: "ecx", 0x15: "edx", 0x1D: "ebx", 0x25: "esp", 0x2D: "ebp", 0x35: "esi", 0x3D: "edi"}[data[offset + 1]]
             imm = read_u32(data, offset + 2)
-            row = {"op": "mov", "dst": "esi", "dst_kind": "reg", "src": imm, "src_kind": "mem_abs"}
+            row = {"op": "mov", "dst": reg, "dst_kind": "reg", "src": imm, "src_kind": "mem_abs"}
             size = 6
         elif opcode == 0x8B and offset + 3 < len(data) and data[offset + 1 : offset + 3] == b"\x44\x24":
             disp = data[offset + 3]
@@ -759,16 +852,10 @@ def decode_x86_subset(data: bytes) -> list[str] | None:
         target: int | None = None
         size = 1
 
-        if opcode == 0x50:
-            instruction = "push eax"
-        elif opcode == 0x51:
-            instruction = "push ecx"
-        elif opcode == 0x56:
-            instruction = "push esi"
-        elif opcode == 0x59:
-            instruction = "pop ecx"
-        elif opcode == 0x5E:
-            instruction = "pop esi"
+        if 0x50 <= opcode <= 0x57:
+            instruction = f"push {X86_REGS[opcode - 0x50]}"
+        elif 0x58 <= opcode <= 0x5F:
+            instruction = f"pop {X86_REGS[opcode - 0x58]}"
         elif opcode == 0x90:
             instruction = "nop"
         elif opcode == 0xCC:
@@ -779,6 +866,10 @@ def decode_x86_subset(data: bytes) -> list[str] | None:
             imm = data[offset + 1]
             instruction = f"push {format_imm8(imm)}"
             size = 2
+        elif opcode == 0x68 and offset + 4 < len(data):
+            imm = read_u32(data, offset + 1)
+            instruction = f"push 0x{imm:x}"
+            size = 5
         elif opcode == 0xA1 and offset + 4 < len(data):
             imm = read_u32(data, offset + 1)
             instruction = f"mov eax, dword ptr [0x{imm:08x}]"
@@ -1041,7 +1132,9 @@ def safe_attempt_id(meta: dict[str, Any], variant: str, profile_args: list[str],
     suffix = f"{int(address):08x}" if isinstance(address, int) else hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
     profile = "_".join(arg.strip("-").replace("=", "-") for arg in profile_args) or "default"
     raw = f"{name}_{suffix}_{variant_index:02d}_{profile_index:02d}_{variant}_{profile}"
-    return re.sub(r"[^A-Za-z0-9_.+-]+", "_", raw).strip("._")[:160]
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+    compact_name = re.sub(r"[^A-Za-z0-9_.+-]+", "_", name).strip("._")[:24] or "function"
+    return f"{compact_name}_{suffix}_{variant_index:02d}_{profile_index:02d}_{digest}"
 
 
 def read_json(path: Path) -> dict[str, Any]:
