@@ -1,0 +1,478 @@
+"""Function-boundary candidate discovery from binary inventory."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from .agentdecompile import run_agentdecompile_analysis
+
+
+def discover_function_candidates(inventory: dict[str, Any]) -> dict[str, Any]:
+    fmt = inventory.get("format")
+    if fmt == "elf":
+        candidates = elf_function_candidates(inventory)
+    elif fmt == "pe":
+        candidates = pe_function_candidates(inventory)
+    else:
+        candidates = []
+    candidates = sorted(candidates, key=lambda row: (int(row.get("address") or row.get("rva") or 0), row.get("name", "")))
+    return {
+        "schema": "mizuchi.function-candidates.v1",
+        "format": fmt,
+        "target": inventory.get("target"),
+        "status": "complete" if inventory.get("status") == "complete" else "inventory-incomplete",
+        "candidates": candidates,
+        "summary": summarize_candidates(candidates),
+        "claimBoundary": "function candidates are recovery inputs, not proven source or verified function boundaries",
+    }
+
+
+def analyze_function_candidates_with_objdump(existing: dict[str, Any], binary_path: Path, timeout: int) -> dict[str, Any]:
+    proc = subprocess.run(
+        ["objdump", "-d", str(binary_path)],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=timeout,
+    )
+    labels = parse_objdump_labels(proc.stdout)
+    candidates = list(existing.get("candidates", []))
+    by_address = {int(row.get("address") or 0): row for row in candidates if row.get("address") is not None}
+    added = 0
+    for label in labels:
+        address = int(label["address"])
+        current = by_address.get(address)
+        if current is not None:
+            sources = set((current.get("evidence") or {}).get("sources") or [current.get("source")])
+            sources.add("objdump-label")
+            current["evidence"] = {"sources": sorted(str(item) for item in sources if item)}
+            if confidence_rank("medium") > confidence_rank(str(current.get("confidence"))):
+                current["confidence"] = "medium"
+                current["source"] = "objdump-label"
+            continue
+        row = {
+            "name": label["name"],
+            "address": address,
+            "size": 0,
+            "source": "objdump-label",
+            "confidence": "medium",
+            "evidence": {"sources": ["objdump-label"], "section": label.get("section")},
+        }
+        by_address[address] = row
+        candidates.append(row)
+        added += 1
+
+    candidates = sorted(candidates, key=lambda row: (int(row.get("address") or row.get("rva") or 0), row.get("name", "")))
+    return {
+        **existing,
+        "candidates": candidates,
+        "summary": summarize_candidates(candidates),
+        "toolAnalysis": {
+            "tool": "objdump",
+            "status": "complete" if proc.returncode == 0 else "failed",
+            "returnCode": proc.returncode,
+            "labelsFound": len(labels),
+            "candidatesAdded": added,
+            "stderr": proc.stderr[-4000:],
+        },
+    }
+
+
+def analyze_function_candidates_with_agentdecompile(
+    existing: dict[str, Any],
+    *,
+    binary_path: Path,
+    facts_path: Path,
+    run_dir: Path,
+    limit: int,
+    timeout: int,
+    server_url: str | None = None,
+    mode: str = "auto",
+) -> dict[str, Any]:
+    analysis = run_agentdecompile_analysis(
+        binary_path=binary_path,
+        out_path=facts_path,
+        run_dir=run_dir,
+        limit=limit,
+        timeout=timeout,
+        server_url=server_url,
+        mode=mode,
+    )
+    facts = parse_function_facts(facts_path) if facts_path.exists() else []
+    candidates = list(existing.get("candidates", []))
+    by_address = {int(row.get("address") or 0): row for row in candidates if row.get("address") is not None}
+    added = 0
+    for fact in facts:
+        address = fact.get("entryOffset")
+        if address is None:
+            continue
+        address = int(address)
+        current = by_address.get(address)
+        if current is not None:
+            sources = set((current.get("evidence") or {}).get("sources") or [current.get("source")])
+            sources.add("agentdecompile")
+            current["evidence"] = {"sources": sorted(str(item) for item in sources if item)}
+            current["confidence"] = "high"
+            current["source"] = "agentdecompile"
+            current["size"] = int(fact.get("bodyBytes") or current.get("size") or 0)
+            continue
+        row = {
+            "name": fact.get("name") or f"sub_{address:x}",
+            "address": address,
+            "size": int(fact.get("bodyBytes") or 0),
+            "source": "agentdecompile",
+            "confidence": "high",
+            "evidence": {
+                "sources": ["agentdecompile"],
+                "entry": fact.get("entry"),
+                "hasDecompilerOutput": bool(fact.get("decompiled")),
+            },
+        }
+        by_address[address] = row
+        candidates.append(row)
+        added += 1
+    candidates = sorted(candidates, key=lambda row: (int(row.get("address") or row.get("rva") or 0), row.get("name", "")))
+    return {
+        **existing,
+        "candidates": candidates,
+        "summary": summarize_candidates(candidates),
+        "toolAnalysis": {**analysis, "candidatesAdded": added},
+    }
+
+
+def analyze_function_candidates_with_ghidra(
+    existing: dict[str, Any],
+    *,
+    binary_path: Path,
+    ghidra: Path,
+    script_dir: Path,
+    project_dir: Path,
+    facts_path: Path,
+    timeout: int,
+    fact_limit: int | None = None,
+) -> dict[str, Any]:
+    project_dir.mkdir(parents=True, exist_ok=True)
+    facts_path.parent.mkdir(parents=True, exist_ok=True)
+    ghidra_home = (project_dir.parent / "ghidra-home").resolve()
+    ghidra_config = (project_dir.parent / "ghidra-config").resolve()
+    ghidra_cache = (project_dir.parent / "ghidra-cache").resolve()
+    ghidra_tmp = (project_dir.parent / "ghidra-tmp").resolve()
+    ghidra_home.mkdir(parents=True, exist_ok=True)
+    ghidra_config.mkdir(parents=True, exist_ok=True)
+    ghidra_cache.mkdir(parents=True, exist_ok=True)
+    ghidra_tmp.mkdir(parents=True, exist_ok=True)
+    project_name = "mizuchi_" + hashlib.sha256(str(binary_path).encode("utf-8")).hexdigest()[:12]
+    proc = subprocess.run(
+        [
+            str(ghidra),
+            str(project_dir),
+            project_name,
+            "-import",
+            str(binary_path),
+            "-scriptPath",
+            str(script_dir),
+            "-postScript",
+            "ExportFunctionFacts.java",
+            str(facts_path),
+            str(fact_limit) if fact_limit is not None else "-1",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=timeout,
+        env={
+            **os.environ,
+            "HOME": str(ghidra_home),
+            "XDG_CONFIG_HOME": str(ghidra_config),
+            "XDG_CACHE_HOME": str(ghidra_cache),
+            "TMPDIR": str(ghidra_tmp),
+        },
+    )
+    facts = parse_function_facts(facts_path) if facts_path.exists() else []
+    candidates = list(existing.get("candidates", []))
+    by_address = {int(row.get("address") or 0): row for row in candidates if row.get("address") is not None}
+    added = 0
+    for fact in facts:
+        address = fact.get("entryOffset")
+        if address is None:
+            continue
+        address = int(address)
+        current = by_address.get(address)
+        if current is not None:
+            sources = set((current.get("evidence") or {}).get("sources") or [current.get("source")])
+            sources.add("ghidra-function")
+            current["evidence"] = {"sources": sorted(str(item) for item in sources if item)}
+            current["confidence"] = "high"
+            current["source"] = "ghidra-function"
+            current["size"] = int(fact.get("bodyBytes") or current.get("size") or 0)
+            continue
+        row = {
+            "name": fact.get("name") or f"sub_{address:x}",
+            "address": address,
+            "size": int(fact.get("bodyBytes") or 0),
+            "source": "ghidra-function",
+            "confidence": "high",
+            "evidence": {
+                "sources": ["ghidra-function"],
+                "entry": fact.get("entry"),
+                "instructionCount": fact.get("instructionCount"),
+                "hasDecompilerOutput": bool(fact.get("decompiled")),
+            },
+        }
+        by_address[address] = row
+        candidates.append(row)
+        added += 1
+
+    candidates = sorted(candidates, key=lambda row: (int(row.get("address") or row.get("rva") or 0), row.get("name", "")))
+    return {
+        **existing,
+        "candidates": candidates,
+        "summary": summarize_candidates(candidates),
+        "toolAnalysis": {
+            "tool": "ghidra",
+            "status": "complete" if proc.returncode == 0 and facts else "failed",
+            "returnCode": proc.returncode,
+            "factsPath": str(facts_path),
+            "functionsFound": len(facts),
+            "candidatesAdded": added,
+            "stdout": proc.stdout[-4000:],
+            "stderr": proc.stderr[-4000:],
+        },
+    }
+
+
+def parse_function_facts(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        rows.append(row)
+    return rows
+
+
+def parse_objdump_labels(text: str) -> list[dict[str, Any]]:
+    labels: list[dict[str, Any]] = []
+    current_section = None
+    section_re = re.compile(r"^Disassembly of section (.+):$")
+    label_re = re.compile(r"^([0-9a-fA-F]+) <([^>]+)>:$")
+    for line in text.splitlines():
+        section_match = section_re.match(line.strip())
+        if section_match:
+            current_section = section_match.group(1)
+            continue
+        label_match = label_re.match(line.strip())
+        if not label_match:
+            continue
+        name = label_match.group(2)
+        address = int(label_match.group(1), 16)
+        if name.startswith(".") and "@" not in name:
+            continue
+        labels.append({"address": address, "name": normalize_label_name(name, address), "section": current_section})
+    return labels
+
+
+def normalize_label_name(name: str, address: int) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_@.$+-]", "_", name)
+    return cleaned or f"sub_{address:x}"
+
+
+def elf_function_candidates(inventory: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for sym in inventory.get("symbols", []):
+        if sym.get("type") != 2 or sym.get("sectionIndex") == 0 or not sym.get("value"):
+            continue
+        candidates.append(
+            {
+                "name": sym.get("name") or f"sub_{int(sym['value']):x}",
+                "address": int(sym["value"]),
+                "size": int(sym.get("size") or 0),
+                "source": "elf-symbol",
+                "confidence": "high" if int(sym.get("size") or 0) > 0 else "medium",
+                "symbolTable": sym.get("table"),
+            }
+        )
+
+    entry = inventory.get("entryVa")
+    if entry is not None and not any(int(row["address"]) == int(entry) for row in candidates):
+        candidates.append(
+            {
+                "name": f"entry_{int(entry):x}",
+                "address": int(entry),
+                "size": 0,
+                "source": "entrypoint",
+                "confidence": "medium",
+            }
+        )
+    return candidates
+
+
+def pe_function_candidates(inventory: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    image_base = int(inventory.get("imageBase") or 0)
+    entry_rva = inventory.get("entryRva")
+    if entry_rva is not None:
+        candidates.append(
+            {
+                "name": f"entry_{int(entry_rva):x}",
+                "rva": int(entry_rva),
+                "address": image_base + int(entry_rva),
+                "size": 0,
+                "source": "entrypoint",
+                "confidence": "medium",
+            }
+        )
+    candidates.extend(x86_boundary_candidates(inventory, image_base=image_base))
+
+    # Without symbols or disassembly, PE executable ranges are only regions to
+    # scan. They are emitted as low-confidence boundary seeds for later analysis.
+    for code_range in inventory.get("codeRanges", []):
+        rva = int(code_range.get("rva") or 0)
+        size = int(code_range.get("size") or 0)
+        candidates.append(
+            {
+                "name": f"range_{code_range.get('name', 'code')}_{rva:x}",
+                "rva": rva,
+                "address": image_base + rva,
+                "size": size,
+                "source": "executable-range",
+                "confidence": "low",
+                "section": code_range.get("name"),
+                "fileOffset": code_range.get("fileOffset"),
+            }
+        )
+    return candidates
+
+
+def x86_boundary_candidates(inventory: dict[str, Any], *, image_base: int) -> list[dict[str, Any]]:
+    target = inventory.get("target") or {}
+    binary_path = target.get("binaryPath")
+    if not binary_path:
+        return []
+    arch = str(target.get("architectureHint") or "")
+    if arch not in {"x86", "x86_64"}:
+        return []
+    try:
+        data = Path(binary_path).read_bytes()
+    except OSError:
+        return []
+
+    starts: dict[int, dict[str, Any]] = {}
+    for code_range in inventory.get("codeRanges", []):
+        base_rva = int(code_range.get("rva") or 0)
+        file_offset = int(code_range.get("fileOffset") or 0)
+        file_size = int(code_range.get("fileSize") or code_range.get("size") or 0)
+        section = str(code_range.get("name") or "code")
+        blob = data[file_offset : file_offset + file_size]
+        for rel in scan_x86_prologues(blob):
+            add_candidate(starts, base_rva + rel, "x86-prologue", "medium", section)
+        for rel in scan_x86_call_targets(blob, base_rva):
+            add_candidate(starts, rel, "x86-call-target", "medium", section)
+        for rel in scan_after_ret_alignment(blob):
+            add_candidate(starts, base_rva + rel, "x86-post-ret-alignment", "low", section)
+
+    return [
+        {
+            "name": f"sub_{rva:x}",
+            "rva": rva,
+            "address": image_base + rva,
+            "size": 0,
+            "source": row["source"],
+            "confidence": row["confidence"],
+            "section": row["section"],
+            "evidence": row["evidence"],
+        }
+        for rva, row in starts.items()
+    ]
+
+
+def add_candidate(candidates: dict[int, dict[str, Any]], rva: int, source: str, confidence: str, section: str) -> None:
+    current = candidates.get(rva)
+    evidence = {"sources": [source]}
+    if current is None:
+        candidates[rva] = {"source": source, "confidence": confidence, "section": section, "evidence": evidence}
+        return
+    if source not in current["evidence"]["sources"]:
+        current["evidence"]["sources"].append(source)
+    if confidence_rank(confidence) > confidence_rank(current["confidence"]):
+        current["confidence"] = confidence
+        current["source"] = source
+
+
+def confidence_rank(value: str) -> int:
+    return {"low": 1, "medium": 2, "high": 3}.get(value, 0)
+
+
+def scan_x86_prologues(blob: bytes) -> list[int]:
+    starts: list[int] = []
+    needles = [
+        b"\x55\x8b\xec",
+        b"\x55\x89\xe5",
+        b"\x53\x56\x57",
+        b"\x56\x8b\xf1",
+        b"\x57\x8b\xf9",
+    ]
+    for offset in range(0, max(0, len(blob) - 3)):
+        if any(blob.startswith(needle, offset) for needle in needles):
+            starts.append(offset)
+    return starts
+
+
+def scan_x86_call_targets(blob: bytes, base_rva: int) -> list[int]:
+    targets: list[int] = []
+    for offset in range(0, max(0, len(blob) - 5)):
+        opcode = blob[offset]
+        if opcode not in {0xE8, 0xE9}:
+            continue
+        rel = int.from_bytes(blob[offset + 1 : offset + 5], "little", signed=True)
+        target = base_rva + offset + 5 + rel
+        if base_rva <= target < base_rva + len(blob):
+            targets.append(target)
+    return targets
+
+
+def scan_after_ret_alignment(blob: bytes) -> list[int]:
+    starts: list[int] = []
+    ret_opcodes = {0xC3, 0xCB, 0xC2, 0xCA}
+    for offset in range(0, max(0, len(blob) - 8)):
+        opcode = blob[offset]
+        if opcode not in ret_opcodes:
+            continue
+        ret_size = 3 if opcode in {0xC2, 0xCA} else 1
+        cursor = offset + ret_size
+        while cursor < len(blob) and blob[cursor] in {0x90, 0xCC, 0x00}:
+            cursor += 1
+        if cursor < len(blob) and looks_like_x86_start(blob, cursor):
+            starts.append(cursor)
+    return starts
+
+
+def looks_like_x86_start(blob: bytes, offset: int) -> bool:
+    return blob.startswith((b"\x55\x8b\xec", b"\x55\x89\xe5", b"\x56\x8b\xf1", b"\x57\x8b\xf9"), offset)
+
+
+def summarize_candidates(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    by_source: dict[str, int] = {}
+    by_confidence: dict[str, int] = {}
+    for row in candidates:
+        by_source[str(row.get("source"))] = by_source.get(str(row.get("source")), 0) + 1
+        by_confidence[str(row.get("confidence"))] = by_confidence.get(str(row.get("confidence")), 0) + 1
+    return {
+        "candidateCount": len(candidates),
+        "bySource": dict(sorted(by_source.items())),
+        "byConfidence": dict(sorted(by_confidence.items())),
+    }
+
+
+def write_function_candidates(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
