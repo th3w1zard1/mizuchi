@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,7 @@ def run_agentdecompile_analysis(
         )
 
     sequence = build_list_sequence(binary_path, limit)
+    clean_local_backend_state(run_dir, mode=mode, server_url=server_url)
     command, env, cwd = build_command(
         run_dir=run_dir,
         server_url=server_url,
@@ -129,6 +131,7 @@ def run_seeded_agentdecompile_analysis(
     for index, chunk in enumerate(chunks(seed_candidates, chunk_size), start=1):
         sequence = build_list_sequence(binary_path, len(chunk), chunk)
         batch_run_dir = run_dir / "agentdecompile-batches" / f"batch-{index:04d}"
+        clean_local_backend_state(batch_run_dir, mode=mode, server_url=server_url)
         command, env, cwd = build_command(
             run_dir=batch_run_dir,
             server_url=server_url,
@@ -381,6 +384,15 @@ def build_command(
         command.extend(["--server-url", server_url])
     command.extend(["tool-seq", json.dumps(sequence)])
     return command, env, ROOT
+
+
+def clean_local_backend_state(run_dir: Path, *, mode: str, server_url: str | None) -> None:
+    if mode != "local" and server_url:
+        return
+    for name in ("agentdecompile-project", "agentdecompile-home", "agentdecompile-config", "agentdecompile-cache", "agentdecompile-tmp"):
+        path = run_dir / name
+        if path.exists():
+            shutil.rmtree(path)
 
 
 def parse_cli_json(text: str) -> Any:
