@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .package_verify import GLOBAL_RE, is_code_match, resolve_manifest_path, resolve_package_path, strip_trailing_padding, verify_source, verify_target_slice
+from .package_verify import GLOBAL_RE, is_code_match, resolve_manifest_path, resolve_msvc_root, resolve_package_path, strip_trailing_padding, verify_source, verify_target_slice
 from .state import atomic_write_json
 
 
@@ -51,11 +51,14 @@ def sweep_recovered_source_package(
     sweep_dir = out_dir or package_dir / "sweep"
     sweep_dir.mkdir(parents=True, exist_ok=True)
     attempts_path = sweep_dir / "attempts.jsonl"
+    previous_attempts = load_attempt_cache(attempts_path)
 
     profiles = clang_profiles or default_profiles_for_compiler(compiler)
     base_args = clang_args or []
     function_results: list[dict[str, Any]] = []
     attempts_written = 0
+    attempts_compiled = 0
+    attempts_reused = 0
 
     with attempts_path.open("w", encoding="utf-8") as attempts_out:
         for fn in manifest.get("functions", []):
@@ -77,24 +80,49 @@ def sweep_recovered_source_package(
                     attempt_dir.mkdir(parents=True, exist_ok=True)
                     variant_source = attempt_dir / "candidate.c"
                     variant_source.write_text(variant["source"], encoding="utf-8")
-                    result = verify_source(
-                        source=variant_source,
-                        metadata=metadata,
-                        out_dir=attempt_dir,
+                    cache_key = attempt_cache_key(
+                        meta=meta,
+                        variant=variant,
                         compiler=compiler,
                         clang=clang,
-                        clang_args=[*base_args, *profile_args],
-                        timeout=timeout,
-                        object_compile=True,
-                        clang_target=clang_target,
                         msvc_root=msvc_root,
                         wine=wine,
-                        wineprefix=wineprefix,
-                        code_compare=True,
-                        objcopy=objcopy,
-                        objdump=objdump,
+                        compiler_args=[*base_args, *profile_args],
+                        clang_target=clang_target,
                     )
-                    attempt = summarize_attempt(meta, variant, profile_args, variant_source, result)
+                    cached = previous_attempts.get(cache_key)
+                    if cached is not None:
+                        attempt = dict(cached)
+                        attempt["cacheHit"] = True
+                        attempt["source"] = str(variant_source)
+                        attempts_reused += 1
+                    else:
+                        result = verify_source(
+                            source=variant_source,
+                            metadata=metadata,
+                            out_dir=attempt_dir,
+                            compiler=compiler,
+                            clang=clang,
+                            clang_args=[*base_args, *profile_args],
+                            timeout=timeout,
+                            object_compile=True,
+                            clang_target=clang_target,
+                            msvc_root=msvc_root,
+                            wine=wine,
+                            wineprefix=wineprefix,
+                            code_compare=True,
+                            objcopy=objcopy,
+                            objdump=objdump,
+                        )
+                        attempt = summarize_attempt(meta, variant, profile_args, variant_source, result)
+                        attempt["cacheHit"] = False
+                        attempts_compiled += 1
+                    attempt["attemptKey"] = cache_key
+                    attempt["sourceSha256"] = source_sha256(variant["source"])
+                    attempt["compiler"] = compiler
+                    attempt["compilerArgs"] = [*base_args, *profile_args]
+                    attempt["clangTarget"] = clang_target
+                    attempt["targetSliceSha256"] = target_slice_sha256(meta)
                     attempts_out.write(json.dumps(attempt, sort_keys=True) + "\n")
                     attempts_written += 1
                     if is_code_match(attempt.get("codeCompareStatus")):
@@ -139,6 +167,8 @@ def sweep_recovered_source_package(
         "matchedFunctions": matched_functions,
         "semanticMatchedFunctions": semantic_matched_functions,
         "attempts": attempts_written,
+        "attemptsCompiled": attempts_compiled,
+        "attemptsReused": attempts_reused,
         "compilerProfiles": profiles,
         "clangProfiles": profiles,
         "compiler": compiler,
@@ -149,6 +179,106 @@ def sweep_recovered_source_package(
     }
     atomic_write_json(sweep_dir / "sweep.json", report)
     return report
+
+
+def load_attempt_cache(path: Path) -> dict[str, dict[str, Any]]:
+    if not path.exists():
+        return {}
+    attempts: dict[str, dict[str, Any]] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        key = row.get("attemptKey")
+        if not isinstance(key, str) or not key:
+            key = legacy_attempt_cache_key(row)
+        if key:
+            attempts[key] = row
+    return attempts
+
+
+def legacy_attempt_cache_key(row: dict[str, Any]) -> str | None:
+    source = row.get("source")
+    source_hash = None
+    if isinstance(source, str) and Path(source).exists():
+        try:
+            source_hash = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+        except OSError:
+            source_hash = None
+    if source_hash is None:
+        return None
+    payload = {
+        "name": row.get("name"),
+        "address": row.get("address"),
+        "variant": row.get("variant"),
+        "sourceKind": row.get("sourceKind"),
+        "semanticSource": row.get("semanticSource"),
+        "sourceSha256": source_hash,
+        "profileArgs": row.get("profileArgs") or [],
+        "targetBodySize": row.get("targetBodySize"),
+        "targetSize": row.get("targetSize"),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def attempt_cache_key(
+    *,
+    meta: dict[str, Any],
+    variant: dict[str, Any],
+    compiler: str,
+    clang: str,
+    msvc_root: Path | None,
+    wine: str,
+    compiler_args: list[str],
+    clang_target: str | None,
+) -> str:
+    payload = {
+        "schema": "mizuchi.recovered-source-sweep-attempt-key.v1",
+        "name": meta.get("name"),
+        "address": meta.get("address"),
+        "variant": variant.get("name"),
+        "sourceKind": variant.get("sourceKind"),
+        "semanticSource": bool(variant.get("semanticSource", True)),
+        "sourceSha256": source_sha256(str(variant.get("source") or "")),
+        "compiler": compiler,
+        "compilerTool": compiler_tool_identity(compiler, clang, msvc_root, wine),
+        "compilerArgs": compiler_args,
+        "clangTarget": clang_target,
+        "targetSliceSha256": target_slice_sha256(meta),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def compiler_tool_identity(compiler: str, clang: str, msvc_root: Path | None, wine: str) -> dict[str, str | None]:
+    if compiler == "msvc":
+        return {
+            "msvcRoot": str(resolve_msvc_root(msvc_root)),
+            "wine": wine,
+        }
+    return {"clang": clang}
+
+
+def source_sha256(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def target_slice_sha256(meta: dict[str, Any]) -> str | None:
+    target_slice = meta.get("targetSlice")
+    if isinstance(target_slice, dict):
+        expected = target_slice.get("bytesSha256")
+        if expected:
+            return str(expected)
+        packaged = target_slice.get("packagedBytesPath") or target_slice.get("bytesPath")
+        if packaged:
+            path = Path(str(packaged))
+            if not path.is_absolute() and not path.exists() and meta.get("_metadataPath"):
+                path = Path(str(meta["_metadataPath"])).parent / path.name
+            if path.exists():
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+    return None
 
 
 def default_profiles_for_compiler(compiler: str) -> list[list[str]]:

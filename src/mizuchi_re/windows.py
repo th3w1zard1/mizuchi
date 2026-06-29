@@ -230,6 +230,8 @@ def run_source_package_semantic_sweep(
         "matchedFunctions": report.get("matchedFunctions"),
         "semanticMatchedFunctions": report.get("semanticMatchedFunctions"),
         "attempts": report.get("attempts"),
+        "attemptsCompiled": report.get("attemptsCompiled"),
+        "attemptsReused": report.get("attemptsReused"),
         "compilerProfiles": report.get("compilerProfiles") or report.get("clangProfiles"),
         "claimBoundary": report.get("claimBoundary"),
     }
@@ -275,8 +277,14 @@ def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]
     tasks_path = package_dir / "tasks.jsonl"
     manifest_path = package_dir / "manifest.json"
     index_path = package_dir / "README.md"
+    preserved_sweep = base_dir / ".recovered-source-sweep-cache"
 
+    if preserved_sweep.exists():
+        shutil.rmtree(preserved_sweep)
     if package_dir.exists():
+        sweep_dir = package_dir / "sweep"
+        if sweep_dir.exists():
+            shutil.move(str(sweep_dir), str(preserved_sweep))
         shutil.rmtree(package_dir)
     functions_dir.mkdir(parents=True, exist_ok=True)
 
@@ -351,6 +359,11 @@ def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]
     }
     atomic_write_json(manifest_path, manifest)
     index_path.write_text(render_source_index(manifest), encoding="utf-8")
+    if preserved_sweep.exists():
+        if functions:
+            shutil.move(str(preserved_sweep), str(package_dir / "sweep"))
+        else:
+            shutil.rmtree(preserved_sweep)
     return {
         "status": "complete",
         "packageDir": str(package_dir),
