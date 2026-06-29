@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--work-dir", type=Path, help="Run/state directory. Defaults to target/mizuchi-recover/<stable-target-id>.")
     recover.add_argument("--resume", action="store_true", help="Reuse complete stage receipts with matching config.")
     recover.add_argument("--force", action="store_true", help="Rerun selected stages even when receipts exist.")
-    recover.add_argument("--stop-after", choices=["discover", "inspect-capabilities", "prepare-analysis-image", "inventory-binary", "discover-functions", "analyze-functions", "generate-source-candidates", "plan-strategy", "byte-authority", "legacy-adapter", "snapshot-existing-recovery", "report"])
+    recover.add_argument("--stop-after", choices=["discover", "inspect-capabilities", "prepare-analysis-image", "export-context", "inventory-binary", "discover-functions", "analyze-functions", "generate-source-candidates", "plan-strategy", "byte-authority", "legacy-adapter", "snapshot-existing-recovery", "report"])
     recover.add_argument("--json", action="store_true", help="Emit progress as JSON lines.")
     recover.add_argument("--progress-width", type=int, default=24)
     recover.add_argument("--stage-timeout", type=int, default=300)
@@ -55,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--function-facts-jsonl", type=Path, help="Machine-generated function facts JSONL, for example AgentDecompile list/decompile output.")
     recover.add_argument("--source-task-limit", type=int, default=500, help="Maximum function candidates to queue for automatic source generation.")
     recover.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
+    recover.add_argument("--context-format", choices=["json", "md"], default="json", help="LLM-readable context export format used by the recover pipeline.")
+    recover.add_argument("--context-max-files", type=int, default=1000, help="Maximum files exported by the recover context stage.")
+    recover.add_argument("--context-max-depth", type=int, default=4, help="Maximum recursive container extraction depth for the recover context stage.")
+    recover.add_argument("--context-strings-limit", type=int, default=500, help="Maximum unique strings retained per binary in the recover context stage.")
+    recover.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
     return parser
 
 
@@ -87,6 +92,11 @@ def run_recover(args: argparse.Namespace) -> int:
         function_facts_jsonl=args.function_facts_jsonl,
         source_task_limit=args.source_task_limit,
         steamless_cli=args.steamless_cli,
+        context_format=args.context_format,
+        context_max_files=args.context_max_files,
+        context_max_depth=args.context_max_depth,
+        context_strings_limit=args.context_strings_limit,
+        context_extract_containers=not args.no_context_extract_containers,
     )
     return RecoveryRunner(config).run()
 

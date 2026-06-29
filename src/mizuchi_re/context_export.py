@@ -127,7 +127,7 @@ class ContextExporter:
             return
         if not path.is_dir():
             return
-        for child in sorted(path.iterdir(), key=lambda item: item.name.lower()):
+        for child in sorted(path.iterdir(), key=child_priority):
             if self.seen_files >= self.config.max_files:
                 return
             child_prefix = f"{logical_prefix}/{child.name}" if logical_prefix else child.name
@@ -193,9 +193,26 @@ class ContextExporter:
         }
         if result["returnCode"] == 0:
             before = len(self.rows)
-            self._walk(extract_root, logical_prefix=f"{rel}::extracted", depth=depth + 1)
+            self._walk_extracted_members(
+                extract_root,
+                logical_prefix=f"{rel}::extracted",
+                depth=depth + 1,
+                limit=self.config.max_container_members,
+            )
             extraction["exportedMembers"] = len(self.rows) - before
         return extraction
+
+    def _walk_extracted_members(self, path: Path, *, logical_prefix: str, depth: int, limit: int) -> None:
+        exported = 0
+        for child in sorted(path.rglob("*"), key=child_priority):
+            if exported >= limit or self.seen_files >= self.config.max_files:
+                return
+            if not child.is_file():
+                continue
+            rel = child.relative_to(path)
+            child_prefix = f"{logical_prefix}/{rel.as_posix()}"
+            self._export_file(child, logical_prefix=child_prefix, depth=depth)
+            exported += 1
 
 
 def export_context(config: ExportConfig) -> dict[str, Any]:
@@ -228,6 +245,28 @@ def classify_file(path: Path) -> str:
 
 def should_try_extract(path: Path, kind: str) -> bool:
     return kind in {"container", "pe", "zip", "pdf"} or path.suffix.lower() in ARCHIVE_SUFFIXES
+
+
+def child_priority(path: Path) -> tuple[int, str]:
+    name = path.name.lower()
+    suffix = path.suffix.lower()
+    if path.is_dir():
+        if name in {".rsrc", "resources", "resource", "scripts", "docs", "documentation"}:
+            return (0, name)
+        if name in {"cursor", "icon", "group_icon"}:
+            return (8, name)
+        return (3, name)
+    if name in {"version.txt", "packageinfo", "distribution", "setup.ini", "manifest", "installscript"}:
+        return (0, name)
+    if suffix in {".txt", ".xml", ".json", ".ini", ".manifest", ".plist", ".yaml", ".yml", ".md"}:
+        return (1, name)
+    if suffix in {".msi", ".pkg", ".zip", ".cab", ".7z", ".exe"}:
+        return (2, name)
+    if name in {".text", ".rdata", ".data", ".idata", "certificate"}:
+        return (4, name)
+    if suffix in {".ico", ".icns", ".png", ".jpg", ".jpeg", ".bmp"} or "cursor" in str(path).lower():
+        return (9, name)
+    return (5, name)
 
 
 def build_file_payload(path: Path, rel: str, kind: str, digest: str, size: int, config: ExportConfig) -> dict[str, Any]:
@@ -373,4 +412,3 @@ def render_markdown(payload: dict[str, Any]) -> str:
     if payload.get("analysis") or payload.get("container"):
         lines.extend(["## Structured Data", "", "```json", json.dumps({k: v for k, v in payload.items() if k not in {"text"}}, indent=2, sort_keys=True), "```", ""])
     return "\n".join(lines)
-

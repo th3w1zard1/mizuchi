@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .context_export import ExportConfig, export_context
 from .functions import analyze_function_candidates_with_agentdecompile, analyze_function_candidates_with_objdump, discover_function_candidates, write_function_candidates
 from .inventory import build_binary_inventory, write_inventory
 from .sourcegen import generate_source_candidates
@@ -52,6 +53,11 @@ class RecoveryConfig:
     function_facts_jsonl: Path | None = None
     source_task_limit: int = 500
     steamless_cli: Path | None = None
+    context_format: str = "json"
+    context_max_files: int = 1000
+    context_max_depth: int = 4
+    context_strings_limit: int = 500
+    context_extract_containers: bool = True
 
 
 class RecoveryRunner:
@@ -68,6 +74,7 @@ class RecoveryRunner:
             Stage("discover", "resolve target binary and content identity", (self.run_dir / "target.json",), RecoveryRunner.stage_discover),
             Stage("inspect-capabilities", "inspect local tools and reusable proof surfaces", (self.run_dir / "capabilities.json",), RecoveryRunner.stage_inspect_capabilities),
             Stage("prepare-analysis-image", "prepare the binary image used for static analysis", (self.run_dir / "analysis-target.json",), RecoveryRunner.stage_prepare_analysis_image),
+            Stage("export-context", "export app/archive/resource context into LLM-readable files", (self.run_dir / "context-export/manifest.json",), RecoveryRunner.stage_export_context),
             Stage("inventory-binary", "derive executable sections, imports, symbols, and code/data ranges", (self.run_dir / "binary-inventory.json",), RecoveryRunner.stage_inventory_binary),
             Stage("discover-functions", "derive function-boundary candidates from symbols and executable ranges", (self.run_dir / "function-candidates.json",), RecoveryRunner.stage_discover_functions),
             Stage("analyze-functions", "enrich function candidates with tool-backed boundary analysis", (self.run_dir / "function-analysis.json",), RecoveryRunner.stage_analyze_functions),
@@ -164,6 +171,11 @@ class RecoveryRunner:
             "functionFactsJsonl": str(self.config.function_facts_jsonl) if self.config.function_facts_jsonl else None,
             "sourceTaskLimit": self.config.source_task_limit,
             "steamlessCli": str(self.config.steamless_cli) if self.config.steamless_cli else None,
+            "contextFormat": self.config.context_format,
+            "contextMaxFiles": self.config.context_max_files,
+            "contextMaxDepth": self.config.context_max_depth,
+            "contextStringsLimit": self.config.context_strings_limit,
+            "contextExtractContainers": self.config.context_extract_containers,
             "stageTimeout": self.config.stage_timeout,
             "stage": stage.name,
         }
@@ -300,6 +312,28 @@ class RecoveryRunner:
                     summary.update({"status": "original", "transformAttempted": "steamless-unpacked-pe", "transformResult": "not-produced"})
         atomic_write_json(out_path, summary)
         return summary
+
+    def stage_export_context(self, _stage: Stage) -> dict[str, Any]:
+        target = self.load_target()
+        manifest = export_context(
+            ExportConfig(
+                input_path=target.input_path,
+                out_dir=self.run_dir / "context-export",
+                output_format=self.config.context_format,
+                extract_containers=self.config.context_extract_containers,
+                max_files=self.config.context_max_files,
+                max_depth=self.config.context_max_depth,
+                strings_limit=self.config.context_strings_limit,
+            )
+        )
+        return {
+            "status": "complete",
+            "manifest": str(self.run_dir / "context-export/manifest.json"),
+            "filesVisited": manifest.get("filesVisited"),
+            "filesExported": manifest.get("filesExported"),
+            "truncated": manifest.get("truncated"),
+            "outputFormat": manifest.get("outputFormat"),
+        }
 
     def stage_inventory_binary(self, _stage: Stage) -> dict[str, Any]:
         target = self.load_analysis_target()
@@ -443,6 +477,7 @@ class RecoveryRunner:
             "events": str(self.state.events_path),
             "target": json.loads((self.run_dir / "target.json").read_text(encoding="utf-8")),
             "analysisImage": json.loads((self.run_dir / "analysis-target.json").read_text(encoding="utf-8")),
+            "contextExport": json.loads((self.run_dir / "context-export/manifest.json").read_text(encoding="utf-8")),
             "binaryInventory": json.loads((self.run_dir / "binary-inventory.json").read_text(encoding="utf-8")),
             "functionCandidates": json.loads((self.run_dir / "function-candidates.json").read_text(encoding="utf-8")),
             "functionAnalysis": json.loads((self.run_dir / "function-analysis.json").read_text(encoding="utf-8")),
