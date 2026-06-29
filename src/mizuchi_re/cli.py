@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .context_export import ExportConfig, export_context
+from .package_sweep import sweep_recovered_source_package
 from .package_verify import verify_recovered_source_package
 from .pipeline import RecoveryConfig, RecoveryRunner
 from .targets import identify_binary
@@ -94,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     match = sub.add_parser("match-package", help="Compile candidates and compare code bytes against packaged target slices.")
     add_package_verify_args(match)
+
+    sweep = sub.add_parser("sweep-package", help="Generate source-shape/compiler variants and compare each against packaged target slices.")
+    add_package_verify_args(sweep)
+    sweep.add_argument("--max-variants-per-function", type=int, default=8, help="Maximum generated source variants per function.")
+    sweep.add_argument("--clang-profile", action="append", default=[], help="Comma-separated clang args for one profile, for example --clang-profile=-O2 or --clang-profile=-O2,-fomit-frame-pointer. Repeat for multiple profiles.")
     return parser
 
 
@@ -237,6 +243,34 @@ def run_match_package(args: argparse.Namespace) -> int:
     return 0 if report.get("status") in {"code-match", "code-relocation-masked-match"} else 1
 
 
+def run_sweep_package(args: argparse.Namespace) -> int:
+    profiles = parse_clang_profiles(args.clang_profile)
+    report = sweep_recovered_source_package(
+        args.package,
+        out_dir=args.out_dir,
+        clang=args.clang,
+        clang_args=args.clang_arg,
+        clang_profiles=profiles or None,
+        timeout=args.timeout,
+        clang_target=args.clang_target or None,
+        objcopy=args.objcopy,
+        objdump=args.objdump,
+        max_variants_per_function=args.max_variants_per_function,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report.get("status") == "matched" else 1
+
+
+def parse_clang_profiles(values: list[str]) -> list[list[str]]:
+    profiles = []
+    for value in values:
+        if value.strip() == "":
+            profiles.append([])
+            continue
+        profiles.append([item for item in (part.strip() for part in value.split(",")) if item])
+    return profiles
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
@@ -252,6 +286,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_verify_package(args)
     if args.command == "match-package":
         return run_match_package(args)
+    if args.command == "sweep-package":
+        return run_sweep_package(args)
     parser.print_help()
     return 2
 

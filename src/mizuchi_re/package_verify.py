@@ -77,8 +77,8 @@ def verify_recovered_source_package(
     object_attempted = sum(1 for row in results if row.get("object", {}).get("status") not in {None, "not-run"})
     target_slices_ok = sum(1 for row in results if row.get("targetSlice", {}).get("status") == "complete")
     code_attempted = sum(1 for row in results if row.get("codeCompare", {}).get("status") not in {None, "not-run"})
-    code_raw_matched = sum(1 for row in results if row.get("codeCompare", {}).get("status") == "match")
-    code_masked_matched = sum(1 for row in results if row.get("codeCompare", {}).get("status") == "relocation-masked-match")
+    code_raw_matched = sum(1 for row in results if is_code_match(row.get("codeCompare", {}).get("status"), raw_only=True))
+    code_masked_matched = sum(1 for row in results if is_code_match(row.get("codeCompare", {}).get("status"), raw_only=False) and not is_code_match(row.get("codeCompare", {}).get("status"), raw_only=True))
     report = {
         "schema": "mizuchi.recovered-source-verification.v1",
         "status": verification_status(
@@ -265,6 +265,17 @@ def verification_status(
     return "syntax-ok"
 
 
+def is_code_match(status: Any, *, raw_only: bool = False) -> bool:
+    if raw_only:
+        return status in {"match", "target-padding-trimmed-match"}
+    return status in {
+        "match",
+        "relocation-masked-match",
+        "target-padding-trimmed-match",
+        "relocation-masked-target-padding-trimmed-match",
+    }
+
+
 def verify_target_slice(target_slice: Any) -> dict[str, Any]:
     if not isinstance(target_slice, dict):
         return {"status": "missing", "reason": "metadata has no targetSlice object"}
@@ -344,11 +355,26 @@ def compare_object_code_to_target(
     target_bytes = target_path.read_bytes()
     relocations = parse_relocations(reloc_proc.stdout)
     mask = relocation_mask(relocations, len(candidate_bytes), len(target_bytes))
+    target_body_bytes = strip_trailing_padding(target_bytes)
+    target_body_mask = {index for index in mask if index < len(target_body_bytes)}
     raw_match = candidate_bytes == target_bytes
     masked_match = len(candidate_bytes) == len(target_bytes) and all(
         left == right or index in mask for index, (left, right) in enumerate(zip(candidate_bytes, target_bytes))
     )
-    status = "match" if raw_match else ("relocation-masked-match" if masked_match else "mismatch")
+    body_match = candidate_bytes == target_body_bytes
+    masked_body_match = len(candidate_bytes) == len(target_body_bytes) and all(
+        left == right or index in target_body_mask for index, (left, right) in enumerate(zip(candidate_bytes, target_body_bytes))
+    )
+    if raw_match:
+        status = "match"
+    elif masked_match:
+        status = "relocation-masked-match"
+    elif body_match:
+        status = "target-padding-trimmed-match"
+    elif masked_body_match:
+        status = "relocation-masked-target-padding-trimmed-match"
+    else:
+        status = "mismatch"
     return {
         "status": status,
         "method": "raw-and-relocation-masked-text-section-compare",
@@ -356,12 +382,19 @@ def compare_object_code_to_target(
         "targetBytes": str(target_path),
         "candidateSize": len(candidate_bytes),
         "targetSize": len(target_bytes),
+        "targetBodySize": len(target_body_bytes),
+        "targetTrailingPaddingBytes": len(target_bytes) - len(target_body_bytes),
         "candidateSha256": hashlib.sha256(candidate_bytes).hexdigest(),
         "targetSha256": hashlib.sha256(target_bytes).hexdigest(),
+        "targetBodySha256": hashlib.sha256(target_body_bytes).hexdigest(),
         "rawMatch": raw_match,
         "relocationMaskedMatch": masked_match,
+        "targetPaddingTrimmedMatch": body_match,
+        "relocationMaskedTargetPaddingTrimmedMatch": masked_body_match,
         "firstRawDifference": first_difference(candidate_bytes, target_bytes),
         "firstRelocationMaskedDifference": first_difference(candidate_bytes, target_bytes, mask),
+        "firstTargetPaddingTrimmedDifference": first_difference(candidate_bytes, target_body_bytes),
+        "firstRelocationMaskedTargetPaddingTrimmedDifference": first_difference(candidate_bytes, target_body_bytes, target_body_mask),
         "relocationMaskBytes": len(mask),
         "relocations": relocations[:50],
         "relocationCount": len(relocations),
@@ -402,6 +435,13 @@ def relocation_size(kind: str) -> int:
     if "16" in upper:
         return 2
     return 4
+
+
+def strip_trailing_padding(data: bytes) -> bytes:
+    end = len(data)
+    while end > 0 and data[end - 1] in {0x90, 0xCC}:
+        end -= 1
+    return data[:end]
 
 
 def relocation_mask(relocations: list[dict[str, Any]], candidate_size: int, target_size: int) -> set[int]:
