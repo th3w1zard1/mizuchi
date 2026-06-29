@@ -316,8 +316,8 @@ def generate_source_variants(source: str, meta: dict[str, Any], max_variants: in
         if prototypes:
             add_semantic_variant({"name": "stdcall-dllimport-prototypes-positive-relation-normalized", "source": prototypes + "\n\n" + relational, "sourceKind": "decompiler-c-with-prototypes-normalized", "semanticSource": True})
 
-    for pattern_variant in target_pattern_c_variants(source, meta):
-        add_semantic_variant(pattern_variant)
+    for lifted_variant in slice_lifted_c_variants(source, meta):
+        add_semantic_variant(lifted_variant)
 
     for repaired in outparam_alias_variants(source):
         add_semantic_variant(repaired)
@@ -389,7 +389,7 @@ def signed_candidate_stack_vars(source: str) -> list[str]:
     return sorted(address_taken & compared)
 
 
-def target_pattern_c_variants(source: str, meta: dict[str, Any]) -> list[dict[str, Any]]:
+def slice_lifted_c_variants(source: str, meta: dict[str, Any]) -> list[dict[str, Any]]:
     target_slice = meta.get("targetSlice")
     if isinstance(target_slice, dict):
         target_slice = {**target_slice, "metadataPath": str(meta.get("_metadataPath") or "")}
@@ -400,16 +400,20 @@ def target_pattern_c_variants(source: str, meta: dict[str, Any]) -> list[dict[st
     if not bytes_path:
         return []
     body = strip_trailing_padding(Path(str(bytes_path)).read_bytes())
+    rows = decode_x86_rows(body)
+    if rows is None:
+        return []
     prototypes = infer_stdcall_prototypes(source, str(meta.get("name") or ""))
     function_name = c_identifier(str(meta.get("name") or "recovered_function"))
     import_name = first_external_call_name(source)
     global_name = first_global_name(source)
+    stack_name = first_stack_address_var(source) or "local_4"
     variants: list[dict[str, Any]] = []
     if import_name and global_name:
-        simple = target_pattern_global_threshold_call(body, function_name, import_name, global_name, prototypes)
+        simple = lift_global_threshold_call(rows, function_name, import_name, global_name, prototypes)
         if simple:
             variants.append(simple)
-        outparam = target_pattern_import_outparam_global_store(body, function_name, import_name, global_name, prototypes)
+        outparam = lift_outparam_global_store(rows, function_name, import_name, global_name, stack_name, prototypes)
         if outparam:
             variants.append(outparam)
     return variants
@@ -427,70 +431,169 @@ def first_global_name(source: str) -> str | None:
     return globals_found[0] if globals_found else None
 
 
-def target_pattern_global_threshold_call(body: bytes, function_name: str, import_name: str, global_name: str, prototypes: str) -> dict[str, Any] | None:
-    if len(body) != 24:
+def first_stack_address_var(source: str) -> str | None:
+    names = sorted(set(re.findall(r"&\s*([A-Za-z_][A-Za-z0-9_]*)", source)))
+    for name in names:
+        if name.startswith(("uStack_", "iStack_", "local_", "stack_")):
+            return name
+    return names[0] if names else None
+
+
+def lift_global_threshold_call(rows: list[dict[str, Any]], function_name: str, import_name: str, global_name: str, prototypes: str) -> dict[str, Any] | None:
+    load_index = find_row(rows, op="mov", dst="eax", src_kind="mem_abs")
+    if load_index is None:
         return None
-    if not (
-        body[0] == 0xA1
-        and body[5:10] == b"\x83\xf8\x01\x7c\x0d"
-        and body[10:16] == b"\x6a\x00\x6a\x00\x50\x6a"
-        and body[17:19] == b"\xff\x15"
-        and body[24 - 1] == 0xC3
-    ):
+    cmp_index = find_row(rows, op="cmp", dst="eax", start=load_index + 1)
+    branch_index = find_branch_after_cmp(rows, cmp_index)
+    call_index = find_row(rows, op="call", start=(branch_index or cmp_index) + 1 if cmp_index is not None else 0)
+    if cmp_index is None or branch_index is None or call_index is None:
         return None
-    action = body[16]
+    threshold = rows[cmp_index].get("imm")
+    condition = compare_condition("eax", rows[cmp_index].get("cmp"), rows[branch_index].get("op"))
+    args = call_args_before(rows, call_index, {"eax": global_name})
+    if threshold is None or condition is None or len(args) < 1:
+        return None
     lines = [
         prototypes,
         f"void {function_name}(void)",
         "{",
-        f"  if ({global_name} >= 1) {{",
-        f"    {import_name}(0x{action:x},{global_name},0,0);",
+        f"  if ({global_name} {condition} {format_c_int(int(threshold))}) {{",
+        f"    {import_name}({','.join(args)});",
         "  }",
         "  return;",
         "}",
         "",
     ]
-    return {"name": "target-pattern-global-threshold-call", "source": "\n".join(line for line in lines if line != ""), "sourceKind": "target-pattern-c", "semanticSource": True}
+    return {"name": "slice-lifted-global-threshold-call", "source": "\n".join(line for line in lines if line != ""), "sourceKind": "slice-lifted-c", "semanticSource": True}
 
 
-def target_pattern_import_outparam_global_store(body: bytes, function_name: str, import_name: str, global_name: str, prototypes: str) -> dict[str, Any] | None:
-    if len(body) != 60:
+def lift_outparam_global_store(
+    rows: list[dict[str, Any]],
+    function_name: str,
+    import_name: str,
+    global_name: str,
+    stack_name: str,
+    prototypes: str,
+) -> dict[str, Any] | None:
+    calls = [index for index, row in enumerate(rows) if row.get("op") == "call"]
+    if len(calls) < 2:
         return None
-    if not (
-        body[0:2] == b"\x51\x56"
-        and body[2] == 0x8B
-        and body[3] == 0x35
-        and body[8:19] == b"\x6a\x00\x8d\x44\x24\x08\x50\x6a\x00\x6a\x5e"
-        and body[19:29] == b"\xc7\x44\x24\x14\x00\x00\x00\x00\xff\xd6"
-        and body[29:33] == b"\x85\xc0\x74\x18"
-        and body[33:42] == b"\x8b\x44\x24\x04\x83\xf8\x01\x7c\x0f"
-        and body[42:50] == b"\x6a\x00\x6a\x00\x6a\x00\x6a\x5d"
-        and body[50] == 0xA3
-        and body[55:60] == b"\xff\xd6\x5e\x59\xc3"
-    ):
+    first_call, second_call = calls[0], calls[1]
+    stack_disp = stack_disp_loaded_before_cmp(rows, first_call, second_call)
+    cmp_index = find_row(rows, op="cmp", dst="eax", start=first_call + 1)
+    branch_index = find_branch_after_cmp(rows, cmp_index)
+    test_index = find_row(rows, op="test", dst="eax", start=first_call + 1)
+    fail_branch_index = find_row(rows, op="je", start=(test_index or first_call) + 1)
+    store_index = find_row(rows, op="mov", dst_kind="mem_abs", src="eax", start=(branch_index or first_call) + 1)
+    if stack_disp is None or cmp_index is None or branch_index is None or test_index is None or fail_branch_index is None or store_index is None:
         return None
-    get_action = body[18]
-    set_action = body[49]
+    first_args = call_args_before(rows, first_call, {"eax": f"(unsigned int)&{stack_name}"})
+    second_args = call_args_before(rows, second_call, {"eax": stack_name})
+    threshold = rows[cmp_index].get("imm")
+    condition = compare_condition(stack_name, rows[cmp_index].get("cmp"), rows[branch_index].get("op"))
+    if len(first_args) < 1 or len(second_args) < 1 or threshold is None or condition is None:
+        return None
     lines = [
         prototypes,
         f"void {function_name}(void)",
         "{",
         "  int iVar1;",
-        "  int iVar2;",
-        "  int uStack_4;",
+        f"  int {stack_name};",
         "",
-        "  iVar2 = 0;",
-        "  uStack_4 = 0;",
-        f"  iVar1 = {import_name}(0x{get_action:x},0,(unsigned int)&uStack_4,0);",
-        "  if ((iVar1 != 0) && (uStack_4 >= 1)) {",
-        f"    {global_name} = uStack_4;",
-        f"    {import_name}(0x{set_action:x},0,0,0);",
+        f"  {stack_name} = 0;",
+        f"  iVar1 = {import_name}({','.join(first_args)});",
+        f"  if ((iVar1 != 0) && ({stack_name} {condition} {format_c_int(int(threshold))})) {{",
+        f"    {global_name} = {stack_name};",
+        f"    {import_name}({','.join(second_args)});",
         "  }",
         "  return;",
         "}",
         "",
     ]
-    return {"name": "target-pattern-import-outparam-global-store", "source": "\n".join(lines), "sourceKind": "target-pattern-c", "semanticSource": True}
+    return {"name": "slice-lifted-outparam-global-store", "source": "\n".join(lines), "sourceKind": "slice-lifted-c", "semanticSource": True}
+
+
+def stack_disp_loaded_before_cmp(rows: list[dict[str, Any]], start: int, end: int) -> int | None:
+    for row in rows[start:end]:
+        if row.get("op") == "mov" and row.get("dst") == "eax" and row.get("src_kind") == "stack":
+            return int(row.get("disp") or 0)
+    return None
+
+
+def find_row(rows: list[dict[str, Any]], *, op: str, start: int = 0, dst: str | None = None, src: str | None = None, dst_kind: str | None = None, src_kind: str | None = None) -> int | None:
+    for index, row in enumerate(rows[start:], start=start):
+        if row.get("op") != op:
+            continue
+        if dst is not None and row.get("dst") != dst:
+            continue
+        if src is not None and row.get("src") != src:
+            continue
+        if dst_kind is not None and row.get("dst_kind") != dst_kind:
+            continue
+        if src_kind is not None and row.get("src_kind") != src_kind:
+            continue
+        return index
+    return None
+
+
+def find_branch_after_cmp(rows: list[dict[str, Any]], cmp_index: int | None) -> int | None:
+    if cmp_index is None:
+        return None
+    for index in range(cmp_index + 1, min(cmp_index + 4, len(rows))):
+        if rows[index].get("op") in {"jl", "jle", "jg", "jge", "je", "jne"}:
+            return index
+    return None
+
+
+def compare_condition(value: str, threshold: Any, branch_op: Any) -> str | None:
+    _ = value
+    if threshold is None:
+        return None
+    return {
+        "jl": ">=",
+        "jle": ">",
+        "jg": "<=",
+        "jge": "<",
+        "je": "!=",
+        "jne": "==",
+    }.get(str(branch_op))
+
+
+def call_args_before(rows: list[dict[str, Any]], call_index: int, register_values: dict[str, str]) -> list[str]:
+    pushes: list[str] = []
+    eax_value: str | None = None
+    for row in rows[:call_index]:
+        op = row.get("op")
+        if op == "lea" and row.get("dst") == "eax" and row.get("src_kind") == "stack":
+            eax_value = register_values.get("eax", "eax")
+        elif op == "mov":
+            if row.get("dst") == "eax" and row.get("src_kind") in {"stack", "mem_abs"}:
+                eax_value = register_values.get("eax", "eax")
+            elif row.get("dst_kind") == "stack" or (row.get("dst_kind") == "mem_abs" and row.get("src") == "eax"):
+                pass
+            else:
+                pushes.clear()
+                eax_value = None
+        elif op == "push":
+            pushes.append(push_arg_expression(row.get("value"), eax_value, register_values))
+        elif op == "call":
+            pushes.clear()
+            eax_value = None
+        elif op not in {"nop"} and pushes:
+            pushes.clear()
+    return list(reversed(pushes))
+
+
+def push_arg_expression(value: Any, eax_value: str | None, register_values: dict[str, str]) -> str:
+    if value == "eax":
+        return eax_value or register_values.get("eax") or "eax"
+    if isinstance(value, int):
+        return format_c_int(value)
+    return str(value)
+
+
+def format_c_int(value: int) -> str:
+    return "0" if value == 0 else f"0x{value:x}"
 
 
 def target_slice_inline_asm_variant(meta: dict[str, Any]) -> dict[str, Any] | None:
@@ -524,6 +627,84 @@ def target_slice_inline_asm_variant(meta: dict[str, Any]) -> dict[str, Any] | No
             lines.append(f"    {line}")
     lines.extend(["  }", "}", ""])
     return {"name": "target-slice-inline-asm", "source": "\n".join(lines), "sourceKind": "target-slice-inline-asm", "semanticSource": False}
+
+
+def decode_x86_rows(data: bytes) -> list[dict[str, Any]] | None:
+    decoded: list[dict[str, Any]] = []
+    labels: set[int] = set()
+    offset = 0
+    while offset < len(data):
+        start = offset
+        opcode = data[offset]
+        row: dict[str, Any] | None = None
+        size = 1
+
+        if opcode in {0x50, 0x51, 0x56, 0x59, 0x5E}:
+            reg = {0x50: "eax", 0x51: "ecx", 0x56: "esi", 0x59: "ecx", 0x5E: "esi"}[opcode]
+            row = {"op": "push" if opcode in {0x50, 0x51, 0x56} else "pop", "value": reg}
+        elif opcode == 0x90:
+            row = {"op": "nop"}
+        elif opcode == 0xCC:
+            row = {"op": "int3"}
+        elif opcode == 0xC3:
+            row = {"op": "ret"}
+        elif opcode == 0x6A and offset + 1 < len(data):
+            row = {"op": "push", "value": signed_i8(data[offset + 1])}
+            size = 2
+        elif opcode == 0xA1 and offset + 4 < len(data):
+            imm = read_u32(data, offset + 1)
+            row = {"op": "mov", "dst": "eax", "dst_kind": "reg", "src": imm, "src_kind": "mem_abs"}
+            size = 5
+        elif opcode == 0xA3 and offset + 4 < len(data):
+            imm = read_u32(data, offset + 1)
+            row = {"op": "mov", "dst": imm, "dst_kind": "mem_abs", "src": "eax", "src_kind": "reg"}
+            size = 5
+        elif opcode == 0x8B and offset + 5 < len(data) and data[offset + 1] == 0x35:
+            imm = read_u32(data, offset + 2)
+            row = {"op": "mov", "dst": "esi", "dst_kind": "reg", "src": imm, "src_kind": "mem_abs"}
+            size = 6
+        elif opcode == 0x8B and offset + 3 < len(data) and data[offset + 1 : offset + 3] == b"\x44\x24":
+            disp = data[offset + 3]
+            row = {"op": "mov", "dst": "eax", "dst_kind": "reg", "src": disp, "src_kind": "stack", "disp": disp}
+            size = 4
+        elif opcode == 0x8D and offset + 3 < len(data) and data[offset + 1 : offset + 3] == b"\x44\x24":
+            disp = data[offset + 3]
+            row = {"op": "lea", "dst": "eax", "dst_kind": "reg", "src": disp, "src_kind": "stack", "disp": disp}
+            size = 4
+        elif opcode == 0xC7 and offset + 7 < len(data) and data[offset + 1 : offset + 3] == b"\x44\x24":
+            disp = data[offset + 3]
+            imm = read_u32(data, offset + 4)
+            row = {"op": "mov", "dst": disp, "dst_kind": "stack", "src": imm, "src_kind": "imm", "disp": disp}
+            size = 8
+        elif opcode == 0x85 and offset + 1 < len(data) and data[offset + 1] == 0xC0:
+            row = {"op": "test", "dst": "eax", "src": "eax"}
+            size = 2
+        elif opcode == 0x83 and offset + 2 < len(data) and data[offset + 1] == 0xF8:
+            imm = signed_i8(data[offset + 2])
+            row = {"op": "cmp", "dst": "eax", "src": imm, "src_kind": "imm", "cmp": imm, "imm": imm}
+            size = 3
+        elif opcode in {0x74, 0x75, 0x7C, 0x7D, 0x7E, 0x7F} and offset + 1 < len(data):
+            mnemonic = {0x74: "je", 0x75: "jne", 0x7C: "jl", 0x7D: "jge", 0x7E: "jle", 0x7F: "jg"}[opcode]
+            target = offset + 2 + signed_i8(data[offset + 1])
+            row = {"op": mnemonic, "target": target}
+            labels.add(target)
+            size = 2
+        elif opcode == 0xFF and offset + 1 < len(data) and data[offset + 1] == 0xD6:
+            row = {"op": "call", "target": "esi", "target_kind": "reg"}
+            size = 2
+        elif opcode == 0xFF and offset + 5 < len(data) and data[offset + 1] == 0x15:
+            imm = read_u32(data, offset + 2)
+            row = {"op": "call", "target": imm, "target_kind": "mem_abs"}
+            size = 6
+
+        if row is None:
+            return None
+        decoded.append({"offset": start, "size": size, **row})
+        offset += size
+
+    if any(label < 0 or label > len(data) for label in labels):
+        return None
+    return decoded
 
 
 def decode_x86_subset(data: bytes) -> list[str] | None:
