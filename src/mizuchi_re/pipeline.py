@@ -286,14 +286,15 @@ class RecoveryRunner:
             mono = ((capabilities.get("tools") or {}).get("mono") or {}).get("available")
             steamless = resolve_steamless_cli(ROOT, self.config.steamless_cli)
             if mono and steamless is not None:
-                image_dir = self.run_dir / "analysis-image"
+                image_dir = (self.run_dir / "analysis-image").resolve()
                 image_dir.mkdir(parents=True, exist_ok=True)
                 original_copy = image_dir / target.binary_path.name
                 if not original_copy.exists() or original_copy.stat().st_size != target.binary_path.stat().st_size:
                     shutil.copy2(target.binary_path, original_copy)
                 unpacked = Path(str(original_copy) + ".unpacked.exe")
+                steamless_result: subprocess.CompletedProcess[str] | None = None
                 if not unpacked.exists():
-                    subprocess.run(
+                    steamless_result = subprocess.run(
                         ["mono", str(steamless), "--quiet", "--keepbind", "--dumppayload", "--dumpdrmp", str(original_copy)],
                         cwd=ROOT,
                         text=True,
@@ -308,12 +309,23 @@ class RecoveryRunner:
                             "status": "transformed",
                             "transform": "steamless-unpacked-pe",
                             "transformTool": str(steamless),
+                            "transformReturnCode": steamless_result.returncode if steamless_result is not None else None,
                             "analysisSha256": sha256_file(unpacked),
                             "analysisSize": unpacked.stat().st_size,
                         }
                     )
                 else:
-                    summary.update({"status": "original", "transformAttempted": "steamless-unpacked-pe", "transformResult": "not-produced"})
+                    summary.update(
+                        {
+                            "status": "original",
+                            "transformAttempted": "steamless-unpacked-pe",
+                            "transformTool": str(steamless),
+                            "transformResult": "not-produced",
+                            "transformReturnCode": steamless_result.returncode if steamless_result is not None else None,
+                            "transformStdout": steamless_result.stdout[-4000:] if steamless_result is not None else "",
+                            "transformStderr": steamless_result.stderr[-4000:] if steamless_result is not None else "",
+                        }
+                    )
         atomic_write_json(out_path, summary)
         return summary
 
