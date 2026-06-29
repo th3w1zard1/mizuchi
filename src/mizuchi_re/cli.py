@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .context_export import ExportConfig, export_context
+from .package_verify import verify_recovered_source_package
 from .pipeline import RecoveryConfig, RecoveryRunner
 from .targets import identify_binary
 from .windows import run_recovery_windows
@@ -86,6 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("--context-max-depth", type=int, default=4, help="Maximum recursive container extraction depth for the recover context stage.")
     windows.add_argument("--context-strings-limit", type=int, default=500, help="Maximum unique strings retained per binary in the recover context stage.")
     windows.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
+
+    verify = sub.add_parser("verify-package", help="Verify a recovered-source package with explicit syntax/object tiers.")
+    verify.add_argument("package", type=Path, help="Path to recovered-source directory or manifest.json.")
+    verify.add_argument("--out-dir", type=Path, help="Verification output directory. Defaults to <package>/verification.")
+    verify.add_argument("--clang", default="clang", help="Clang executable used for syntax/object tiers.")
+    verify.add_argument("--timeout", type=int, default=30, help="Timeout per function/tier in seconds.")
+    verify.add_argument("--no-object", action="store_true", help="Only run syntax tier; do not compile object files.")
+    verify.add_argument("--clang-target", default="i686-pc-windows-msvc", help="Optional clang target triple for object tier; empty string disables target override.")
     return parser
 
 
@@ -183,6 +192,19 @@ def run_export_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_verify_package(args: argparse.Namespace) -> int:
+    report = verify_recovered_source_package(
+        args.package,
+        out_dir=args.out_dir,
+        clang=args.clang,
+        timeout=args.timeout,
+        object_compile=not args.no_object,
+        clang_target=args.clang_target or None,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report.get("status") in {"syntax-ok", "object-ok"} else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
@@ -194,6 +216,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_recover(args)
     if args.command == "recover-windows":
         return run_recover_windows(args)
+    if args.command == "verify-package":
+        return run_verify_package(args)
     parser.print_help()
     return 2
 
