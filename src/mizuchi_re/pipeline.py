@@ -19,7 +19,7 @@ from .state import RunState, atomic_write_json, config_fingerprint, now
 from .strategy import build_strategy
 from .snapshot import snapshot_existing_recovery
 from .targets import TargetIdentity, identify_binary
-from .tools import inspect_capabilities
+from .tools import inspect_capabilities, resolve_steamless_cli
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -283,10 +283,9 @@ class RecoveryRunner:
         }
         if target.format == "pe":
             capabilities = json.loads((self.run_dir / "capabilities.json").read_text(encoding="utf-8"))
-            local = capabilities.get("localSurfaces") or {}
             mono = ((capabilities.get("tools") or {}).get("mono") or {}).get("available")
-            steamless = self.config.steamless_cli or ROOT / "target/steamless-release/extracted/Steamless.CLI.exe"
-            if mono and (local.get("steamlessCli") or steamless.exists()):
+            steamless = resolve_steamless_cli(ROOT, self.config.steamless_cli)
+            if mono and steamless is not None:
                 image_dir = self.run_dir / "analysis-image"
                 image_dir.mkdir(parents=True, exist_ok=True)
                 original_copy = image_dir / target.binary_path.name
@@ -308,6 +307,7 @@ class RecoveryRunner:
                             "analysisBinaryPath": str(unpacked),
                             "status": "transformed",
                             "transform": "steamless-unpacked-pe",
+                            "transformTool": str(steamless),
                             "analysisSha256": sha256_file(unpacked),
                             "analysisSize": unpacked.stat().st_size,
                         }

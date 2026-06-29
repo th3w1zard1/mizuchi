@@ -11,6 +11,7 @@ from typing import Any
 
 DEFAULT_GHIDRA = Path("/home/brunner56/.local/opt/ghidra/current/support/analyzeHeadless")
 DEFAULT_STEAMLESS = Path("target/steamless-release/extracted/Steamless.CLI.exe")
+STEAMLESS_ENV = "MIZUCHI_STEAMLESS_CLI"
 
 
 def inspect_tool(name: str, command: list[str] | None = None) -> dict[str, Any]:
@@ -44,6 +45,7 @@ def inspect_executable(name: str, path: Path, command: list[str] | None = None) 
 
 
 def inspect_capabilities(repo_root: Path) -> dict[str, Any]:
+    steamless = resolve_steamless_cli(repo_root)
     tools = {
         "python": inspect_tool("python3", ["python3", "--version"]),
         "clang": inspect_tool("clang", ["clang", "--version"]),
@@ -65,10 +67,31 @@ def inspect_capabilities(repo_root: Path) -> dict[str, Any]:
         "sourceParityOneShot": (repo_root / "scripts/source-parity-one-shot.py").exists(),
         "swkotorInventorySlice": (repo_root / "scripts/swkotor-inventory-slice.py").exists(),
         "verifyObjdiff": (repo_root / "scripts/lib/verify-objdiff.sh").exists(),
-        "steamlessCli": (repo_root / DEFAULT_STEAMLESS).exists(),
+        "steamlessCli": steamless is not None,
+        "steamlessCliPath": str(steamless) if steamless else None,
     }
     return {
         "schema": "mizuchi.capabilities.v1",
         "tools": tools,
         "localSurfaces": local,
     }
+
+
+def resolve_steamless_cli(repo_root: Path, configured: Path | None = None) -> Path | None:
+    candidates: list[Path] = []
+    if configured is not None:
+        candidates.append(configured)
+    env_path = os.environ.get(STEAMLESS_ENV)
+    if env_path:
+        candidates.append(Path(env_path))
+    candidates.extend(
+        [
+            Path.cwd() / DEFAULT_STEAMLESS,
+            repo_root / DEFAULT_STEAMLESS,
+        ]
+    )
+    for candidate in candidates:
+        expanded = candidate.expanduser()
+        if expanded.exists():
+            return expanded.resolve()
+    return None
