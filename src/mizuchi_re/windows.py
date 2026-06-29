@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -80,6 +81,8 @@ def run_recovery_windows(
         atomic_write_json(summary_path, aggregate)
 
     aggregate.update(summarize_aggregate(aggregate))
+    source_package = build_recovered_source_package(base_dir, windows)
+    aggregate["sourcePackage"] = source_package
     aggregate["completedAt"] = now()
     atomic_write_json(summary_path, aggregate)
     return aggregate
@@ -131,3 +134,125 @@ def read_json(path: Path) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]) -> dict[str, Any]:
+    package_dir = base_dir / "recovered-source"
+    functions_dir = package_dir / "functions"
+    facts_path = package_dir / "function-facts.jsonl"
+    tasks_path = package_dir / "tasks.jsonl"
+    manifest_path = package_dir / "manifest.json"
+    index_path = package_dir / "README.md"
+
+    if package_dir.exists():
+        shutil.rmtree(package_dir)
+    functions_dir.mkdir(parents=True, exist_ok=True)
+
+    functions: list[dict[str, Any]] = []
+    task_count = 0
+    fact_count = 0
+
+    with facts_path.open("w", encoding="utf-8") as facts_out, tasks_path.open("w", encoding="utf-8") as tasks_out:
+        for window in windows:
+            shard_dir = Path(str(window.get("workDir") or ""))
+            fact_file = shard_dir / "function-facts.jsonl"
+            if fact_file.exists():
+                for line in fact_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if not line.strip():
+                        continue
+                    facts_out.write(line.rstrip() + "\n")
+                    fact_count += 1
+
+            task_file = shard_dir / "source-generation/tasks.jsonl"
+            if not task_file.exists():
+                continue
+            for line in task_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    task = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                task_count += 1
+                source = task.get("source")
+                if source:
+                    source_path = resolve_path(source)
+                    if source_path.exists():
+                        stem = safe_function_file_stem(task)
+                        copied_c = functions_dir / f"{stem}.c"
+                        copied_json = functions_dir / f"{stem}.json"
+                        shutil.copy2(source_path, copied_c)
+                        task = {**task, "packagedSource": str(copied_c)}
+                        atomic_write_json(copied_json, task)
+                        functions.append(
+                            {
+                                "name": task.get("name"),
+                                "address": task.get("address"),
+                                "rva": task.get("rva"),
+                                "status": task.get("status"),
+                                "source": str(copied_c),
+                                "metadata": str(copied_json),
+                                "windowOffset": window.get("offset"),
+                            }
+                        )
+                tasks_out.write(json.dumps(task, sort_keys=True) + "\n")
+
+    manifest = {
+        "schema": "mizuchi.recovered-source-package.v1",
+        "status": "complete",
+        "packageDir": str(package_dir),
+        "functionsDir": str(functions_dir),
+        "functionCount": len(functions),
+        "factCount": fact_count,
+        "taskCount": task_count,
+        "facts": str(facts_path),
+        "tasks": str(tasks_path),
+        "functions": functions,
+        "claimBoundary": "packaged sources are generated-unverified decompiler candidates until compiler and objdiff gates accept them",
+    }
+    atomic_write_json(manifest_path, manifest)
+    index_path.write_text(render_source_index(manifest), encoding="utf-8")
+    return {
+        "status": "complete",
+        "packageDir": str(package_dir),
+        "manifest": str(manifest_path),
+        "index": str(index_path),
+        "functionCount": len(functions),
+        "factCount": fact_count,
+        "taskCount": task_count,
+    }
+
+
+def resolve_path(path: Any) -> Path:
+    candidate = Path(str(path))
+    if candidate.is_absolute():
+        return candidate
+    return Path.cwd() / candidate
+
+
+def safe_function_file_stem(task: dict[str, Any]) -> str:
+    name = str(task.get("name") or "sub")
+    address = task.get("address")
+    suffix = f"{int(address):08x}" if address is not None else "unknown"
+    safe = "".join(ch if ch.isalnum() or ch in "._+-" else "_" for ch in name).strip("._") or "sub"
+    return f"{safe}_{suffix}"
+
+
+def render_source_index(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# Mizuchi Recovered Source Package",
+        "",
+        f"Status: {manifest['status']}",
+        f"Functions: {manifest['functionCount']}",
+        f"Facts: {manifest['factCount']}",
+        f"Tasks: {manifest['taskCount']}",
+        "",
+        manifest["claimBoundary"],
+        "",
+        "## Functions",
+        "",
+    ]
+    for fn in manifest["functions"]:
+        lines.append(f"- `{fn.get('name')}` at `{fn.get('address')}` -> `{fn.get('source')}`")
+    lines.append("")
+    return "\n".join(lines)
