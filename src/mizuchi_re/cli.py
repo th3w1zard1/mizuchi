@@ -52,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--function-analysis", choices=["auto", "none", "objdump", "agentdecompile"], default="auto", help="Tool-backed function-boundary analysis mode.")
     recover.add_argument("--agentdecompile-server-url", help="Optional AgentDecompile MCP/CLI server URL. Omit to use uvx local mode.")
     recover.add_argument("--agentdecompile-mode", choices=["auto", "local"], default="local", help="AgentDecompile execution mode. local uses uvx plus PyGhidra in-process.")
+    recover.add_argument("--agentdecompile-batch-size", type=int, default=25, help="Seed/decompile this many function candidates per AgentDecompile subprocess.")
     recover.add_argument("--function-facts-jsonl", type=Path, help="Machine-generated function facts JSONL, for example AgentDecompile list/decompile output.")
     recover.add_argument("--source-task-limit", type=int, default=500, help="Maximum function candidates to queue for automatic source generation.")
     recover.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
@@ -89,6 +90,7 @@ def run_recover(args: argparse.Namespace) -> int:
         function_analysis=args.function_analysis,
         agentdecompile_server_url=args.agentdecompile_server_url,
         agentdecompile_mode=args.agentdecompile_mode,
+        agentdecompile_batch_size=args.agentdecompile_batch_size,
         function_facts_jsonl=args.function_facts_jsonl,
         source_task_limit=args.source_task_limit,
         steamless_cli=args.steamless_cli,

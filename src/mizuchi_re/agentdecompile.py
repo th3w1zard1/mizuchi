@@ -27,12 +27,25 @@ def run_agentdecompile_analysis(
     limit: int,
     timeout: int,
     candidate_functions: list[dict[str, Any]] | None = None,
+    batch_size: int = 25,
     server_url: str | None = None,
     mode: str = "auto",
 ) -> dict[str, Any]:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     seed_candidates = select_seed_candidates(candidate_functions or [], limit)
-    sequence = build_list_sequence(binary_path, limit, seed_candidates)
+    if seed_candidates:
+        return run_seeded_agentdecompile_analysis(
+            binary_path=binary_path,
+            out_path=out_path,
+            run_dir=run_dir,
+            seed_candidates=seed_candidates,
+            timeout=timeout,
+            batch_size=batch_size,
+            server_url=server_url,
+            mode=mode,
+        )
+
+    sequence = build_list_sequence(binary_path, limit)
     command, env, cwd = build_command(
         run_dir=run_dir,
         server_url=server_url,
@@ -89,6 +102,84 @@ def run_agentdecompile_analysis(
         "stdout": proc.stdout[-4000:],
         "stderr": proc.stderr[-4000:],
     }
+
+
+def run_seeded_agentdecompile_analysis(
+    *,
+    binary_path: Path,
+    out_path: Path,
+    run_dir: Path,
+    seed_candidates: list[dict[str, Any]],
+    timeout: int,
+    batch_size: int,
+    server_url: str | None,
+    mode: str,
+) -> dict[str, Any]:
+    facts: list[dict[str, Any]] = []
+    batches: list[dict[str, Any]] = []
+    stdout_tail = ""
+    stderr_tail = ""
+    return_codes: list[int] = []
+    chunk_size = max(1, batch_size)
+
+    for index, chunk in enumerate(chunks(seed_candidates, chunk_size), start=1):
+        sequence = build_list_sequence(binary_path, len(chunk), chunk)
+        batch_run_dir = run_dir / "agentdecompile-batches" / f"batch-{index:04d}"
+        command, env, cwd = build_command(
+            run_dir=batch_run_dir,
+            server_url=server_url,
+            mode=mode,
+            sequence=sequence,
+        )
+        proc = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False, timeout=timeout)
+        parsed = parse_cli_json(proc.stdout)
+        batch_facts = seeded_facts_from_tool_seq(parsed, binary_path, chunk)
+        facts.extend(batch_facts)
+        stdout_tail = (stdout_tail + "\n" + proc.stdout)[-4000:]
+        stderr_tail = (stderr_tail + "\n" + proc.stderr)[-4000:]
+        return_codes.append(proc.returncode)
+        batches.append(
+            {
+                "index": index,
+                "seedCandidates": len(chunk),
+                "factsFound": len(batch_facts),
+                "decompiled": sum(1 for row in batch_facts if row.get("decompiled")),
+                "returnCode": proc.returncode,
+                "command": redact_command(command),
+            }
+        )
+
+    with out_path.open("w", encoding="utf-8") as fh:
+        for fact in facts:
+            fh.write(json.dumps(fact, sort_keys=True) + "\n")
+
+    nonzero = [code for code in return_codes if code != 0]
+    return_code = nonzero[-1] if nonzero else (return_codes[-1] if return_codes else 1)
+    return {
+        "tool": "agentdecompile",
+        "status": "complete" if return_code == 0 and facts else "failed",
+        "returnCode": return_code,
+        "factsPath": str(out_path),
+        "functionsFound": len(facts),
+        "seedCandidates": len(seed_candidates),
+        "mode": mode,
+        "serverUrl": server_url,
+        "command": batches[-1]["command"] if batches else [],
+        "decompile": {
+            "attempted": len(seed_candidates),
+            "returnCode": return_code,
+            "batchSize": chunk_size,
+            "batches": len(batches),
+            "decompiled": sum(1 for row in facts if row.get("decompiled")),
+        },
+        "batches": batches,
+        "stdout": stdout_tail,
+        "stderr": stderr_tail,
+    }
+
+
+def chunks(items: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
+    return [items[index : index + size] for index in range(0, len(items), size)]
 
 
 def build_list_sequence(binary_path: Path, limit: int, seed_candidates: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
@@ -345,6 +436,31 @@ def decompiled_from_tool_seq(parsed: Any) -> dict[str, str]:
         if name and code:
             out[str(name)] = str(code)
     return out
+
+
+def seeded_facts_from_tool_seq(parsed: Any, binary_path: Path, seeds: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    decompiled = decompiled_from_tool_seq(parsed)
+    facts: list[dict[str, Any]] = []
+    for seed in seeds:
+        name = str(seed["name"])
+        address = int(seed["address"])
+        end_address = int(seed.get("endAddress") or address)
+        body_bytes = max(1, end_address - address + 1)
+        facts.append(
+            {
+                "name": name,
+                "entry": f"{address:08x}",
+                "entryOffset": address,
+                "bodyBytes": body_bytes,
+                "instructionCount": 0,
+                "bytes": "",
+                "asm": "",
+                "decompiled": decompiled.get(name, ""),
+                "source": "agentdecompile-seeded",
+                "binaryPath": str(binary_path),
+            }
+        )
+    return facts
 
 
 def extract_payloads(value: Any) -> list[Any]:

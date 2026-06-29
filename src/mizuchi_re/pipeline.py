@@ -50,6 +50,7 @@ class RecoveryConfig:
     function_analysis: str = "auto"
     agentdecompile_server_url: str | None = None
     agentdecompile_mode: str = "local"
+    agentdecompile_batch_size: int = 25
     function_facts_jsonl: Path | None = None
     source_task_limit: int = 500
     steamless_cli: Path | None = None
@@ -168,6 +169,7 @@ class RecoveryRunner:
             "functionAnalysis": self.config.function_analysis,
             "agentdecompileServerUrl": self.config.agentdecompile_server_url,
             "agentdecompileMode": self.config.agentdecompile_mode,
+            "agentdecompileBatchSize": self.config.agentdecompile_batch_size,
             "functionFactsJsonl": str(self.config.function_facts_jsonl) if self.config.function_facts_jsonl else None,
             "sourceTaskLimit": self.config.source_task_limit,
             "steamlessCli": str(self.config.steamless_cli) if self.config.steamless_cli else None,
@@ -372,6 +374,7 @@ class RecoveryRunner:
                 run_dir=self.run_dir,
                 limit=self.config.source_task_limit,
                 timeout=max(self.config.stage_timeout, 600),
+                batch_size=self.config.agentdecompile_batch_size,
                 server_url=self.config.agentdecompile_server_url,
                 mode=self.config.agentdecompile_mode,
             )

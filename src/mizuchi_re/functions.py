@@ -92,6 +92,7 @@ def analyze_function_candidates_with_agentdecompile(
     run_dir: Path,
     limit: int,
     timeout: int,
+    batch_size: int = 25,
     server_url: str | None = None,
     mode: str = "auto",
 ) -> dict[str, Any]:
@@ -102,6 +103,7 @@ def analyze_function_candidates_with_agentdecompile(
         limit=limit,
         timeout=timeout,
         candidate_functions=list(existing.get("candidates", [])),
+        batch_size=batch_size,
         server_url=server_url,
         mode=mode,
     )
