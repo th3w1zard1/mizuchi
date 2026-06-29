@@ -17,11 +17,13 @@ from .state import atomic_write_json
 TYPE_SHIM = """
 typedef unsigned char byte;
 typedef unsigned char undefined;
+typedef unsigned char undefined1;
 typedef unsigned short undefined2;
 typedef unsigned int undefined4;
 typedef unsigned long long undefined8;
 typedef unsigned int uint;
 typedef unsigned long ulong;
+typedef int code();
 typedef int BOOL;
 typedef void *HANDLE;
 typedef void *HWND;
@@ -34,6 +36,7 @@ typedef char *LPSTR;
 
 
 GLOBAL_RE = re.compile(r"\b(?:DAT|UNK|PTR|iRam|uRam|bRam|sRam|wRam|dRam|qRam|fRam|g_|s_)[A-Za-z0-9_]*\b")
+STACK_SYMBOL_RE = re.compile(r"\bstack0x[0-9A-Fa-f]+\b")
 
 
 def verify_recovered_source_package(
@@ -588,6 +591,8 @@ def build_shim(source: str) -> str:
     declarations = []
     for name in sorted(set(GLOBAL_RE.findall(source))):
         declarations.append(f"extern int {name};")
+    for name in sorted(set(STACK_SYMBOL_RE.findall(source))):
+        declarations.append(f"extern undefined4 {name};")
     return TYPE_SHIM + ("\n" + "\n".join(declarations) if declarations else "")
 
 
