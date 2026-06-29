@@ -359,16 +359,28 @@ def generate_source_variants(source: str, meta: dict[str, Any], max_variants: in
     if inline_asm is not None:
         variants.append(inline_asm)
 
+    variant_limit = max(1, max_variants)
+    semantic_limit = variant_limit
+    fallback_variant = next((variant for variant in reversed(variants) if not bool(variant.get("semanticSource", True))), None)
+    if fallback_variant is not None:
+        semantic_limit = max(0, variant_limit - 1)
+
     deduped: list[dict[str, Any]] = []
     seen: set[str] = set()
     for variant in variants:
+        if not bool(variant.get("semanticSource", True)):
+            continue
+        if len(deduped) >= semantic_limit:
+            break
         digest = hashlib.sha256(variant["source"].encode("utf-8")).hexdigest()
         if digest in seen:
             continue
         seen.add(digest)
         deduped.append(variant)
-        if len(deduped) >= max(1, max_variants):
-            break
+    if fallback_variant is not None:
+        digest = hashlib.sha256(fallback_variant["source"].encode("utf-8")).hexdigest()
+        if digest not in seen and len(deduped) < variant_limit:
+            deduped.append(fallback_variant)
     return deduped
 
 
