@@ -21,10 +21,14 @@ def generate_source_candidates(
     out_dir: Path,
     function_facts_jsonl: Path | None = None,
     limit: int = 500,
+    offset: int = 0,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     facts = load_function_facts(function_facts_jsonl) if function_facts_jsonl else {}
-    candidates = list(function_candidates.get("candidates", []))[: max(limit, 0)]
+    original_candidates = list(function_candidates.get("candidates", []))
+    all_candidates = [row for row in original_candidates if is_recoverable_candidate(row)]
+    start = max(0, offset)
+    candidates = all_candidates[start : start + max(limit, 0)]
 
     tasks_path = out_dir / "tasks.jsonl"
     generated_count = 0
@@ -78,6 +82,10 @@ def generate_source_candidates(
         "tasks": str(tasks_path),
         "taskCount": task_count,
         "generatedSourceCandidates": generated_count,
+        "candidateOffset": start,
+        "candidateLimit": max(limit, 0),
+        "candidateTotal": len(all_candidates),
+        "originalCandidateTotal": len(original_candidates),
         "functionFacts": str(function_facts_jsonl) if function_facts_jsonl else None,
         "byStatus": dict(sorted(by_status.items())),
         "blockers": blockers,
@@ -134,6 +142,16 @@ def is_range_alias(candidate: dict[str, Any], facts: dict[str, dict[str, Any]]) 
     if candidate.get("source") != "executable-range" or candidate.get("address") is None:
         return False
     return f"address:{int(candidate['address'])}" in facts
+
+
+def is_recoverable_candidate(candidate: dict[str, Any]) -> bool:
+    if candidate.get("address") is None:
+        return False
+    if candidate.get("source") == "executable-range":
+        return False
+    if candidate.get("confidence") == "low":
+        return False
+    return True
 
 
 def build_task(target: dict[str, Any], candidate: dict[str, Any], fact: dict[str, Any] | None) -> dict[str, Any]:

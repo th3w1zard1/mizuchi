@@ -53,6 +53,7 @@ class RecoveryConfig:
     agentdecompile_batch_size: int = 25
     function_facts_jsonl: Path | None = None
     source_task_limit: int = 500
+    source_task_offset: int = 0
     steamless_cli: Path | None = None
     context_format: str = "json"
     context_max_files: int = 1000
@@ -172,6 +173,7 @@ class RecoveryRunner:
             "agentdecompileBatchSize": self.config.agentdecompile_batch_size,
             "functionFactsJsonl": str(self.config.function_facts_jsonl) if self.config.function_facts_jsonl else None,
             "sourceTaskLimit": self.config.source_task_limit,
+            "sourceTaskOffset": self.config.source_task_offset,
             "steamlessCli": str(self.config.steamless_cli) if self.config.steamless_cli else None,
             "contextFormat": self.config.context_format,
             "contextMaxFiles": self.config.context_max_files,
@@ -374,6 +376,7 @@ class RecoveryRunner:
                 run_dir=self.run_dir,
                 limit=self.config.source_task_limit,
                 timeout=max(self.config.stage_timeout, 600),
+                offset=self.config.source_task_offset,
                 batch_size=self.config.agentdecompile_batch_size,
                 server_url=self.config.agentdecompile_server_url,
                 mode=self.config.agentdecompile_mode,
@@ -420,6 +423,7 @@ class RecoveryRunner:
             out_dir=self.run_dir / "source-generation",
             function_facts_jsonl=self.config.function_facts_jsonl or default_function_facts_path(self.run_dir),
             limit=self.config.source_task_limit,
+            offset=self.config.source_task_offset,
         )
         atomic_write_json(self.run_dir / "source-generation/summary.json", summary)
         return summary

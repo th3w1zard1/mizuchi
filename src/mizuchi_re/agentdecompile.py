@@ -26,13 +26,14 @@ def run_agentdecompile_analysis(
     run_dir: Path,
     limit: int,
     timeout: int,
+    offset: int = 0,
     candidate_functions: list[dict[str, Any]] | None = None,
     batch_size: int = 25,
     server_url: str | None = None,
     mode: str = "auto",
 ) -> dict[str, Any]:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    seed_candidates = select_seed_candidates(candidate_functions or [], limit)
+    seed_candidates = select_seed_candidates(candidate_functions or [], limit, offset)
     if seed_candidates:
         return run_seeded_agentdecompile_analysis(
             binary_path=binary_path,
@@ -40,6 +41,7 @@ def run_agentdecompile_analysis(
             run_dir=run_dir,
             seed_candidates=seed_candidates,
             timeout=timeout,
+            offset=offset,
             batch_size=batch_size,
             server_url=server_url,
             mode=mode,
@@ -95,6 +97,7 @@ def run_agentdecompile_analysis(
         "factsPath": str(out_path),
         "functionsFound": len(facts),
         "seedCandidates": len(seed_candidates),
+        "candidateOffset": max(0, offset),
         "mode": mode,
         "serverUrl": server_url,
         "command": redact_command(command),
@@ -111,6 +114,7 @@ def run_seeded_agentdecompile_analysis(
     run_dir: Path,
     seed_candidates: list[dict[str, Any]],
     timeout: int,
+    offset: int,
     batch_size: int,
     server_url: str | None,
     mode: str,
@@ -162,6 +166,7 @@ def run_seeded_agentdecompile_analysis(
         "factsPath": str(out_path),
         "functionsFound": len(facts),
         "seedCandidates": len(seed_candidates),
+        "candidateOffset": max(0, offset),
         "mode": mode,
         "serverUrl": server_url,
         "command": batches[-1]["command"] if batches else [],
@@ -224,7 +229,7 @@ def build_list_sequence(binary_path: Path, limit: int, seed_candidates: list[dic
     return calls
 
 
-def select_seed_candidates(candidates: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+def select_seed_candidates(candidates: list[dict[str, Any]], limit: int, offset: int = 0) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     seen: set[int] = set()
     eligible: list[tuple[int, dict[str, Any]]] = []
@@ -245,9 +250,13 @@ def select_seed_candidates(candidates: list[dict[str, Any]], limit: int) -> list
         seen.add(address_int)
         eligible.append((address_int, row))
     eligible.sort(key=lambda item: item[0])
-    for index, (address_int, row) in enumerate(eligible[:limit]):
+    start = max(0, offset)
+    stop = start + max(0, limit)
+    window = eligible[start:stop]
+    for index, (address_int, row) in enumerate(window):
         name = normalize_seed_name(str(row.get("name") or f"sub_{address_int:x}"), address_int)
-        next_address = eligible[index + 1][0] if index + 1 < min(len(eligible), limit) else None
+        absolute_index = start + index
+        next_address = eligible[absolute_index + 1][0] if absolute_index + 1 < len(eligible) else None
         end_address = address_int + 0x3ff
         if next_address is not None and next_address > address_int:
             end_address = min(end_address, next_address - 1)

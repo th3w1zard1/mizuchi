@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--agentdecompile-batch-size", type=int, default=25, help="Seed/decompile this many function candidates per AgentDecompile subprocess.")
     recover.add_argument("--function-facts-jsonl", type=Path, help="Machine-generated function facts JSONL, for example AgentDecompile list/decompile output.")
     recover.add_argument("--source-task-limit", type=int, default=500, help="Maximum function candidates to queue for automatic source generation.")
+    recover.add_argument("--source-task-offset", type=int, default=0, help="Skip this many eligible function candidates before analysis/source generation.")
     recover.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
     recover.add_argument("--context-format", choices=["json", "md"], default="json", help="LLM-readable context export format used by the recover pipeline.")
     recover.add_argument("--context-max-files", type=int, default=1000, help="Maximum files exported by the recover context stage.")
@@ -93,6 +94,7 @@ def run_recover(args: argparse.Namespace) -> int:
         agentdecompile_batch_size=args.agentdecompile_batch_size,
         function_facts_jsonl=args.function_facts_jsonl,
         source_task_limit=args.source_task_limit,
+        source_task_offset=args.source_task_offset,
         steamless_cli=args.steamless_cli,
         context_format=args.context_format,
         context_max_files=args.context_max_files,
