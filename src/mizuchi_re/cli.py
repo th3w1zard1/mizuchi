@@ -88,6 +88,19 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("--context-max-depth", type=int, default=4, help="Maximum recursive container extraction depth for the recover context stage.")
     windows.add_argument("--context-strings-limit", type=int, default=500, help="Maximum unique strings retained per binary in the recover context stage.")
     windows.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
+    windows.add_argument("--no-semantic-sweep", action="store_true", help="Do not run compiler-profile semantic source matching after assembling the recovered-source package.")
+    windows.add_argument("--semantic-sweep-compiler", choices=["auto", "clang", "msvc"], default="auto", help="Compiler backend for recovered-source semantic sweep. auto prefers MSVC when cl.exe and wine are available.")
+    windows.add_argument("--semantic-sweep-profile", action="append", default=[], help="Comma-separated compiler args for one semantic sweep profile. Repeat for multiple profiles.")
+    windows.add_argument("--semantic-sweep-timeout", type=int, help="Timeout per semantic sweep compile/compare attempt. Defaults to --stage-timeout.")
+    windows.add_argument("--semantic-sweep-max-variants-per-function", type=int, default=8, help="Maximum generated source-shape variants per recovered function.")
+    windows.add_argument("--semantic-sweep-clang", default="clang", help="Clang executable used when semantic sweep compiler is clang.")
+    windows.add_argument("--semantic-sweep-clang-arg", action="append", default=[], help="Extra clang argument for semantic sweep. Repeat for multiple flags.")
+    windows.add_argument("--semantic-sweep-clang-target", default="i686-pc-windows-msvc", help="Optional clang target triple for semantic sweep; empty string disables target override.")
+    windows.add_argument("--msvc-root", type=Path, help="MSVC root containing bin/cl.exe for semantic sweep.")
+    windows.add_argument("--wine", default="wine", help="Wine executable used by the MSVC semantic sweep backend.")
+    windows.add_argument("--wineprefix", type=Path, help="Wine prefix used by the MSVC semantic sweep backend.")
+    windows.add_argument("--objcopy", default="objcopy", help="objcopy executable used to extract candidate .text during semantic sweep.")
+    windows.add_argument("--objdump", default="objdump", help="objdump executable used for relocation/disassembly evidence during semantic sweep.")
 
     verify = sub.add_parser("verify-package", help="Verify a recovered-source package with explicit syntax/object tiers.")
     add_package_verify_args(verify)
@@ -190,6 +203,19 @@ def run_recover_windows(args: argparse.Namespace) -> int:
         window_size=args.window_size,
         start_offset=args.start_offset,
         max_windows=args.max_windows,
+        semantic_sweep=not args.no_semantic_sweep,
+        semantic_sweep_compiler=args.semantic_sweep_compiler,
+        semantic_sweep_profiles=parse_clang_profiles(args.semantic_sweep_profile) or None,
+        semantic_sweep_timeout=args.semantic_sweep_timeout or args.stage_timeout,
+        semantic_sweep_max_variants_per_function=args.semantic_sweep_max_variants_per_function,
+        semantic_sweep_clang=args.semantic_sweep_clang,
+        semantic_sweep_clang_args=args.semantic_sweep_clang_arg,
+        semantic_sweep_clang_target=args.semantic_sweep_clang_target or None,
+        msvc_root=args.msvc_root,
+        wine=args.wine,
+        wineprefix=args.wineprefix,
+        objcopy=args.objcopy,
+        objdump=args.objdump,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary.get("status") == "complete" else 1

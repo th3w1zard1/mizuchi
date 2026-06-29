@@ -8,6 +8,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from .package_sweep import sweep_recovered_source_package
+from .package_verify import resolve_msvc_root
 from .pipeline import RecoveryConfig, RecoveryRunner
 from .sourcegen import is_recoverable_candidate
 from .state import atomic_write_json, now
@@ -19,6 +21,19 @@ def run_recovery_windows(
     window_size: int,
     start_offset: int = 0,
     max_windows: int | None = None,
+    semantic_sweep: bool = True,
+    semantic_sweep_compiler: str = "auto",
+    semantic_sweep_profiles: list[list[str]] | None = None,
+    semantic_sweep_timeout: int | None = None,
+    semantic_sweep_max_variants_per_function: int = 8,
+    semantic_sweep_clang: str = "clang",
+    semantic_sweep_clang_args: list[str] | None = None,
+    semantic_sweep_clang_target: str | None = "i686-pc-windows-msvc",
+    msvc_root: Path | None = None,
+    wine: str = "wine",
+    wineprefix: Path | None = None,
+    objcopy: str = "objcopy",
+    objdump: str = "objdump",
 ) -> dict[str, Any]:
     if window_size <= 0:
         raise ValueError("window_size must be positive")
@@ -80,9 +95,25 @@ def run_recovery_windows(
         aggregate.update(summarize_aggregate(aggregate))
         atomic_write_json(summary_path, aggregate)
 
-    aggregate.update(summarize_aggregate(aggregate))
     source_package = build_recovered_source_package(base_dir, windows)
     aggregate["sourcePackage"] = source_package
+    aggregate["semanticSweep"] = run_source_package_semantic_sweep(
+        source_package,
+        enabled=semantic_sweep,
+        compiler=semantic_sweep_compiler,
+        profiles=semantic_sweep_profiles,
+        timeout=semantic_sweep_timeout or base_config.stage_timeout,
+        max_variants_per_function=semantic_sweep_max_variants_per_function,
+        clang=semantic_sweep_clang,
+        clang_args=semantic_sweep_clang_args or [],
+        clang_target=semantic_sweep_clang_target,
+        msvc_root=msvc_root,
+        wine=wine,
+        wineprefix=wineprefix,
+        objcopy=objcopy,
+        objdump=objdump,
+    )
+    aggregate.update(summarize_aggregate(aggregate))
     aggregate["completedAt"] = now()
     atomic_write_json(summary_path, aggregate)
     return aggregate
@@ -104,6 +135,8 @@ def summarize_window(shard_dir: Path, offset: int, limit: int, return_code: int)
         "decompiled": (analysis.get("decompile") or {}).get("decompiled", 0),
         "sourceStatus": source.get("status"),
         "generatedSourceCandidates": source.get("generatedSourceCandidates", 0),
+        "freshGeneratedSourceCandidates": source.get("freshGeneratedSourceCandidates", 0),
+        "reusedSourceCandidates": source.get("reusedSourceCandidates", 0),
         "taskCount": source.get("taskCount", 0),
         "sourceByStatus": source.get("byStatus", {}),
         "analysisImageStatus": analysis_image.get("status"),
@@ -115,14 +148,113 @@ def summarize_window(shard_dir: Path, offset: int, limit: int, return_code: int)
 def summarize_aggregate(aggregate: dict[str, Any]) -> dict[str, Any]:
     windows = aggregate.get("windows", [])
     failed = [row for row in windows if row.get("returnCode") != 0 or row.get("sourceStatus") in {None, "blocked"}]
+    status = "failed" if failed else "complete"
+    semantic_sweep = aggregate.get("semanticSweep")
+    if status == "complete" and isinstance(semantic_sweep, dict) and semantic_sweep.get("enabled"):
+        if semantic_sweep.get("status") != "matched":
+            status = "semantic-incomplete"
     return {
-        "status": "failed" if failed else "complete",
+        "status": status,
         "windowsComplete": sum(1 for row in windows if row.get("returnCode") == 0),
         "windowsFailed": len(failed),
         "functionsFound": sum(int(row.get("functionsFound") or 0) for row in windows),
         "decompiled": sum(int(row.get("decompiled") or 0) for row in windows),
         "generatedSourceCandidates": sum(int(row.get("generatedSourceCandidates") or 0) for row in windows),
+        "freshGeneratedSourceCandidates": sum(int(row.get("freshGeneratedSourceCandidates") or 0) for row in windows),
+        "reusedSourceCandidates": sum(int(row.get("reusedSourceCandidates") or 0) for row in windows),
         "taskCount": sum(int(row.get("taskCount") or 0) for row in windows),
+    }
+
+
+def run_source_package_semantic_sweep(
+    source_package: dict[str, Any],
+    *,
+    enabled: bool,
+    compiler: str,
+    profiles: list[list[str]] | None,
+    timeout: int,
+    max_variants_per_function: int,
+    clang: str,
+    clang_args: list[str],
+    clang_target: str | None,
+    msvc_root: Path | None,
+    wine: str,
+    wineprefix: Path | None,
+    objcopy: str,
+    objdump: str,
+) -> dict[str, Any]:
+    if not enabled:
+        return {"schema": "mizuchi.recovery-windows-semantic-sweep.v1", "enabled": False, "status": "disabled"}
+    package_dir_value = source_package.get("packageDir")
+    if not package_dir_value:
+        return {"schema": "mizuchi.recovery-windows-semantic-sweep.v1", "enabled": True, "status": "missing-package", "reason": "source package has no packageDir"}
+    function_count = int(source_package.get("functionCount") or 0)
+    if function_count <= 0:
+        return {"schema": "mizuchi.recovery-windows-semantic-sweep.v1", "enabled": True, "status": "skipped-no-functions", "reason": "source package contains no generated function candidates"}
+
+    resolution = resolve_semantic_sweep_compiler(compiler, msvc_root, wine)
+    selected_compiler = str(resolution["compiler"])
+    try:
+        report = sweep_recovered_source_package(
+            Path(str(package_dir_value)),
+            compiler=selected_compiler,
+            clang=clang,
+            clang_args=clang_args,
+            clang_profiles=profiles,
+            timeout=timeout,
+            clang_target=clang_target,
+            msvc_root=msvc_root,
+            wine=wine,
+            wineprefix=wineprefix,
+            objcopy=objcopy,
+            objdump=objdump,
+            max_variants_per_function=max_variants_per_function,
+        )
+    except Exception as exc:
+        return {
+            "schema": "mizuchi.recovery-windows-semantic-sweep.v1",
+            "enabled": True,
+            "status": "failed",
+            "compilerResolution": resolution,
+            "reason": str(exc),
+        }
+    return {
+        "schema": "mizuchi.recovery-windows-semantic-sweep.v1",
+        "enabled": True,
+        "status": report.get("status"),
+        "compilerResolution": resolution,
+        "package": report.get("package"),
+        "report": str(Path(str(report.get("outDir") or package_dir_value)) / "sweep.json"),
+        "attemptsPath": report.get("attemptsPath"),
+        "functions": report.get("functions"),
+        "matchedFunctions": report.get("matchedFunctions"),
+        "semanticMatchedFunctions": report.get("semanticMatchedFunctions"),
+        "attempts": report.get("attempts"),
+        "compilerProfiles": report.get("compilerProfiles") or report.get("clangProfiles"),
+        "claimBoundary": report.get("claimBoundary"),
+    }
+
+
+def resolve_semantic_sweep_compiler(requested: str, msvc_root: Path | None, wine: str) -> dict[str, Any]:
+    if requested != "auto":
+        return {"compiler": requested, "reason": "explicitly requested"}
+    root = resolve_msvc_root(msvc_root)
+    cl_exe = root / "bin" / "cl.exe"
+    wine_path = shutil.which(wine) or (str(Path(wine)) if Path(wine).exists() else None)
+    if cl_exe.exists() and wine_path:
+        return {
+            "compiler": "msvc",
+            "reason": "auto-selected MSVC because cl.exe and wine are available",
+            "msvcRoot": str(root),
+            "cl": str(cl_exe),
+            "wine": wine_path,
+        }
+    return {
+        "compiler": "clang",
+        "reason": "auto-selected clang because MSVC cl.exe or wine was not available",
+        "msvcRoot": str(root),
+        "clExists": cl_exe.exists(),
+        "wine": wine_path,
     }
 
 

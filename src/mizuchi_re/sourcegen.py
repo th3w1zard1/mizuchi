@@ -34,6 +34,8 @@ def generate_source_candidates(
 
     tasks_path = out_dir / "tasks.jsonl"
     generated_count = 0
+    fresh_generated_count = 0
+    reused_generated_count = 0
     target_slice_count = 0
     task_count = 0
     by_status: dict[str, int] = {}
@@ -53,8 +55,8 @@ def generate_source_candidates(
                 target_slice["bytesPath"] = str(slice_path)
                 target_slice_count += 1
             task["targetSlice"] = target_slice
+            case_dir = out_dir / safe_task_id(task)
             if fact and fact.get("decompiled"):
-                case_dir = out_dir / safe_task_id(task)
                 case_dir.mkdir(parents=True, exist_ok=True)
                 source = str(fact["decompiled"]).rstrip() + "\n"
                 source_path = case_dir / "candidate.c"
@@ -70,6 +72,25 @@ def generate_source_candidates(
                 )
                 write_json(case_dir / "candidate.json", task)
                 generated_count += 1
+                fresh_generated_count += 1
+            elif (case_dir / "candidate.c").exists():
+                source_path = case_dir / "candidate.c"
+                source = source_path.read_text(encoding="utf-8", errors="replace")
+                task.update(
+                    {
+                        "status": "generated-unverified",
+                        "source": str(source_path),
+                        "sourceSha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+                        "sourceOrigin": "existing automatic task-local candidate reused because the current tool pass produced no decompiler C",
+                        "acceptanceGate": "compile with selected compiler profile and objdiff-zero against target slice",
+                    }
+                )
+                task.setdefault("automaticInputs", ["function-facts"])
+                if "existing-candidate-file" not in task["automaticInputs"]:
+                    task["automaticInputs"].append("existing-candidate-file")
+                write_json(case_dir / "candidate.json", task)
+                generated_count += 1
+                reused_generated_count += 1
             tasks.write(json.dumps(task, sort_keys=True) + "\n")
             task_count += 1
             by_status[str(task["status"])] = by_status.get(str(task["status"]), 0) + 1
@@ -94,6 +115,8 @@ def generate_source_candidates(
         "tasks": str(tasks_path),
         "taskCount": task_count,
         "generatedSourceCandidates": generated_count,
+        "freshGeneratedSourceCandidates": fresh_generated_count,
+        "reusedSourceCandidates": reused_generated_count,
         "targetSlices": target_slice_count,
         "candidateOffset": start,
         "candidateLimit": max(limit, 0),
