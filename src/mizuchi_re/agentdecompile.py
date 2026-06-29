@@ -26,11 +26,13 @@ def run_agentdecompile_analysis(
     run_dir: Path,
     limit: int,
     timeout: int,
+    candidate_functions: list[dict[str, Any]] | None = None,
     server_url: str | None = None,
     mode: str = "auto",
 ) -> dict[str, Any]:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    sequence = build_list_sequence(binary_path, limit)
+    seed_candidates = select_seed_candidates(candidate_functions or [], limit)
+    sequence = build_list_sequence(binary_path, limit, seed_candidates)
     command, env, cwd = build_command(
         run_dir=run_dir,
         server_url=server_url,
@@ -40,8 +42,11 @@ def run_agentdecompile_analysis(
     proc = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False, timeout=timeout)
     parsed = parse_cli_json(proc.stdout)
     facts = facts_from_tool_seq(parsed, binary_path)
-    decompile_summary: dict[str, Any] = {"attempted": 0, "returnCode": None}
-    if facts and proc.returncode == 0:
+    decompile_summary: dict[str, Any] = {
+        "attempted": len(seed_candidates) if seed_candidates else 0,
+        "returnCode": proc.returncode if seed_candidates else None,
+    }
+    if facts and proc.returncode == 0 and not seed_candidates:
         decompile_sequence = build_decompile_sequence(binary_path.name, [str(row["name"]) for row in facts])
         decompile_command, decompile_env, decompile_cwd = build_command(
             run_dir=run_dir,
@@ -76,6 +81,7 @@ def run_agentdecompile_analysis(
         "returnCode": proc.returncode,
         "factsPath": str(out_path),
         "functionsFound": len(facts),
+        "seedCandidates": len(seed_candidates),
         "mode": mode,
         "serverUrl": server_url,
         "command": redact_command(command),
@@ -85,7 +91,7 @@ def run_agentdecompile_analysis(
     }
 
 
-def build_list_sequence(binary_path: Path, limit: int) -> list[dict[str, Any]]:
+def build_list_sequence(binary_path: Path, limit: int, seed_candidates: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     program_name = binary_path.name
     calls: list[dict[str, Any]] = [
         {
@@ -98,6 +104,20 @@ def build_list_sequence(binary_path: Path, limit: int) -> list[dict[str, Any]]:
                 "format": "json",
             },
         },
+    ]
+    if seed_candidates:
+        calls.append(
+            {
+                "name": "execute-script",
+                "arguments": {
+                    "program_path": f"/{program_name}",
+                    "programPath": f"/{program_name}",
+                    "timeout": 120,
+                    "code": build_seed_script(seed_candidates),
+                },
+            }
+        )
+    calls.append(
         {
             "name": "list-functions",
             "arguments": {
@@ -106,9 +126,109 @@ def build_list_sequence(binary_path: Path, limit: int) -> list[dict[str, Any]]:
                 "limit": limit,
                 "format": "json",
             },
-        },
-    ]
+        }
+    )
+    if seed_candidates:
+        calls.extend(build_decompile_sequence(program_name, [str(row["name"]) for row in seed_candidates]))
     return calls
+
+
+def select_seed_candidates(candidates: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    eligible: list[tuple[int, dict[str, Any]]] = []
+    for row in candidates:
+        address = row.get("address")
+        if address is None:
+            continue
+        if str(row.get("source")) == "executable-range":
+            continue
+        if str(row.get("confidence")) == "low":
+            continue
+        try:
+            address_int = int(address)
+        except (TypeError, ValueError):
+            continue
+        if address_int in seen:
+            continue
+        seen.add(address_int)
+        eligible.append((address_int, row))
+    eligible.sort(key=lambda item: item[0])
+    for index, (address_int, row) in enumerate(eligible[:limit]):
+        name = normalize_seed_name(str(row.get("name") or f"sub_{address_int:x}"), address_int)
+        next_address = eligible[index + 1][0] if index + 1 < min(len(eligible), limit) else None
+        end_address = address_int + 0x3ff
+        if next_address is not None and next_address > address_int:
+            end_address = min(end_address, next_address - 1)
+        selected.append({"name": name, "address": address_int, "endAddress": end_address})
+    return selected
+
+
+def normalize_seed_name(name: str, address: int) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", name)
+    if not cleaned or cleaned[0].isdigit():
+        cleaned = f"sub_{address:x}"
+    return cleaned[:80]
+
+
+def build_seed_script(candidates: list[dict[str, Any]]) -> str:
+    payload = json.dumps(candidates, sort_keys=True)
+    return f"""
+from ghidra.program.model.symbol import SourceType
+from ghidra.program.model.address import AddressSet
+
+candidates = {payload}
+fm = currentProgram.getFunctionManager()
+listing = currentProgram.getListing()
+memory = currentProgram.getMemory()
+summary = {{"attempted": 0, "created": 0, "existing": 0, "disassembled": 0, "skipped": 0, "errors": []}}
+
+tx = currentProgram.startTransaction("mizuchi-seed-functions")
+try:
+    for row in candidates:
+        summary["attempted"] += 1
+        address_int = int(row["address"])
+        name = str(row["name"])
+        try:
+            addr = toAddr("0x%08x" % address_int)
+            end_addr = toAddr("0x%08x" % int(row.get("endAddress", address_int)))
+            if addr is None or not memory.contains(addr):
+                summary["skipped"] += 1
+                continue
+            if end_addr is None or not memory.contains(end_addr) or end_addr.compareTo(addr) < 0:
+                end_addr = addr
+            existing = fm.getFunctionAt(addr)
+            if existing is not None:
+                summary["existing"] += 1
+                continue
+            containing = fm.getFunctionContaining(addr)
+            if containing is not None and containing.getEntryPoint() != addr:
+                summary["skipped"] += 1
+                continue
+            if listing.getInstructionAt(addr) is None:
+                try:
+                    if disassemble(addr):
+                        summary["disassembled"] += 1
+                except Exception:
+                    pass
+            func = fm.getFunctionAt(addr)
+            if func is None:
+                try:
+                    func = createFunction(addr, name)
+                except Exception:
+                    body = AddressSet(addr, end_addr)
+                    func = fm.createFunction(name, addr, body, SourceType.USER_DEFINED)
+            if func is not None:
+                summary["created"] += 1
+        except Exception as exc:
+            summary["errors"].append({{"address": hex(address_int), "name": name, "error": str(exc)}})
+            if len(summary["errors"]) > 10:
+                break
+finally:
+    currentProgram.endTransaction(tx, True)
+
+__result__ = summary
+""".strip()
 
 
 def build_decompile_sequence(binary_name: str, names: list[str]) -> list[dict[str, Any]]:

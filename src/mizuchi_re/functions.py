@@ -101,6 +101,7 @@ def analyze_function_candidates_with_agentdecompile(
         run_dir=run_dir,
         limit=limit,
         timeout=timeout,
+        candidate_functions=list(existing.get("candidates", [])),
         server_url=server_url,
         mode=mode,
     )

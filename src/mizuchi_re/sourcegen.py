@@ -33,6 +33,8 @@ def generate_source_candidates(
 
     with tasks_path.open("w", encoding="utf-8") as tasks:
         for row in candidates:
+            if is_range_alias(row, facts):
+                continue
             fact = match_fact(row, facts)
             task = build_task(target, row, fact)
             if fact and fact.get("decompiled"):
@@ -126,6 +128,12 @@ def match_fact(candidate: dict[str, Any], facts: dict[str, dict[str, Any]]) -> d
         if key in facts:
             return facts[key]
     return None
+
+
+def is_range_alias(candidate: dict[str, Any], facts: dict[str, dict[str, Any]]) -> bool:
+    if candidate.get("source") != "executable-range" or candidate.get("address") is None:
+        return False
+    return f"address:{int(candidate['address'])}" in facts
 
 
 def build_task(target: dict[str, Any], candidate: dict[str, Any], fact: dict[str, Any] | None) -> dict[str, Any]:
