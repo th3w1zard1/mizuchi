@@ -181,8 +181,14 @@ def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]
                         stem = safe_function_file_stem(task)
                         copied_c = functions_dir / f"{stem}.c"
                         copied_json = functions_dir / f"{stem}.json"
+                        copied_slice = copy_target_slice(task, functions_dir / f"{stem}.target.bin")
                         shutil.copy2(source_path, copied_c)
                         task = {**task, "packagedSource": str(copied_c)}
+                        if copied_slice is not None:
+                            task["targetSlice"] = {
+                                **(task.get("targetSlice") or {}),
+                                "packagedBytesPath": str(copied_slice),
+                            }
                         atomic_write_json(copied_json, task)
                         functions.append(
                             {
@@ -192,6 +198,7 @@ def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]
                                 "status": task.get("status"),
                                 "source": str(copied_c),
                                 "metadata": str(copied_json),
+                                "targetSlice": task.get("targetSlice"),
                                 "windowOffset": window.get("offset"),
                             }
                         )
@@ -228,6 +235,20 @@ def resolve_path(path: Any) -> Path:
     if candidate.is_absolute():
         return candidate
     return Path.cwd() / candidate
+
+
+def copy_target_slice(task: dict[str, Any], destination: Path) -> Path | None:
+    target_slice = task.get("targetSlice")
+    if not isinstance(target_slice, dict):
+        return None
+    bytes_path = target_slice.get("bytesPath")
+    if not bytes_path:
+        return None
+    source = resolve_path(bytes_path)
+    if not source.exists():
+        return None
+    shutil.copy2(source, destination)
+    return destination
 
 
 def safe_function_file_stem(task: dict[str, Any]) -> str:

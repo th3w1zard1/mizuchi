@@ -19,11 +19,13 @@ def generate_source_candidates(
     target: dict[str, Any],
     function_candidates: dict[str, Any],
     out_dir: Path,
+    inventory: dict[str, Any] | None = None,
     function_facts_jsonl: Path | None = None,
     limit: int = 500,
     offset: int = 0,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    slices_dir = out_dir / "target-slices"
     facts = load_function_facts(function_facts_jsonl) if function_facts_jsonl else {}
     original_candidates = list(function_candidates.get("candidates", []))
     all_candidates = [row for row in original_candidates if is_recoverable_candidate(row)]
@@ -32,6 +34,7 @@ def generate_source_candidates(
 
     tasks_path = out_dir / "tasks.jsonl"
     generated_count = 0
+    target_slice_count = 0
     task_count = 0
     by_status: dict[str, int] = {}
 
@@ -41,6 +44,15 @@ def generate_source_candidates(
                 continue
             fact = match_fact(row, facts)
             task = build_task(target, row, fact)
+            target_slice = build_target_slice(inventory or {}, row, fact)
+            if target_slice.get("status") == "complete":
+                slices_dir.mkdir(parents=True, exist_ok=True)
+                slice_path = slices_dir / f"{safe_task_id(task)}.target.bin"
+                slice_bytes = bytes.fromhex(str(target_slice.pop("bytesHex")))
+                slice_path.write_bytes(slice_bytes)
+                target_slice["bytesPath"] = str(slice_path)
+                target_slice_count += 1
+            task["targetSlice"] = target_slice
             if fact and fact.get("decompiled"):
                 case_dir = out_dir / safe_task_id(task)
                 case_dir.mkdir(parents=True, exist_ok=True)
@@ -82,6 +94,7 @@ def generate_source_candidates(
         "tasks": str(tasks_path),
         "taskCount": task_count,
         "generatedSourceCandidates": generated_count,
+        "targetSlices": target_slice_count,
         "candidateOffset": start,
         "candidateLimit": max(limit, 0),
         "candidateTotal": len(all_candidates),
@@ -155,11 +168,13 @@ def is_recoverable_candidate(candidate: dict[str, Any]) -> bool:
 
 
 def build_task(target: dict[str, Any], candidate: dict[str, Any], fact: dict[str, Any] | None) -> dict[str, Any]:
+    fact_binary = fact.get("binaryPath") if fact else None
     task = {
         "schema": "mizuchi.source-task.v1",
         "status": "waiting-for-automatic-source-generator",
         "targetStableId": target.get("stableId"),
         "binaryPath": target.get("binaryPath"),
+        "analysisBinaryPath": fact_binary or target.get("binaryPath"),
         "name": candidate.get("name"),
         "address": candidate.get("address"),
         "rva": candidate.get("rva"),
@@ -186,6 +201,88 @@ def build_task(target: dict[str, Any], candidate: dict[str, Any], fact: dict[str
         if fact.get("decompiled"):
             task["automaticInputs"].append("decompiler-output")
     return task
+
+
+def build_target_slice(inventory: dict[str, Any], candidate: dict[str, Any], fact: dict[str, Any] | None) -> dict[str, Any]:
+    target = inventory.get("target") or {}
+    binary_path = Path(str((fact or {}).get("binaryPath") or target.get("binaryPath") or ""))
+    image_base = int(inventory.get("imageBase") or 0)
+    address = coerce_int(candidate.get("address"))
+    rva = coerce_int(candidate.get("rva"))
+    if rva is None and address is not None and image_base:
+        rva = address - image_base
+    if address is None and rva is not None and image_base:
+        address = image_base + rva
+    size = coerce_int((fact or {}).get("bodyBytes")) or coerce_int(candidate.get("size")) or 0
+    if not binary_path.exists():
+        return {
+            "status": "missing-binary",
+            "reason": f"analysis binary not found: {binary_path}",
+            "analysisBinaryPath": str(binary_path),
+            "address": address,
+            "rva": rva,
+            "size": size,
+        }
+    if rva is None:
+        return {"status": "missing-rva", "analysisBinaryPath": str(binary_path), "address": address, "size": size}
+    if size <= 0:
+        return {"status": "missing-size", "analysisBinaryPath": str(binary_path), "address": address, "rva": rva, "size": size}
+    section = section_for_rva(inventory, rva)
+    if section is None:
+        return {
+            "status": "rva-outside-code",
+            "analysisBinaryPath": str(binary_path),
+            "address": address,
+            "rva": rva,
+            "size": size,
+        }
+    section_rva = int(section.get("rva") or 0)
+    section_file_offset = int(section.get("fileOffset") or 0)
+    section_file_size = int(section.get("fileSize") or section.get("size") or 0)
+    file_offset = section_file_offset + (rva - section_rva)
+    if file_offset < section_file_offset or file_offset + size > section_file_offset + section_file_size:
+        return {
+            "status": "slice-outside-section",
+            "analysisBinaryPath": str(binary_path),
+            "address": address,
+            "rva": rva,
+            "size": size,
+            "fileOffset": file_offset,
+            "section": section.get("name"),
+        }
+    with binary_path.open("rb") as fh:
+        fh.seek(file_offset)
+        data = fh.read(size)
+    return {
+        "status": "complete",
+        "analysisBinaryPath": str(binary_path),
+        "address": address,
+        "rva": rva,
+        "size": len(data),
+        "fileOffset": file_offset,
+        "section": section.get("name"),
+        "bytesSha256": hashlib.sha256(data).hexdigest(),
+        "bytesHex": data.hex(),
+        "claimBoundary": "target slice bytes are acquisition evidence only; source parity still requires compiling candidate source and comparing code/relocations under a compiler profile",
+    }
+
+
+def section_for_rva(inventory: dict[str, Any], rva: int) -> dict[str, Any] | None:
+    for section in inventory.get("codeRanges", []):
+        start = int(section.get("rva") or 0)
+        size = int(section.get("size") or section.get("fileSize") or 0)
+        if start <= rva < start + size:
+            return section
+    return None
+
+
+def coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def safe_task_id(task: dict[str, Any]) -> str:

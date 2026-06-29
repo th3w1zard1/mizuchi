@@ -429,10 +429,12 @@ class RecoveryRunner:
     def stage_generate_source_candidates(self, _stage: Stage) -> dict[str, Any]:
         target = self.load_target()
         candidates = json.loads((self.run_dir / "function-candidates.json").read_text(encoding="utf-8"))
+        inventory = json.loads((self.run_dir / "binary-inventory.json").read_text(encoding="utf-8"))
         summary = generate_source_candidates(
             target=target.to_json(),
             function_candidates=candidates,
             out_dir=self.run_dir / "source-generation",
+            inventory=inventory,
             function_facts_jsonl=self.config.function_facts_jsonl or default_function_facts_path(self.run_dir),
             limit=self.config.source_task_limit,
             offset=self.config.source_task_offset,
