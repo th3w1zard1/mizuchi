@@ -129,6 +129,7 @@ def run_recovery_windows(
         objdump=objdump,
     )
     aggregate.update(summarize_aggregate(aggregate))
+    aggregate["coverage"] = write_window_coverage(base_dir, aggregate)
     aggregate["completedAt"] = now()
     atomic_write_json(summary_path, aggregate)
     return aggregate
@@ -217,6 +218,201 @@ def summarize_aggregate(aggregate: dict[str, Any]) -> dict[str, Any]:
         "reusedSourceCandidates": sum(int(row.get("reusedSourceCandidates") or 0) for row in windows),
         "taskCount": sum(int(row.get("taskCount") or 0) for row in windows),
     }
+
+
+def write_window_coverage(base_dir: Path, aggregate: dict[str, Any]) -> dict[str, Any]:
+    package = aggregate.get("sourcePackage") if isinstance(aggregate.get("sourcePackage"), dict) else {}
+    package_dir = Path(str(package.get("packageDir") or base_dir / "recovered-source"))
+    coverage_path = package_dir / "coverage.json"
+    coverage_md_path = package_dir / "COVERAGE.md"
+    semantic = aggregate.get("semanticSweep") if isinstance(aggregate.get("semanticSweep"), dict) else {}
+    sweep = read_json(Path(str(semantic.get("report") or "")))
+    windows = aggregate.get("windows") if isinstance(aggregate.get("windows"), list) else []
+    recoverable_total = int(aggregate.get("recoverableCandidateTotal") or 0)
+    source_functions = int(package.get("functionCount") or 0)
+    semantic_matched = int(semantic.get("semanticMatchedFunctions") or 0)
+    matched_rows, unmatched_rows = semantic_coverage_rows(sweep)
+    coverage = {
+        "schema": "mizuchi.recovery-window-coverage.v1",
+        "status": coverage_status(recoverable_total, source_functions, semantic_matched, semantic),
+        "generatedAt": now(),
+        "input": aggregate.get("input"),
+        "workDir": aggregate.get("workDir"),
+        "sourcePackage": package,
+        "candidateCoverage": {
+            "candidateTotal": int(aggregate.get("candidateTotal") or 0),
+            "recoverableCandidateTotal": recoverable_total,
+            "recoverableWindowTotal": int(aggregate.get("recoverableWindowTotal") or 0),
+            "windowSize": int(aggregate.get("windowSize") or 0),
+            "windowsKnown": len(windows),
+            "windowsComplete": int(aggregate.get("windowsComplete") or 0),
+            "windowsFailed": int(aggregate.get("windowsFailed") or 0),
+            "windowOffsetsCovered": [row.get("offset") for row in windows if isinstance(row, dict)],
+        },
+        "sourceCoverage": {
+            "packagedFunctions": source_functions,
+            "taskCount": int(package.get("taskCount") or aggregate.get("taskCount") or 0),
+            "targetSlicedFunctions": int(package.get("functionCount") or 0),
+            "generatedSourceCandidates": int(aggregate.get("generatedSourceCandidates") or 0),
+            "freshGeneratedSourceCandidates": int(aggregate.get("freshGeneratedSourceCandidates") or 0),
+            "reusedSourceCandidates": int(aggregate.get("reusedSourceCandidates") or 0),
+            "recoverableFunctionCoveragePercent": percent(source_functions, recoverable_total),
+        },
+        "semanticCoverage": {
+            "enabled": bool(semantic.get("enabled")),
+            "status": semantic.get("status"),
+            "functionsSwept": int(semantic.get("functions") or 0),
+            "matchedFunctions": int(semantic.get("matchedFunctions") or 0),
+            "semanticMatchedFunctions": semantic_matched,
+            "semanticMatchPackagePercent": percent(semantic_matched, source_functions),
+            "semanticMatchRecoverablePercent": percent(semantic_matched, recoverable_total),
+            "attempts": int(semantic.get("attempts") or 0),
+            "attemptsCompiled": int(semantic.get("attemptsCompiled") or 0),
+            "attemptsReused": int(semantic.get("attemptsReused") or 0),
+            "report": semantic.get("report"),
+            "attemptsPath": semantic.get("attemptsPath"),
+            "compilerResolution": semantic.get("compilerResolution"),
+            "compilerProfiles": semantic.get("compilerProfiles"),
+        },
+        "matchedFunctions": matched_rows,
+        "unmatchedFunctions": unmatched_rows,
+        "nextAction": coverage_next_action(aggregate, semantic, recoverable_total, source_functions, semantic_matched),
+        "claimBoundary": (
+            "Coverage is per-function source-candidate and code-byte evidence only. "
+            "Full source parity remains false until every recoverable function and required data/linker artifact is rebuilt and verified."
+        ),
+        "fullSourceParity": False,
+    }
+    package_dir.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(coverage_path, coverage)
+    coverage_md_path.write_text(render_coverage_markdown(coverage), encoding="utf-8")
+    return {"status": coverage["status"], "json": str(coverage_path), "markdown": str(coverage_md_path), "fullSourceParity": False}
+
+
+def semantic_coverage_rows(sweep: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    matched: list[dict[str, Any]] = []
+    unmatched: list[dict[str, Any]] = []
+    for row in sweep.get("results", []) if isinstance(sweep.get("results"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        attempts = row.get("semanticMatchedAttempts") or row.get("matchedAttempts") or []
+        attempt = attempts[0] if attempts and isinstance(attempts[0], dict) else row.get("bestAttempt") or {}
+        summary = {
+            "name": row.get("name"),
+            "address": row.get("address"),
+            "source": row.get("source"),
+            "metadata": row.get("metadata"),
+            "semanticMatched": bool(row.get("semanticMatched")),
+            "variant": attempt.get("variant"),
+            "sourceKind": attempt.get("sourceKind"),
+            "semanticSource": attempt.get("semanticSource"),
+            "compilerArgs": attempt.get("compilerArgs") or attempt.get("profileArgs"),
+            "codeCompareStatus": attempt.get("codeCompareStatus"),
+            "score": attempt.get("score"),
+            "firstDifference": attempt.get("firstDifference"),
+        }
+        if row.get("semanticMatched"):
+            matched.append(summary)
+        else:
+            unmatched.append(summary)
+    return matched, unmatched
+
+
+def coverage_status(recoverable_total: int, source_functions: int, semantic_matched: int, semantic: dict[str, Any]) -> str:
+    if recoverable_total <= 0:
+        return "no-recoverable-functions"
+    if source_functions <= 0:
+        return "no-source-candidates"
+    if semantic.get("enabled") and semantic_matched == source_functions and source_functions < recoverable_total:
+        return "partial-semantic-match"
+    if semantic.get("enabled") and semantic_matched == recoverable_total:
+        return "all-recoverable-functions-semantically-matched"
+    if semantic.get("enabled") and semantic_matched:
+        return "partial-semantic-match"
+    if semantic.get("enabled"):
+        return "source-candidates-unmatched"
+    return "source-candidates-unverified"
+
+
+def coverage_next_action(
+    aggregate: dict[str, Any],
+    semantic: dict[str, Any],
+    recoverable_total: int,
+    source_functions: int,
+    semantic_matched: int,
+) -> dict[str, Any]:
+    if source_functions < recoverable_total:
+        return {
+            "kind": "continue-window-recovery",
+            "reason": "not all recoverable function candidates have packaged source candidates",
+            "suggestedCommand": [
+                "mizuchi-recover",
+                "recover-windows",
+                str(aggregate.get("input") or "<input>"),
+                "--work-dir",
+                str(aggregate.get("workDir") or "<work-dir>"),
+                "--resume",
+                "--window-size",
+                str(aggregate.get("windowSize") or 25),
+                "--start-offset",
+                str(aggregate.get("startOffset") or 0),
+                "--max-windows",
+                "1",
+            ],
+        }
+    if semantic.get("enabled") and semantic_matched < source_functions:
+        return {
+            "kind": "improve-source-variant-generation",
+            "reason": "all packaged functions were swept, but some did not match semantically",
+            "unmatchedFunctions": source_functions - semantic_matched,
+        }
+    return {
+        "kind": "expand-non-function-coverage",
+        "reason": "current packaged function set matched; data sections, globals, libraries, and linker layout still remain outside source parity",
+    }
+
+
+def percent(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round((numerator / denominator) * 100.0, 4)
+
+
+def render_coverage_markdown(coverage: dict[str, Any]) -> str:
+    candidate = coverage["candidateCoverage"]
+    source = coverage["sourceCoverage"]
+    semantic = coverage["semanticCoverage"]
+    lines = [
+        "# Mizuchi Recovery Coverage",
+        "",
+        f"Status: `{coverage['status']}`",
+        f"Full source parity: `{str(coverage['fullSourceParity']).lower()}`",
+        "",
+        "## Candidate Coverage",
+        "",
+        f"- Recoverable candidates: `{candidate['recoverableCandidateTotal']}`",
+        f"- Complete windows: `{candidate['windowsComplete']}` / `{candidate['recoverableWindowTotal']}`",
+        f"- Packaged functions: `{source['packagedFunctions']}`",
+        f"- Recoverable function coverage: `{source['recoverableFunctionCoveragePercent']}%`",
+        "",
+        "## Semantic Coverage",
+        "",
+        f"- Sweep status: `{semantic['status']}`",
+        f"- Semantic matches: `{semantic['semanticMatchedFunctions']}` / `{source['packagedFunctions']}` packaged functions",
+        f"- Semantic match over recoverable candidates: `{semantic['semanticMatchRecoverablePercent']}%`",
+        f"- Attempts: `{semantic['attempts']}` compiled `{semantic['attemptsCompiled']}` reused `{semantic['attemptsReused']}`",
+        "",
+        "## Matched Functions",
+        "",
+    ]
+    matched = coverage.get("matchedFunctions") or []
+    if matched:
+        for row in matched:
+            lines.append(f"- `{row.get('name')}` at `{row.get('address')}` via `{row.get('variant')}` `{row.get('codeCompareStatus')}`")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Next Action", "", f"- Kind: `{coverage['nextAction']['kind']}`", f"- Reason: {coverage['nextAction']['reason']}", "", coverage["claimBoundary"], ""])
+    return "\n".join(lines)
 
 
 def run_source_package_semantic_sweep(
@@ -314,11 +510,11 @@ def resolve_semantic_sweep_compiler(requested: str, msvc_root: Path | None, wine
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    if not path.exists():
+    if not path.is_file():
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
 

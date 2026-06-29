@@ -97,6 +97,9 @@ class ContextExporter:
         self.files_dir.mkdir(parents=True, exist_ok=True)
         self.extracted_dir.mkdir(parents=True, exist_ok=True)
         self._walk(self.root, logical_prefix="", depth=0)
+        tree = build_context_tree(self.rows)
+        atomic_write_json(self.out_dir / "tree.json", tree)
+        (self.out_dir / "TREE.md").write_text(render_context_tree_markdown(self.root, tree), encoding="utf-8")
         manifest = {
             "schema": "mizuchi.context-export.v1",
             "createdAt": now(),
@@ -114,6 +117,10 @@ class ContextExporter:
             "filesVisited": self.seen_files,
             "filesExported": len(self.rows),
             "truncated": self.seen_files >= self.config.max_files,
+            "tree": {
+                "json": "tree.json",
+                "markdown": "TREE.md",
+            },
             "entries": self.rows,
         }
         atomic_write_json(self.out_dir / "manifest.json", manifest)
@@ -267,6 +274,86 @@ def child_priority(path: Path) -> tuple[int, str]:
     if suffix in {".ico", ".icns", ".png", ".jpg", ".jpeg", ".bmp"} or "cursor" in str(path).lower():
         return (9, name)
     return (5, name)
+
+
+def build_context_tree(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    root: dict[str, Any] = {"schema": "mizuchi.context-tree.v1", "name": ".", "kind": "directory", "children": {}}
+    for row in rows:
+        parts = [part for part in str(row.get("path") or "").split("/") if part]
+        if not parts:
+            parts = [Path(str(row.get("sourcePath") or "root")).name or "root"]
+        cursor = root
+        for part in parts[:-1]:
+            children = cursor.setdefault("children", {})
+            cursor = children.setdefault(part, {"name": part, "kind": "directory", "children": {}})
+        leaf_name = parts[-1]
+        cursor.setdefault("children", {})[leaf_name] = {
+            "name": leaf_name,
+            "kind": row.get("kind"),
+            "path": row.get("path"),
+            "sourcePath": row.get("sourcePath"),
+            "size": row.get("size"),
+            "sha256": row.get("sha256"),
+            "export": row.get("export"),
+            "extraction": summarize_extraction(row.get("extraction")),
+        }
+    return freeze_tree(root)
+
+
+def summarize_extraction(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return {
+        "status": value.get("status"),
+        "tool": value.get("tool"),
+        "directory": value.get("directory"),
+        "exportedMembers": value.get("exportedMembers"),
+        "reason": value.get("reason"),
+    }
+
+
+def freeze_tree(node: dict[str, Any]) -> dict[str, Any]:
+    children = node.get("children")
+    if isinstance(children, dict):
+        frozen_children = [freeze_tree(child) for _name, child in sorted(children.items(), key=lambda item: item[0].lower())]
+        node = {**node, "children": frozen_children, "childCount": len(frozen_children)}
+    return node
+
+
+def render_context_tree_markdown(input_path: Path, tree: dict[str, Any]) -> str:
+    lines = [
+        "# Mizuchi Context Tree",
+        "",
+        f"Input: `{input_path}`",
+        "",
+        "This is a plaintext hierarchy of exported files and extracted container members. Each file points at its JSON/Markdown surrogate.",
+        "",
+        "## Tree",
+        "",
+    ]
+    for child in tree.get("children", []):
+        render_tree_node(child, lines, depth=0)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_tree_node(node: dict[str, Any], lines: list[str], *, depth: int) -> None:
+    indent = "  " * depth
+    children = node.get("children") if isinstance(node.get("children"), list) else []
+    if children:
+        lines.append(f"{indent}- `{node.get('name')}/`")
+        for child in children:
+            render_tree_node(child, lines, depth=depth + 1)
+        return
+    details = [str(node.get("kind") or "file")]
+    if node.get("size") is not None:
+        details.append(f"{node['size']} bytes")
+    if node.get("export"):
+        details.append(f"export: `{node['export']}`")
+    extraction = node.get("extraction")
+    if isinstance(extraction, dict) and extraction.get("status"):
+        details.append(f"extraction: `{extraction['status']}`")
+    lines.append(f"{indent}- `{node.get('name')}` ({'; '.join(details)})")
 
 
 def build_file_payload(path: Path, rel: str, kind: str, digest: str, size: int, config: ExportConfig) -> dict[str, Any]:
