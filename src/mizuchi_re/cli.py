@@ -7,10 +7,13 @@ import json
 import sys
 from pathlib import Path
 
+from .context_batch import main as context_batch_main
 from .context_export import ExportConfig, export_context
 from .package_sweep import sweep_recovered_source_package
 from .package_verify import verify_recovered_source_package
 from .pipeline import RecoveryConfig, RecoveryRunner
+from .source_parity_profile_corpus import main as source_parity_profile_corpus_main
+from .source_parity_synthesize import main as source_parity_synthesize_main
 from .targets import identify_binary
 from .windows import run_recovery_windows
 
@@ -32,12 +35,34 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("input", type=Path, help="File or folder to export.")
     export.add_argument("--out-dir", type=Path, required=True, help="Output directory for manifest and per-file surrogates.")
     export.add_argument("--format", choices=["json", "md"], default="json", help="Per-file surrogate format.")
+    export.add_argument("--binary-analysis", choices=["light", "standard", "deep"], default="standard", help="Binary analysis depth for PE/ELF/container surrogates.")
     export.add_argument("--no-extract-containers", action="store_true", help="Do not recursively extract archives/installers with 7z.")
+    export.add_argument("--include-low-signal-members", action="store_true", help="Also export low-signal extracted members such as cursor/icon resources.")
     export.add_argument("--max-files", type=int, default=1000, help="Maximum files to visit across original and extracted trees.")
     export.add_argument("--max-depth", type=int, default=4, help="Maximum recursive container extraction depth.")
+    export.add_argument("--max-hash-bytes", type=int, default=512_000_000, help="Maximum bytes hashed per file; larger files record hashScope=prefix.")
     export.add_argument("--max-text-bytes", type=int, default=2_000_000, help="Maximum text bytes copied per file.")
-    export.add_argument("--max-container-members", type=int, default=300, help="Reserved member cap recorded in manifests.")
+    export.add_argument("--max-binary-analysis-bytes", type=int, default=256_000_000, help="Skip expensive whole-file binary tools above this size.")
+    export.add_argument("--max-container-members", type=int, default=300, help="Maximum extracted container members exported per container.")
     export.add_argument("--strings-limit", type=int, default=500, help="Maximum unique strings retained for binary files.")
+
+    batch = sub.add_parser("export-context-batch", help="Find EXEs/installers/archives under a tree and export each into LLM-readable context.")
+    batch.add_argument("input", type=Path, help="File or directory tree to batch-export.")
+    batch.add_argument("--out-dir", type=Path, required=True, help="Output directory for aggregate and per-item manifests.")
+    batch.add_argument("--format", choices=["json", "md"], default="json", help="Per-file surrogate format.")
+    batch.add_argument("--binary-analysis", choices=["light", "standard", "deep"], default="standard", help="Binary analysis depth for PE/ELF/container surrogates.")
+    batch.add_argument("--no-extract-containers", action="store_true", help="Do not recursively extract archives/installers with 7z.")
+    batch.add_argument("--include-low-signal-members", action="store_true", help="Also export low-signal extracted members such as cursor/icon resources.")
+    batch.add_argument("--max-items", type=int, default=25, help="Maximum root items to export from the input tree.")
+    batch.add_argument("--min-size", type=int, default=0, help="Ignore candidate files smaller than this many bytes.")
+    batch.add_argument("--suffix", action="append", default=[], help="Suffix or comma-separated suffix list. Defaults to EXE/archive/binary suffixes.")
+    batch.add_argument("--max-files-per-item", type=int, default=250, help="Maximum files exported per discovered item.")
+    batch.add_argument("--max-depth", type=int, default=3, help="Maximum recursive container extraction depth per item.")
+    batch.add_argument("--max-hash-bytes", type=int, default=512_000_000, help="Maximum bytes hashed per file; larger files record hashScope=prefix.")
+    batch.add_argument("--max-text-bytes", type=int, default=2_000_000, help="Maximum text bytes copied per file.")
+    batch.add_argument("--max-binary-analysis-bytes", type=int, default=256_000_000, help="Skip expensive whole-file binary tools above this size.")
+    batch.add_argument("--max-container-members", type=int, default=120, help="Maximum extracted members exported per container.")
+    batch.add_argument("--strings-limit", type=int, default=200, help="Maximum unique strings retained per binary.")
 
     recover = sub.add_parser("recover", help="Run the resumable recovery orchestration pipeline.")
     recover.add_argument("input", type=Path, help="Folder or binary path.")
@@ -61,10 +86,12 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--source-task-offset", type=int, default=0, help="Skip this many eligible function candidates before analysis/source generation.")
     recover.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
     recover.add_argument("--context-format", choices=["json", "md"], default="json", help="LLM-readable context export format used by the recover pipeline.")
+    recover.add_argument("--context-binary-analysis", choices=["light", "standard", "deep"], default="standard", help="Binary analysis depth for the recover context stage.")
     recover.add_argument("--context-max-files", type=int, default=1000, help="Maximum files exported by the recover context stage.")
     recover.add_argument("--context-max-depth", type=int, default=4, help="Maximum recursive container extraction depth for the recover context stage.")
     recover.add_argument("--context-strings-limit", type=int, default=500, help="Maximum unique strings retained per binary in the recover context stage.")
     recover.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
+    recover.add_argument("--context-include-low-signal-members", action="store_true", help="Also export low-signal extracted members such as cursor/icon resources during recover context export.")
 
     windows = sub.add_parser("recover-windows", help="Run recovery across deterministic function-candidate windows.")
     windows.add_argument("input", type=Path, help="Folder or binary path.")
@@ -84,10 +111,12 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("--agentdecompile-batch-size", type=int, default=25, help="Seed/decompile this many function candidates per AgentDecompile subprocess.")
     windows.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
     windows.add_argument("--context-format", choices=["json", "md"], default="json", help="LLM-readable context export format used by the recover pipeline.")
+    windows.add_argument("--context-binary-analysis", choices=["light", "standard", "deep"], default="standard", help="Binary analysis depth for the recover context stage.")
     windows.add_argument("--context-max-files", type=int, default=1000, help="Maximum files exported by the recover context stage.")
     windows.add_argument("--context-max-depth", type=int, default=4, help="Maximum recursive container extraction depth for the recover context stage.")
     windows.add_argument("--context-strings-limit", type=int, default=500, help="Maximum unique strings retained per binary in the recover context stage.")
     windows.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
+    windows.add_argument("--context-include-low-signal-members", action="store_true", help="Also export low-signal extracted members such as cursor/icon resources during recover context export.")
     windows.add_argument("--no-semantic-sweep", action="store_true", help="Do not run compiler-profile semantic source matching after assembling the recovered-source package.")
     windows.add_argument("--semantic-sweep-compiler", choices=["auto", "clang", "msvc"], default="auto", help="Compiler backend for recovered-source semantic sweep. auto prefers MSVC when cl.exe and wine are available.")
     windows.add_argument("--semantic-sweep-profile", action="append", default=[], help="Comma-separated compiler args for one semantic sweep profile. Repeat for multiple profiles.")
@@ -101,6 +130,22 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("--wineprefix", type=Path, help="Wine prefix used by the MSVC semantic sweep backend.")
     windows.add_argument("--objcopy", default="objcopy", help="objcopy executable used to extract candidate .text during semantic sweep.")
     windows.add_argument("--objdump", default="objdump", help="objdump executable used for relocation/disassembly evidence during semantic sweep.")
+    windows.add_argument("--source-parity-synthesis", action="store_true", help="Run generated source-parity synthesis from explicit queue/inventory artifacts after the package sweep.")
+    windows.add_argument("--source-parity-queue", type=Path, help="Recovery queue JSONL consumed by source-parity synthesis.")
+    windows.add_argument("--source-parity-inventory", type=Path, help="Function inventory JSONL used to slice target bytes for source-parity synthesis.")
+    windows.add_argument("--source-parity-remaining-features", type=Path, help="Optional strategy/features JSONL for source-parity synthesis.")
+    windows.add_argument("--source-parity-retrieval", type=Path, help="Optional nearest-example retrieval JSONL for source-parity synthesis.")
+    windows.add_argument("--source-parity-matched-summary", type=Path, action="append", default=[], help="Optional existing matched-summary JSONL to skip already matched functions. Repeat for multiple files.")
+    windows.add_argument("--source-parity-out-dir", type=Path, help="Output directory for source-parity synthesis. Defaults to <work-dir>/source-parity-synthesis.")
+    windows.add_argument("--source-parity-limit", type=int, default=25, help="Maximum queued functions to inspect during source-parity synthesis.")
+    windows.add_argument("--source-parity-offset", type=int, default=0, help="Eligible queued functions to skip before source-parity synthesis.")
+    windows.add_argument("--source-parity-max-variants-per-function", type=int, default=8, help="Maximum generated source variants per queued function for source-parity synthesis.")
+    windows.add_argument("--source-parity-strategies", help="Comma-separated strategy/tag filter for source-parity synthesis.")
+    windows.add_argument("--source-parity-dry-run", action="store_true", help="Generate source-parity candidates without compiling or objdiff-gating them.")
+    windows.add_argument("--source-parity-clean", action="store_true", help="Delete previous source-parity synthesis output before running.")
+    windows.add_argument("--source-parity-vc-root", type=Path, help="MSVC/VC Toolkit root used by source-parity synthesis. Defaults to --msvc-root when omitted.")
+    windows.add_argument("--source-parity-timeout", type=int, help="Timeout per source-parity synthesis compile/objdiff attempt. Defaults to --semantic-sweep-timeout or --stage-timeout.")
+    windows.add_argument("--source-parity-progress-every", type=int, default=0, help="Emit source-parity synthesis progress to stderr every N generated candidates.")
 
     verify = sub.add_parser("verify-package", help="Verify a recovered-source package with explicit syntax/object tiers.")
     add_package_verify_args(verify)
@@ -113,6 +158,37 @@ def build_parser() -> argparse.ArgumentParser:
     add_package_verify_args(sweep)
     sweep.add_argument("--max-variants-per-function", type=int, default=8, help="Maximum generated source variants per function.")
     sweep.add_argument("--compiler-profile", "--clang-profile", dest="compiler_profile", action="append", default=[], help="Comma-separated compiler args for one profile, for example --compiler-profile=-O2 or --compiler-profile=/O2,/GS-,/Oy. Repeat for multiple profiles.")
+
+    profile = sub.add_parser("compiler-profile-corpus", help="Select and sweep a compiler-profile corpus from verified matched examples.")
+    profile.add_argument("--matched-examples", type=Path, default=Path("target/source-parity-index/swkotor/matched-examples.jsonl"))
+    profile.add_argument("--out-dir", type=Path, default=Path("target/source-parity-profile/swkotor"))
+    profile.add_argument("--max-cases", type=int, default=6)
+    profile.add_argument("--select-only", "--dry-run", dest="select_only", action="store_true", help="Select corpus cases without compiling.")
+    profile.add_argument("--profile", action="append", default=[], help="Compiler profile as NAME=VC_ROOT. Repeat for multiple toolchains.")
+    profile.add_argument("--flag-set", action="append", default=[], help="Flag set as NAME='/O2 /Oy /GS-'. Repeat for custom matrix.")
+    profile.add_argument("--wine", default="wine")
+    profile.add_argument("--wineprefix", type=Path)
+    profile.add_argument("--timeout", type=int, default=120)
+    profile.add_argument("--clean", action="store_true")
+
+    synth = sub.add_parser("source-parity-synthesize", help="Generate and objdiff-gate source candidates from a recovery queue.")
+    synth.add_argument("--queue", type=Path, default=Path("target/swkotor-recovery-queue/queue.jsonl"))
+    synth.add_argument("--inventory", type=Path, default=Path("target/swkotor-unpack/facts/function-inventory.jsonl"))
+    synth.add_argument("--remaining-features", type=Path, default=Path("target/source-parity-index/swkotor/remaining-features.jsonl"))
+    synth.add_argument("--retrieval", type=Path, default=Path("target/source-parity-index/swkotor/retrieval.jsonl"))
+    synth.add_argument("--matched-summary", type=Path, action="append")
+    synth.add_argument("--out-dir", type=Path, default=Path("target/source-parity-synthesis/swkotor"))
+    synth.add_argument("--limit", type=int, default=25)
+    synth.add_argument("--offset", type=int, default=0)
+    synth.add_argument("--max-variants-per-function", type=int, default=8)
+    synth.add_argument("--strategies")
+    synth.add_argument("--dry-run", action="store_true")
+    synth.add_argument("--clean", action="store_true")
+    synth.add_argument("--vc-root", type=Path)
+    synth.add_argument("--wine", default="wine")
+    synth.add_argument("--wineprefix", type=Path)
+    synth.add_argument("--timeout", type=int, default=120)
+    synth.add_argument("--progress-every", type=int, default=0)
     return parser
 
 
@@ -164,10 +240,12 @@ def run_recover(args: argparse.Namespace) -> int:
         source_task_offset=args.source_task_offset,
         steamless_cli=args.steamless_cli,
         context_format=args.context_format,
+        context_binary_analysis=args.context_binary_analysis,
         context_max_files=args.context_max_files,
         context_max_depth=args.context_max_depth,
         context_strings_limit=args.context_strings_limit,
         context_extract_containers=not args.no_context_extract_containers,
+        context_include_low_signal_members=args.context_include_low_signal_members,
     )
     return RecoveryRunner(config).run()
 
@@ -193,10 +271,12 @@ def run_recover_windows(args: argparse.Namespace) -> int:
         agentdecompile_batch_size=args.agentdecompile_batch_size,
         steamless_cli=args.steamless_cli,
         context_format=args.context_format,
+        context_binary_analysis=args.context_binary_analysis,
         context_max_files=args.context_max_files,
         context_max_depth=args.context_max_depth,
         context_strings_limit=args.context_strings_limit,
         context_extract_containers=not args.no_context_extract_containers,
+        context_include_low_signal_members=args.context_include_low_signal_members,
     )
     summary = run_recovery_windows(
         base_config=config,
@@ -216,6 +296,23 @@ def run_recover_windows(args: argparse.Namespace) -> int:
         wineprefix=args.wineprefix,
         objcopy=args.objcopy,
         objdump=args.objdump,
+        source_parity_synthesis=args.source_parity_synthesis,
+        source_parity_queue=args.source_parity_queue,
+        source_parity_inventory=args.source_parity_inventory,
+        source_parity_remaining_features=args.source_parity_remaining_features,
+        source_parity_retrieval=args.source_parity_retrieval,
+        source_parity_matched_summaries=args.source_parity_matched_summary,
+        source_parity_out_dir=args.source_parity_out_dir,
+        source_parity_limit=args.source_parity_limit,
+        source_parity_offset=args.source_parity_offset,
+        source_parity_max_variants_per_function=args.source_parity_max_variants_per_function,
+        source_parity_strategies=args.source_parity_strategies,
+        source_parity_dry_run=args.source_parity_dry_run,
+        source_parity_clean=args.source_parity_clean,
+        source_parity_vc_root=args.source_parity_vc_root,
+        source_parity_wine=args.wine,
+        source_parity_timeout=args.source_parity_timeout,
+        source_parity_progress_every=args.source_parity_progress_every,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary.get("status") == "complete" else 1
@@ -227,16 +324,57 @@ def run_export_context(args: argparse.Namespace) -> int:
             input_path=args.input,
             out_dir=args.out_dir,
             output_format=args.format,
+            binary_analysis=args.binary_analysis,
             extract_containers=not args.no_extract_containers,
+            include_low_signal_members=args.include_low_signal_members,
             max_files=args.max_files,
             max_depth=args.max_depth,
+            max_hash_bytes=args.max_hash_bytes,
             max_text_bytes=args.max_text_bytes,
+            max_binary_analysis_bytes=args.max_binary_analysis_bytes,
             max_container_members=args.max_container_members,
             strings_limit=args.strings_limit,
         )
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0
+
+
+def run_export_context_batch(args: argparse.Namespace) -> int:
+    argv = [
+        str(args.input.resolve()),
+        "--out-dir",
+        str(args.out_dir.resolve()),
+        "--format",
+        args.format,
+        "--binary-analysis",
+        args.binary_analysis,
+        "--max-items",
+        str(args.max_items),
+        "--min-size",
+        str(args.min_size),
+        "--max-files-per-item",
+        str(args.max_files_per_item),
+        "--max-depth",
+        str(args.max_depth),
+        "--max-hash-bytes",
+        str(args.max_hash_bytes),
+        "--max-text-bytes",
+        str(args.max_text_bytes),
+        "--max-binary-analysis-bytes",
+        str(args.max_binary_analysis_bytes),
+        "--max-container-members",
+        str(args.max_container_members),
+        "--strings-limit",
+        str(args.strings_limit),
+    ]
+    if args.no_extract_containers:
+        argv.append("--no-extract-containers")
+    if args.include_low_signal_members:
+        argv.append("--include-low-signal-members")
+    for suffix in args.suffix:
+        argv.extend(["--suffix", suffix])
+    return context_batch_main(argv)
 
 
 def run_verify_package(args: argparse.Namespace) -> int:
@@ -303,6 +441,72 @@ def run_sweep_package(args: argparse.Namespace) -> int:
     return 0 if report.get("status") == "matched" else 1
 
 
+def run_source_parity_synthesize(args: argparse.Namespace) -> int:
+    argv = [
+        "--queue",
+        str(args.queue.resolve()),
+        "--inventory",
+        str(args.inventory.resolve()),
+        "--remaining-features",
+        str(args.remaining_features.resolve()),
+        "--retrieval",
+        str(args.retrieval.resolve()),
+        "--out-dir",
+        str(args.out_dir.resolve()),
+        "--limit",
+        str(args.limit),
+        "--offset",
+        str(args.offset),
+        "--max-variants-per-function",
+        str(args.max_variants_per_function),
+        "--timeout",
+        str(args.timeout),
+        "--progress-every",
+        str(args.progress_every),
+    ]
+    for matched_summary in args.matched_summary or []:
+        argv.extend(["--matched-summary", str(matched_summary.resolve())])
+    if args.strategies:
+        argv.extend(["--strategies", args.strategies])
+    if args.dry_run:
+        argv.append("--dry-run")
+    if args.clean:
+        argv.append("--clean")
+    if args.vc_root:
+        argv.extend(["--vc-root", str(args.vc_root.resolve())])
+    if args.wine:
+        argv.extend(["--wine", args.wine])
+    if args.wineprefix:
+        argv.extend(["--wineprefix", str(args.wineprefix.resolve())])
+    return source_parity_synthesize_main(argv)
+
+
+def run_compiler_profile_corpus(args: argparse.Namespace) -> int:
+    argv = [
+        "--matched-examples",
+        str(args.matched_examples.resolve()),
+        "--out-dir",
+        str(args.out_dir.resolve()),
+        "--max-cases",
+        str(args.max_cases),
+        "--timeout",
+        str(args.timeout),
+    ]
+    if args.select_only:
+        argv.append("--select-only")
+    if args.clean:
+        argv.append("--clean")
+    if args.wine:
+        argv.extend(["--wine", args.wine])
+    if args.wineprefix:
+        argv.extend(["--wineprefix", str(args.wineprefix.resolve())])
+    for profile in args.profile:
+        argv.extend(["--profile", profile])
+    for flag_set in args.flag_set:
+        argv.extend(["--flag-set", flag_set])
+    return source_parity_profile_corpus_main(argv)
+
+
 def parse_clang_profiles(values: list[str]) -> list[list[str]]:
     profiles = []
     for value in values:
@@ -320,6 +524,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_inspect(args)
     if args.command == "export-context":
         return run_export_context(args)
+    if args.command == "export-context-batch":
+        return run_export_context_batch(args)
     if args.command == "recover":
         return run_recover(args)
     if args.command == "recover-windows":
@@ -330,6 +536,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_match_package(args)
     if args.command == "sweep-package":
         return run_sweep_package(args)
+    if args.command == "compiler-profile-corpus":
+        return run_compiler_profile_corpus(args)
+    if args.command == "source-parity-synthesize":
+        return run_source_parity_synthesize(args)
     parser.print_help()
     return 2
 
