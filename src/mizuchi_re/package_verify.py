@@ -39,9 +39,13 @@ def verify_recovered_source_package(
     *,
     out_dir: Path | None = None,
     clang: str = "clang",
+    clang_args: list[str] | None = None,
     timeout: int = 30,
     object_compile: bool = True,
     clang_target: str | None = "i686-pc-windows-msvc",
+    code_compare: bool = False,
+    objcopy: str = "objcopy",
+    objdump: str = "objdump",
 ) -> dict[str, Any]:
     manifest_path = resolve_manifest_path(package)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -58,9 +62,13 @@ def verify_recovered_source_package(
             metadata=metadata,
             out_dir=verify_dir,
             clang=clang,
+            clang_args=clang_args or [],
             timeout=timeout,
             object_compile=object_compile,
             clang_target=clang_target,
+            code_compare=code_compare,
+            objcopy=objcopy,
+            objdump=objdump,
         )
         results.append(result)
 
@@ -68,9 +76,21 @@ def verify_recovered_source_package(
     object_ok = sum(1 for row in results if row.get("object", {}).get("status") == "ok")
     object_attempted = sum(1 for row in results if row.get("object", {}).get("status") not in {None, "not-run"})
     target_slices_ok = sum(1 for row in results if row.get("targetSlice", {}).get("status") == "complete")
+    code_attempted = sum(1 for row in results if row.get("codeCompare", {}).get("status") not in {None, "not-run"})
+    code_raw_matched = sum(1 for row in results if row.get("codeCompare", {}).get("status") == "match")
+    code_masked_matched = sum(1 for row in results if row.get("codeCompare", {}).get("status") == "relocation-masked-match")
     report = {
         "schema": "mizuchi.recovered-source-verification.v1",
-        "status": verification_status(len(results), syntax_ok, object_attempted, object_ok),
+        "status": verification_status(
+            len(results),
+            syntax_ok,
+            object_attempted,
+            object_ok,
+            code_compare=code_compare,
+            code_attempted=code_attempted,
+            code_raw_matched=code_raw_matched,
+            code_masked_matched=code_masked_matched,
+        ),
         "package": str(package_dir),
         "manifest": str(manifest_path),
         "verifier": "clang-generated-shim",
@@ -82,12 +102,16 @@ def verify_recovered_source_package(
         "objectCompileFailed": object_attempted - object_ok,
         "targetSlicesOk": target_slices_ok,
         "targetSlicesMissing": len(results) - target_slices_ok,
+        "codeCompareAttempted": code_attempted,
+        "codeCompareRawMatched": code_raw_matched,
+        "codeCompareRelocationMaskedMatched": code_masked_matched,
+        "codeCompareMismatched": code_attempted - code_raw_matched - code_masked_matched,
         "objdiff": {
             "status": "not-run",
             "reason": objdiff_blocker_reason(target_slices_ok, len(results)),
         },
         "results": results,
-        "claimBoundary": "syntax/object success only proves compiler acceptance with generated shims; it is not objdiff or semantic source parity",
+        "claimBoundary": "syntax/object/code-byte success is not objdiff semantic source parity unless the objdiff gate also accepts the candidate",
     }
     atomic_write_json(verify_dir / "verification.json", report)
     return report
@@ -99,9 +123,13 @@ def verify_source(
     metadata: Path,
     out_dir: Path,
     clang: str,
+    clang_args: list[str],
     timeout: int,
     object_compile: bool,
     clang_target: str | None,
+    code_compare: bool,
+    objcopy: str,
+    objdump: str,
 ) -> dict[str, Any]:
     stem = source.stem
     work_c = out_dir / f"{stem}.verify.c"
@@ -118,7 +146,7 @@ def verify_source(
     target_slice = verify_target_slice(target_slice_meta)
     shim = build_shim(original)
     work_c.write_text(shim + "\n\n" + original, encoding="utf-8")
-    base_command = clang_command(clang, work_c, clang_target)
+    base_command = clang_command(clang, work_c, clang_target, clang_args)
     syntax_command = [*base_command, "-fsyntax-only"]
     syntax_proc = subprocess.run(
         syntax_command,
@@ -153,6 +181,17 @@ def verify_source(
         }
     elif object_compile:
         object_result = {"status": "not-run", "reason": "syntax tier failed"}
+    code_compare_result = {"status": "not-run", "reason": "code_compare disabled"}
+    if code_compare:
+        code_compare_result = compare_object_code_to_target(
+            object_result=object_result,
+            target_slice=target_slice,
+            out_dir=out_dir,
+            stem=stem,
+            objcopy=objcopy,
+            objdump=objdump,
+            timeout=timeout,
+        )
 
     result = {
         "name": meta.get("name") or source.stem,
@@ -171,6 +210,7 @@ def verify_source(
             "stderrTail": syntax_proc.stderr[-2000:],
         },
         "object": object_result,
+        "codeCompare": code_compare_result,
         "objdiff": {
             "status": "not-run",
             "reason": objdiff_blocker_reason(1 if target_slice.get("status") == "complete" else 0, 1),
@@ -179,7 +219,7 @@ def verify_source(
     return result
 
 
-def clang_command(clang: str, source: Path, clang_target: str | None) -> list[str]:
+def clang_command(clang: str, source: Path, clang_target: str | None, clang_args: list[str]) -> list[str]:
     command = [
         clang,
         "-x",
@@ -190,17 +230,36 @@ def clang_command(clang: str, source: Path, clang_target: str | None) -> list[st
     ]
     if clang_target:
         command.extend(["-target", clang_target])
+    command.extend(clang_args)
     command.append(str(source))
     return command
 
 
-def verification_status(total: int, syntax_ok: int, object_attempted: int, object_ok: int) -> str:
+def verification_status(
+    total: int,
+    syntax_ok: int,
+    object_attempted: int,
+    object_ok: int,
+    *,
+    code_compare: bool = False,
+    code_attempted: int = 0,
+    code_raw_matched: int = 0,
+    code_masked_matched: int = 0,
+) -> str:
     if total == 0:
         return "empty"
     if syntax_ok != total:
         return "syntax-failed"
     if object_attempted and object_ok != object_attempted:
         return "object-failed"
+    if code_compare:
+        if code_attempted != total:
+            return "code-compare-incomplete"
+        if code_raw_matched == total:
+            return "code-match"
+        if code_raw_matched + code_masked_matched == total:
+            return "code-relocation-masked-match"
+        return "code-mismatch"
     if object_attempted:
         return "object-ok"
     return "syntax-ok"
@@ -216,7 +275,11 @@ def verify_target_slice(target_slice: Any) -> dict[str, Any]:
     if not path.is_absolute() and not path.exists():
         metadata_path = target_slice.get("metadataPath")
         if metadata_path:
-            path = Path(str(metadata_path)).parent / path
+            metadata_dir = Path(str(metadata_path)).parent
+            for candidate in (metadata_dir / path.name, metadata_dir / path):
+                if candidate.exists():
+                    path = candidate
+                    break
     if not path.exists():
         return {**target_slice, "status": "missing-bytes-file", "resolvedBytesPath": str(path)}
     digest = file_sha256(path)
@@ -224,6 +287,144 @@ def verify_target_slice(target_slice: Any) -> dict[str, Any]:
     if expected and digest != expected:
         return {**target_slice, "status": "sha256-mismatch", "resolvedBytesPath": str(path), "actualSha256": digest}
     return {**target_slice, "status": "complete", "resolvedBytesPath": str(path), "actualSha256": digest}
+
+
+def compare_object_code_to_target(
+    *,
+    object_result: dict[str, Any],
+    target_slice: dict[str, Any],
+    out_dir: Path,
+    stem: str,
+    objcopy: str,
+    objdump: str,
+    timeout: int,
+) -> dict[str, Any]:
+    object_path_value = object_result.get("object")
+    if object_result.get("status") != "ok" or not object_path_value:
+        return {"status": "not-run", "reason": "object tier did not produce an object file"}
+    if target_slice.get("status") != "complete":
+        return {"status": "not-run", "reason": "target slice is not complete", "targetSliceStatus": target_slice.get("status")}
+
+    object_path = Path(str(object_path_value))
+    target_path = Path(str(target_slice["resolvedBytesPath"]))
+    candidate_text = out_dir / f"{stem}.text.bin"
+    objcopy_stdout = out_dir / f"{stem}.objcopy.stdout.txt"
+    objcopy_stderr = out_dir / f"{stem}.objcopy.stderr.txt"
+    reloc_stdout = out_dir / f"{stem}.relocations.stdout.txt"
+    reloc_stderr = out_dir / f"{stem}.relocations.stderr.txt"
+    candidate_disasm = out_dir / f"{stem}.candidate.disasm.txt"
+    target_disasm = out_dir / f"{stem}.target.disasm.txt"
+
+    objcopy_proc = subprocess.run(
+        [objcopy, "-O", "binary", "-j", ".text", str(object_path), str(candidate_text)],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=timeout,
+    )
+    objcopy_stdout.write_text(objcopy_proc.stdout, encoding="utf-8")
+    objcopy_stderr.write_text(objcopy_proc.stderr, encoding="utf-8")
+    if objcopy_proc.returncode != 0 or not candidate_text.exists():
+        return {
+            "status": "failed",
+            "reason": "could not extract .text from candidate object",
+            "returnCode": objcopy_proc.returncode,
+            "stdout": str(objcopy_stdout),
+            "stderr": str(objcopy_stderr),
+            "stderrTail": objcopy_proc.stderr[-2000:],
+        }
+
+    reloc_proc = subprocess.run([objdump, "-r", str(object_path)], text=True, capture_output=True, check=False, timeout=timeout)
+    reloc_stdout.write_text(reloc_proc.stdout, encoding="utf-8")
+    reloc_stderr.write_text(reloc_proc.stderr, encoding="utf-8")
+    write_disassembly(objdump, object_path, candidate_disasm, timeout, candidate=True)
+    write_disassembly(objdump, target_path, target_disasm, timeout, candidate=False)
+
+    candidate_bytes = candidate_text.read_bytes()
+    target_bytes = target_path.read_bytes()
+    relocations = parse_relocations(reloc_proc.stdout)
+    mask = relocation_mask(relocations, len(candidate_bytes), len(target_bytes))
+    raw_match = candidate_bytes == target_bytes
+    masked_match = len(candidate_bytes) == len(target_bytes) and all(
+        left == right or index in mask for index, (left, right) in enumerate(zip(candidate_bytes, target_bytes))
+    )
+    status = "match" if raw_match else ("relocation-masked-match" if masked_match else "mismatch")
+    return {
+        "status": status,
+        "method": "raw-and-relocation-masked-text-section-compare",
+        "candidateText": str(candidate_text),
+        "targetBytes": str(target_path),
+        "candidateSize": len(candidate_bytes),
+        "targetSize": len(target_bytes),
+        "candidateSha256": hashlib.sha256(candidate_bytes).hexdigest(),
+        "targetSha256": hashlib.sha256(target_bytes).hexdigest(),
+        "rawMatch": raw_match,
+        "relocationMaskedMatch": masked_match,
+        "firstRawDifference": first_difference(candidate_bytes, target_bytes),
+        "firstRelocationMaskedDifference": first_difference(candidate_bytes, target_bytes, mask),
+        "relocationMaskBytes": len(mask),
+        "relocations": relocations[:50],
+        "relocationCount": len(relocations),
+        "objcopy": {"returnCode": objcopy_proc.returncode, "stdout": str(objcopy_stdout), "stderr": str(objcopy_stderr)},
+        "relocationDump": {"returnCode": reloc_proc.returncode, "stdout": str(reloc_stdout), "stderr": str(reloc_stderr)},
+        "candidateDisassembly": str(candidate_disasm),
+        "targetDisassembly": str(target_disasm),
+        "claimBoundary": "this compares candidate object .text bytes to target code-slice bytes; it is weaker than objdiff because target relocation symbols and full compiler/linker context are unavailable",
+    }
+
+
+def write_disassembly(objdump: str, path: Path, out_path: Path, timeout: int, *, candidate: bool) -> None:
+    command = [objdump, "-dr", "-Mintel", str(path)] if candidate else [objdump, "-b", "binary", "-m", "i386", "-M", "intel", "-D", str(path)]
+    proc = subprocess.run(command, text=True, capture_output=True, check=False, timeout=timeout)
+    out_path.write_text(proc.stdout + proc.stderr, encoding="utf-8")
+
+
+def parse_relocations(text: str) -> list[dict[str, Any]]:
+    relocations: list[dict[str, Any]] = []
+    pattern = re.compile(r"^\s*([0-9A-Fa-f]+)\s+(\S+)\s+(.+?)\s*$")
+    for line in text.splitlines():
+        match = pattern.match(line)
+        if not match:
+            continue
+        offset_text, kind, symbol = match.groups()
+        try:
+            offset = int(offset_text, 16)
+        except ValueError:
+            continue
+        relocations.append({"offset": offset, "type": kind, "symbol": symbol.strip(), "size": relocation_size(kind)})
+    return relocations
+
+
+def relocation_size(kind: str) -> int:
+    upper = kind.upper()
+    if "64" in upper:
+        return 8
+    if "16" in upper:
+        return 2
+    return 4
+
+
+def relocation_mask(relocations: list[dict[str, Any]], candidate_size: int, target_size: int) -> set[int]:
+    limit = min(candidate_size, target_size)
+    mask: set[int] = set()
+    for relocation in relocations:
+        offset = int(relocation.get("offset") or 0)
+        size = int(relocation.get("size") or 4)
+        for index in range(offset, min(offset + size, limit)):
+            mask.add(index)
+    return mask
+
+
+def first_difference(left: bytes, right: bytes, mask: set[int] | None = None) -> dict[str, Any] | None:
+    masked = mask or set()
+    for index, (left_byte, right_byte) in enumerate(zip(left, right)):
+        if index in masked:
+            continue
+        if left_byte != right_byte:
+            return {"offset": index, "candidateByte": f"{left_byte:02x}", "targetByte": f"{right_byte:02x}"}
+    if len(left) != len(right):
+        return {"offset": min(len(left), len(right)), "candidateSize": len(left), "targetSize": len(right), "reason": "size-mismatch"}
+    return None
 
 
 def objdiff_blocker_reason(target_slices_ok: int, total: int) -> str:

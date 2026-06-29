@@ -89,13 +89,24 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("--no-context-extract-containers", action="store_true", help="Disable archive/installer extraction in the recover context stage.")
 
     verify = sub.add_parser("verify-package", help="Verify a recovered-source package with explicit syntax/object tiers.")
-    verify.add_argument("package", type=Path, help="Path to recovered-source directory or manifest.json.")
-    verify.add_argument("--out-dir", type=Path, help="Verification output directory. Defaults to <package>/verification.")
-    verify.add_argument("--clang", default="clang", help="Clang executable used for syntax/object tiers.")
-    verify.add_argument("--timeout", type=int, default=30, help="Timeout per function/tier in seconds.")
-    verify.add_argument("--no-object", action="store_true", help="Only run syntax tier; do not compile object files.")
-    verify.add_argument("--clang-target", default="i686-pc-windows-msvc", help="Optional clang target triple for object tier; empty string disables target override.")
+    add_package_verify_args(verify)
+    verify.add_argument("--code-compare", action="store_true", help="Also compare candidate object .text bytes against packaged target slices.")
+
+    match = sub.add_parser("match-package", help="Compile candidates and compare code bytes against packaged target slices.")
+    add_package_verify_args(match)
     return parser
+
+
+def add_package_verify_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("package", type=Path, help="Path to recovered-source directory or manifest.json.")
+    parser.add_argument("--out-dir", type=Path, help="Verification output directory. Defaults to <package>/verification.")
+    parser.add_argument("--clang", default="clang", help="Clang executable used for syntax/object tiers.")
+    parser.add_argument("--clang-arg", action="append", default=[], help="Extra clang argument. Repeat for multiple flags, for example --clang-arg=-O2.")
+    parser.add_argument("--timeout", type=int, default=30, help="Timeout per function/tier in seconds.")
+    parser.add_argument("--no-object", action="store_true", help="Only run syntax tier; do not compile object files.")
+    parser.add_argument("--clang-target", default="i686-pc-windows-msvc", help="Optional clang target triple for object tier; empty string disables target override.")
+    parser.add_argument("--objcopy", default="objcopy", help="objcopy executable used to extract candidate .text for code comparison.")
+    parser.add_argument("--objdump", default="objdump", help="objdump executable used for relocations and disassembly evidence.")
 
 
 def run_inspect(args: argparse.Namespace) -> int:
@@ -197,12 +208,33 @@ def run_verify_package(args: argparse.Namespace) -> int:
         args.package,
         out_dir=args.out_dir,
         clang=args.clang,
+        clang_args=args.clang_arg,
         timeout=args.timeout,
         object_compile=not args.no_object,
         clang_target=args.clang_target or None,
+        code_compare=bool(getattr(args, "code_compare", False)),
+        objcopy=args.objcopy,
+        objdump=args.objdump,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if report.get("status") in {"syntax-ok", "object-ok"} else 1
+    return 0 if report.get("status") in {"syntax-ok", "object-ok", "code-match", "code-relocation-masked-match"} else 1
+
+
+def run_match_package(args: argparse.Namespace) -> int:
+    report = verify_recovered_source_package(
+        args.package,
+        out_dir=args.out_dir,
+        clang=args.clang,
+        clang_args=args.clang_arg,
+        timeout=args.timeout,
+        object_compile=not args.no_object,
+        clang_target=args.clang_target or None,
+        code_compare=True,
+        objcopy=args.objcopy,
+        objdump=args.objdump,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report.get("status") in {"code-match", "code-relocation-masked-match"} else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -218,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_recover_windows(args)
     if args.command == "verify-package":
         return run_verify_package(args)
+    if args.command == "match-package":
+        return run_match_package(args)
     parser.print_help()
     return 2
 
