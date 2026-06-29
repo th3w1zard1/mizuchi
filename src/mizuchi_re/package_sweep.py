@@ -310,6 +310,12 @@ def generate_source_variants(source: str, meta: dict[str, Any], max_variants: in
     if prototypes:
         add_semantic_variant({"name": "stdcall-dllimport-prototypes", "source": prototypes + "\n\n" + source, "sourceKind": "decompiler-c-with-prototypes", "semanticSource": True})
 
+    byte_offset = normalize_byte_offset_pointer_arithmetic(source)
+    if byte_offset != source:
+        add_semantic_variant({"name": "byte-offset-pointer-normalized", "source": byte_offset, "sourceKind": "decompiler-c-normalized", "semanticSource": True})
+        if prototypes:
+            add_semantic_variant({"name": "stdcall-dllimport-prototypes-byte-offset-pointer-normalized", "source": prototypes + "\n\n" + byte_offset, "sourceKind": "decompiler-c-with-prototypes-normalized", "semanticSource": True})
+
     relational = normalize_positive_relations(source)
     if relational != source:
         add_semantic_variant({"name": "positive-relation-normalized", "source": relational, "sourceKind": "decompiler-c-normalized", "semanticSource": True})
@@ -882,6 +888,24 @@ def count_call_args(args: str) -> int:
 
 def normalize_positive_relations(source: str) -> str:
     return re.sub(r"\b0\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\b", r"\1 >= 1", source)
+
+
+def normalize_byte_offset_pointer_arithmetic(source: str) -> str:
+    """Preserve Ghidra's byte-offset global-address idiom under C pointer rules."""
+
+    type_name = r"(?:unsigned\s+int|signed\s+int|unsigned\s+long|signed\s+long|undefined[0-9]+|uint|int|ulong|long|ushort|short|byte|uchar|char|float|double|[A-Za-z_][A-Za-z0-9_]*)"
+    global_name = r"(?:UNK|DAT|PTR|LAB|iRam|uRam|g_)[A-Za-z0-9_]*"
+    pattern = re.compile(
+        rf"\*\s*\(\s*(?P<type>{type_name})\s*\*\s*\)\s*"
+        rf"\(\s*&\s*(?P<global>{global_name})\s*\+\s*(?P<index>[A-Za-z_][A-Za-z0-9_]*)\s*\*\s*(?P<scale>0x[0-9A-Fa-f]+|\d+)\s*\)",
+        re.MULTILINE,
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        cast_type = re.sub(r"\s+", " ", match.group("type")).strip()
+        return f"*({cast_type} *)((char *)&{match.group('global')} + {match.group('index')} * {match.group('scale')})"
+
+    return pattern.sub(replace, source)
 
 
 def outparam_alias_variants(source: str) -> list[dict[str, str]]:
