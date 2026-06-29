@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -38,11 +40,15 @@ def verify_recovered_source_package(
     package: Path,
     *,
     out_dir: Path | None = None,
+    compiler: str = "clang",
     clang: str = "clang",
     clang_args: list[str] | None = None,
     timeout: int = 30,
     object_compile: bool = True,
     clang_target: str | None = "i686-pc-windows-msvc",
+    msvc_root: Path | None = None,
+    wine: str = "wine",
+    wineprefix: Path | None = None,
     code_compare: bool = False,
     objcopy: str = "objcopy",
     objdump: str = "objdump",
@@ -61,11 +67,15 @@ def verify_recovered_source_package(
             source=source,
             metadata=metadata,
             out_dir=verify_dir,
+            compiler=compiler,
             clang=clang,
             clang_args=clang_args or [],
             timeout=timeout,
             object_compile=object_compile,
             clang_target=clang_target,
+            msvc_root=msvc_root,
+            wine=wine,
+            wineprefix=wineprefix,
             code_compare=code_compare,
             objcopy=objcopy,
             objdump=objdump,
@@ -122,11 +132,15 @@ def verify_source(
     source: Path,
     metadata: Path,
     out_dir: Path,
+    compiler: str,
     clang: str,
     clang_args: list[str],
     timeout: int,
     object_compile: bool,
     clang_target: str | None,
+    msvc_root: Path | None,
+    wine: str,
+    wineprefix: Path | None,
     code_compare: bool,
     objcopy: str,
     objdump: str,
@@ -137,7 +151,7 @@ def verify_source(
     syntax_stderr = out_dir / f"{stem}.syntax.stderr.txt"
     object_stdout = out_dir / f"{stem}.object.stdout.txt"
     object_stderr = out_dir / f"{stem}.object.stderr.txt"
-    object_path = out_dir / f"{stem}.o"
+    object_path = out_dir / (f"{stem}.obj" if compiler == "msvc" else f"{stem}.o")
     meta = read_json(metadata)
     original = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
     target_slice_meta = meta.get("targetSlice")
@@ -146,41 +160,61 @@ def verify_source(
     target_slice = verify_target_slice(target_slice_meta)
     shim = build_shim(original)
     work_c.write_text(shim + "\n\n" + original, encoding="utf-8")
-    base_command = clang_command(clang, work_c, clang_target, clang_args)
-    syntax_command = [*base_command, "-fsyntax-only"]
-    syntax_proc = subprocess.run(
-        syntax_command,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=timeout,
-    )
-    syntax_stdout.write_text(syntax_proc.stdout, encoding="utf-8")
-    syntax_stderr.write_text(syntax_proc.stderr, encoding="utf-8")
-
-    object_result: dict[str, Any] = {"status": "not-run", "reason": "object_compile disabled"}
-    if object_compile and syntax_proc.returncode == 0:
-        object_command = [*base_command, "-c", "-o", str(object_path)]
-        object_proc = subprocess.run(
-            object_command,
+    if compiler == "msvc":
+        syntax_command: list[str] = []
+        object_result = compile_with_msvc(
+            source=work_c,
+            object_path=object_path,
+            out_dir=out_dir,
+            stem=stem,
+            args=clang_args,
+            timeout=timeout,
+            msvc_root=msvc_root,
+            wine=wine,
+            wineprefix=wineprefix,
+        ) if object_compile else {"status": "not-run", "reason": "object_compile disabled"}
+        syntax_status = "ok" if object_result.get("status") == "ok" else "failed"
+        syntax_return_code = object_result.get("returnCode", 1)
+        syntax_stdout.write_text("", encoding="utf-8")
+        syntax_stderr.write_text(str(object_result.get("stderrTail") or object_result.get("reason") or ""), encoding="utf-8")
+    else:
+        base_command = clang_command(clang, work_c, clang_target, clang_args)
+        syntax_command = [*base_command, "-fsyntax-only"]
+        syntax_proc = subprocess.run(
+            syntax_command,
             text=True,
             capture_output=True,
             check=False,
             timeout=timeout,
         )
-        object_stdout.write_text(object_proc.stdout, encoding="utf-8")
-        object_stderr.write_text(object_proc.stderr, encoding="utf-8")
-        object_result = {
-            "status": "ok" if object_proc.returncode == 0 and object_path.exists() else "failed",
-            "returnCode": object_proc.returncode,
-            "command": object_command,
-            "object": str(object_path) if object_path.exists() else None,
-            "stdout": str(object_stdout),
-            "stderr": str(object_stderr),
-            "stderrTail": object_proc.stderr[-2000:],
-        }
-    elif object_compile:
-        object_result = {"status": "not-run", "reason": "syntax tier failed"}
+        syntax_stdout.write_text(syntax_proc.stdout, encoding="utf-8")
+        syntax_stderr.write_text(syntax_proc.stderr, encoding="utf-8")
+        syntax_status = "ok" if syntax_proc.returncode == 0 else "failed"
+        syntax_return_code = syntax_proc.returncode
+
+        object_result = {"status": "not-run", "reason": "object_compile disabled"}
+        if object_compile and syntax_proc.returncode == 0:
+            object_command = [*base_command, "-c", "-o", str(object_path)]
+            object_proc = subprocess.run(
+                object_command,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=timeout,
+            )
+            object_stdout.write_text(object_proc.stdout, encoding="utf-8")
+            object_stderr.write_text(object_proc.stderr, encoding="utf-8")
+            object_result = {
+                "status": "ok" if object_proc.returncode == 0 and object_path.exists() else "failed",
+                "returnCode": object_proc.returncode,
+                "command": object_command,
+                "object": str(object_path) if object_path.exists() else None,
+                "stdout": str(object_stdout),
+                "stderr": str(object_stderr),
+                "stderrTail": object_proc.stderr[-2000:],
+            }
+        elif object_compile:
+            object_result = {"status": "not-run", "reason": "syntax tier failed"}
     code_compare_result = {"status": "not-run", "reason": "code_compare disabled"}
     if code_compare:
         code_compare_result = compare_object_code_to_target(
@@ -200,14 +234,15 @@ def verify_source(
         "metadata": str(metadata),
         "verifySource": str(work_c),
         "targetSlice": target_slice,
-        "status": "object-ok" if object_result.get("status") == "ok" else ("syntax-ok" if syntax_proc.returncode == 0 else "syntax-failed"),
+        "compiler": compiler,
+        "status": "object-ok" if object_result.get("status") == "ok" else ("syntax-ok" if syntax_status == "ok" else "syntax-failed"),
         "syntax": {
-            "status": "ok" if syntax_proc.returncode == 0 else "failed",
-            "returnCode": syntax_proc.returncode,
+            "status": syntax_status,
+            "returnCode": syntax_return_code,
             "command": syntax_command,
             "stdout": str(syntax_stdout),
             "stderr": str(syntax_stderr),
-            "stderrTail": syntax_proc.stderr[-2000:],
+            "stderrTail": syntax_stderr.read_text(encoding="utf-8", errors="replace")[-2000:],
         },
         "object": object_result,
         "codeCompare": code_compare_result,
@@ -233,6 +268,80 @@ def clang_command(clang: str, source: Path, clang_target: str | None, clang_args
     command.extend(clang_args)
     command.append(str(source))
     return command
+
+
+def compile_with_msvc(
+    *,
+    source: Path,
+    object_path: Path,
+    out_dir: Path,
+    stem: str,
+    args: list[str],
+    timeout: int,
+    msvc_root: Path | None,
+    wine: str,
+    wineprefix: Path | None,
+) -> dict[str, Any]:
+    root = resolve_msvc_root(msvc_root)
+    cl_exe = root / "bin" / "cl.exe"
+    stdout_path = out_dir / f"{stem}.object.stdout.txt"
+    stderr_path = out_dir / f"{stem}.object.stderr.txt"
+    work_dir = out_dir / f"{stem}.msvc-work"
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    if not cl_exe.exists():
+        message = f"cl.exe not found at {cl_exe}; pass --msvc-root or set VC_ROOT"
+        stdout_path.write_text("", encoding="utf-8")
+        stderr_path.write_text(message, encoding="utf-8")
+        return {"status": "failed", "returnCode": 3, "reason": message, "stdout": str(stdout_path), "stderr": str(stderr_path), "stderrTail": message}
+
+    local_source = work_dir / "in.c"
+    local_source.write_text(source.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    out_name = "out.obj"
+    command = [wine, str(cl_exe), "/nologo", "/c", *args, f"/Fo{out_name}", local_source.name]
+    env = msvc_environment(root, wineprefix)
+    proc = subprocess.run(command, cwd=work_dir, env=env, text=True, capture_output=True, check=False, timeout=timeout)
+    stdout_path.write_text(proc.stdout, encoding="utf-8")
+    stderr_path.write_text(proc.stderr, encoding="utf-8")
+    produced = work_dir / out_name
+    if proc.returncode == 0 and produced.exists():
+        shutil.copy2(produced, object_path)
+    return {
+        "status": "ok" if proc.returncode == 0 and object_path.exists() else "failed",
+        "returnCode": proc.returncode,
+        "command": command,
+        "object": str(object_path) if object_path.exists() else None,
+        "stdout": str(stdout_path),
+        "stderr": str(stderr_path),
+        "stderrTail": proc.stderr[-2000:],
+        "compilerRoot": str(root),
+        "wineprefix": env.get("WINEPREFIX"),
+    }
+
+
+def resolve_msvc_root(msvc_root: Path | None) -> Path:
+    if msvc_root is not None:
+        return msvc_root
+    env_root = os.environ.get("VC_ROOT")
+    if env_root:
+        return Path(env_root)
+    return Path("/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main")
+
+
+def msvc_environment(msvc_root: Path, wineprefix: Path | None) -> dict[str, str]:
+    env = dict(os.environ)
+    prefix = wineprefix or Path(env.get("WINEPREFIX") or "target/toolchain-acquire/vctoolkit2003/wineprefix")
+    env["WINEPREFIX"] = str(prefix)
+    env["WINEDEBUG"] = env.get("WINEDEBUG", "-all")
+    env["WINEPATH"] = str(msvc_root / "bin")
+    include_dirs = [msvc_root / "include", msvc_root / "PlatformSDK" / "include"]
+    env["INCLUDE"] = ";".join(wine_unix_path(path) for path in include_dirs if path.exists())
+    return env
+
+
+def wine_unix_path(path: Path) -> str:
+    return "Z:" + str(path).replace("/", "\\")
 
 
 def verification_status(

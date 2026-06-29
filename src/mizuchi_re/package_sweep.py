@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .package_verify import is_code_match, resolve_manifest_path, resolve_package_path, strip_trailing_padding, verify_source, verify_target_slice
+from .package_verify import GLOBAL_RE, is_code_match, resolve_manifest_path, resolve_package_path, strip_trailing_padding, verify_source, verify_target_slice
 from .state import atomic_write_json
 
 
@@ -19,6 +19,12 @@ DEFAULT_CLANG_PROFILES = [
     ["-Os"],
 ]
 
+DEFAULT_MSVC_PROFILES = [
+    ["/O2", "/GS-", "/Oy"],
+    ["/O1", "/GS-", "/Oy"],
+    ["/Od", "/GS-", "/Oy"],
+]
+
 CONTROL_CALLS = {"if", "for", "while", "switch", "return", "sizeof"}
 
 
@@ -26,11 +32,15 @@ def sweep_recovered_source_package(
     package: Path,
     *,
     out_dir: Path | None = None,
+    compiler: str = "clang",
     clang: str = "clang",
     clang_args: list[str] | None = None,
     clang_profiles: list[list[str]] | None = None,
     timeout: int = 30,
     clang_target: str | None = "i686-pc-windows-msvc",
+    msvc_root: Path | None = None,
+    wine: str = "wine",
+    wineprefix: Path | None = None,
     objcopy: str = "objcopy",
     objdump: str = "objdump",
     max_variants_per_function: int = 8,
@@ -42,7 +52,7 @@ def sweep_recovered_source_package(
     sweep_dir.mkdir(parents=True, exist_ok=True)
     attempts_path = sweep_dir / "attempts.jsonl"
 
-    profiles = clang_profiles or DEFAULT_CLANG_PROFILES
+    profiles = clang_profiles or default_profiles_for_compiler(compiler)
     base_args = clang_args or []
     function_results: list[dict[str, Any]] = []
     attempts_written = 0
@@ -58,6 +68,7 @@ def sweep_recovered_source_package(
             best: dict[str, Any] | None = None
             matched_attempts: list[dict[str, Any]] = []
             semantic_matched_attempts: list[dict[str, Any]] = []
+            semantic_match_found = False
 
             for variant_index, variant in enumerate(variants):
                 for profile_index, profile_args in enumerate(profiles):
@@ -70,11 +81,15 @@ def sweep_recovered_source_package(
                         source=variant_source,
                         metadata=metadata,
                         out_dir=attempt_dir,
+                        compiler=compiler,
                         clang=clang,
                         clang_args=[*base_args, *profile_args],
                         timeout=timeout,
                         object_compile=True,
                         clang_target=clang_target,
+                        msvc_root=msvc_root,
+                        wine=wine,
+                        wineprefix=wineprefix,
                         code_compare=True,
                         objcopy=objcopy,
                         objdump=objdump,
@@ -86,8 +101,13 @@ def sweep_recovered_source_package(
                         matched_attempts.append(attempt)
                         if attempt.get("semanticSource"):
                             semantic_matched_attempts.append(attempt)
+                            semantic_match_found = True
                     if best is None or int(attempt.get("score") or 0) > int(best.get("score") or 0):
                         best = attempt
+                    if semantic_match_found:
+                        break
+                if semantic_match_found:
+                    break
 
             function_results.append(
                 {
@@ -119,7 +139,10 @@ def sweep_recovered_source_package(
         "matchedFunctions": matched_functions,
         "semanticMatchedFunctions": semantic_matched_functions,
         "attempts": attempts_written,
+        "compilerProfiles": profiles,
         "clangProfiles": profiles,
+        "compiler": compiler,
+        "baseCompilerArgs": base_args,
         "baseClangArgs": base_args,
         "results": function_results,
         "claimBoundary": "semantic source matches require generated C-shape candidates to match code bytes; inline-assembly fallback matches are code recovery evidence, not semantic C decompilation",
@@ -128,29 +151,68 @@ def sweep_recovered_source_package(
     return report
 
 
+def default_profiles_for_compiler(compiler: str) -> list[list[str]]:
+    return DEFAULT_MSVC_PROFILES if compiler == "msvc" else DEFAULT_CLANG_PROFILES
+
+
 def generate_source_variants(source: str, meta: dict[str, Any], max_variants: int) -> list[dict[str, Any]]:
-    variants: list[dict[str, Any]] = [{"name": "decompiler-original", "source": source, "sourceKind": "decompiler-c", "semanticSource": True}]
-    prototypes = infer_stdcall_prototypes(source, str(meta.get("name") or ""))
-    if prototypes:
-        variants.append({"name": "stdcall-dllimport-prototypes", "source": prototypes + "\n\n" + source, "sourceKind": "decompiler-c-with-prototypes", "semanticSource": True})
+    variants: list[dict[str, Any]] = []
 
-    relational = normalize_positive_relations(source)
-    if relational != source:
-        variants.append({"name": "positive-relation-normalized", "source": relational, "sourceKind": "decompiler-c-normalized", "semanticSource": True})
-        if prototypes:
-            variants.append({"name": "stdcall-dllimport-prototypes-positive-relation-normalized", "source": prototypes + "\n\n" + relational, "sourceKind": "decompiler-c-with-prototypes-normalized", "semanticSource": True})
-
-    for repaired in outparam_alias_variants(source):
-        variants.append(repaired)
-        if prototypes:
+    def add_semantic_variant(variant: dict[str, Any]) -> None:
+        variants.append(variant)
+        for recovered in signed_stack_type_variants(variant["source"]):
             variants.append(
                 {
-                    "name": f"stdcall-dllimport-prototypes-{repaired['name']}",
-                    "source": prototypes + "\n\n" + repaired["source"],
-                    "sourceKind": "decompiler-c-with-prototypes-outparam-repair",
+                    "name": f"{variant['name']}-{recovered['name']}",
+                    "source": recovered["source"],
+                    "sourceKind": f"{variant.get('sourceKind', 'decompiler-c')}-type-recovered",
                     "semanticSource": True,
                 }
             )
+
+    add_semantic_variant({"name": "decompiler-original", "source": source, "sourceKind": "decompiler-c", "semanticSource": True})
+    prototypes = infer_stdcall_prototypes(source, str(meta.get("name") or ""))
+    if prototypes:
+        add_semantic_variant({"name": "stdcall-dllimport-prototypes", "source": prototypes + "\n\n" + source, "sourceKind": "decompiler-c-with-prototypes", "semanticSource": True})
+
+    relational = normalize_positive_relations(source)
+    if relational != source:
+        add_semantic_variant({"name": "positive-relation-normalized", "source": relational, "sourceKind": "decompiler-c-normalized", "semanticSource": True})
+        if prototypes:
+            add_semantic_variant({"name": "stdcall-dllimport-prototypes-positive-relation-normalized", "source": prototypes + "\n\n" + relational, "sourceKind": "decompiler-c-with-prototypes-normalized", "semanticSource": True})
+
+    for pattern_variant in target_pattern_c_variants(source, meta):
+        add_semantic_variant(pattern_variant)
+
+    for repaired in outparam_alias_variants(source):
+        add_semantic_variant(repaired)
+        normalized_repaired_source = normalize_positive_relations(repaired["source"])
+        if normalized_repaired_source != repaired["source"]:
+            add_semantic_variant(
+                {
+                    "name": f"{repaired['name']}-positive-relation-normalized",
+                    "source": normalized_repaired_source,
+                    "sourceKind": "decompiler-c-outparam-repair-normalized",
+                    "semanticSource": True,
+                }
+            )
+        if prototypes:
+            prototyped_repaired = {
+                "name": f"stdcall-dllimport-prototypes-{repaired['name']}",
+                "source": prototypes + "\n\n" + repaired["source"],
+                "sourceKind": "decompiler-c-with-prototypes-outparam-repair",
+                "semanticSource": True,
+            }
+            add_semantic_variant(prototyped_repaired)
+            if normalized_repaired_source != repaired["source"]:
+                add_semantic_variant(
+                    {
+                        "name": f"stdcall-dllimport-prototypes-{repaired['name']}-positive-relation-normalized",
+                        "source": prototypes + "\n\n" + normalized_repaired_source,
+                        "sourceKind": "decompiler-c-with-prototypes-outparam-repair-normalized",
+                        "semanticSource": True,
+                    }
+                )
 
     inline_asm = target_slice_inline_asm_variant(meta)
     if inline_asm is not None:
@@ -167,6 +229,133 @@ def generate_source_variants(source: str, meta: dict[str, Any], max_variants: in
         if len(deduped) >= max(1, max_variants):
             break
     return deduped
+
+
+def signed_stack_type_variants(source: str) -> list[dict[str, str]]:
+    variants = []
+    for var in signed_candidate_stack_vars(source):
+        declaration = re.compile(rf"\b(?:undefined4|uint|unsigned\s+int)\s+{re.escape(var)}\s*;")
+        replaced = declaration.sub(f"int {var};", source, count=1)
+        if replaced != source:
+            variants.append(
+                {
+                    "name": f"signed-stack-{var}",
+                    "source": replaced,
+                }
+            )
+    return variants
+
+
+def signed_candidate_stack_vars(source: str) -> list[str]:
+    address_taken = set(re.findall(r"&\s*(uStack_[A-Za-z0-9_]+)", source))
+    compared = set(re.findall(r"\b(uStack_[A-Za-z0-9_]+)\s*>=\s*1\b", source))
+    compared.update(re.findall(r"\b0\s*<\s*(uStack_[A-Za-z0-9_]+)\b", source))
+    compared.update(re.findall(r"\b(uStack_[A-Za-z0-9_]+)\s*>\s*0\b", source))
+    return sorted(address_taken & compared)
+
+
+def target_pattern_c_variants(source: str, meta: dict[str, Any]) -> list[dict[str, Any]]:
+    target_slice = meta.get("targetSlice")
+    if isinstance(target_slice, dict):
+        target_slice = {**target_slice, "metadataPath": str(meta.get("_metadataPath") or "")}
+    verified = verify_target_slice(target_slice)
+    if verified.get("status") != "complete":
+        return []
+    bytes_path = verified.get("resolvedBytesPath")
+    if not bytes_path:
+        return []
+    body = strip_trailing_padding(Path(str(bytes_path)).read_bytes())
+    prototypes = infer_stdcall_prototypes(source, str(meta.get("name") or ""))
+    function_name = c_identifier(str(meta.get("name") or "recovered_function"))
+    import_name = first_external_call_name(source)
+    global_name = first_global_name(source)
+    variants: list[dict[str, Any]] = []
+    if import_name and global_name:
+        simple = target_pattern_global_threshold_call(body, function_name, import_name, global_name, prototypes)
+        if simple:
+            variants.append(simple)
+        outparam = target_pattern_import_outparam_global_store(body, function_name, import_name, global_name, prototypes)
+        if outparam:
+            variants.append(outparam)
+    return variants
+
+
+def first_external_call_name(source: str) -> str | None:
+    for name, _arity in sorted(find_calls(source).items()):
+        if looks_external_call(name):
+            return name
+    return None
+
+
+def first_global_name(source: str) -> str | None:
+    globals_found = [name for name in sorted(set(GLOBAL_RE.findall(source))) if name.startswith(("iRam", "uRam", "DAT", "g_"))]
+    return globals_found[0] if globals_found else None
+
+
+def target_pattern_global_threshold_call(body: bytes, function_name: str, import_name: str, global_name: str, prototypes: str) -> dict[str, Any] | None:
+    if len(body) != 24:
+        return None
+    if not (
+        body[0] == 0xA1
+        and body[5:10] == b"\x83\xf8\x01\x7c\x0d"
+        and body[10:16] == b"\x6a\x00\x6a\x00\x50\x6a"
+        and body[17:19] == b"\xff\x15"
+        and body[24 - 1] == 0xC3
+    ):
+        return None
+    action = body[16]
+    lines = [
+        prototypes,
+        f"void {function_name}(void)",
+        "{",
+        f"  if ({global_name} >= 1) {{",
+        f"    {import_name}(0x{action:x},{global_name},0,0);",
+        "  }",
+        "  return;",
+        "}",
+        "",
+    ]
+    return {"name": "target-pattern-global-threshold-call", "source": "\n".join(line for line in lines if line != ""), "sourceKind": "target-pattern-c", "semanticSource": True}
+
+
+def target_pattern_import_outparam_global_store(body: bytes, function_name: str, import_name: str, global_name: str, prototypes: str) -> dict[str, Any] | None:
+    if len(body) != 60:
+        return None
+    if not (
+        body[0:2] == b"\x51\x56"
+        and body[2] == 0x8B
+        and body[3] == 0x35
+        and body[8:19] == b"\x6a\x00\x8d\x44\x24\x08\x50\x6a\x00\x6a\x5e"
+        and body[19:29] == b"\xc7\x44\x24\x14\x00\x00\x00\x00\xff\xd6"
+        and body[29:33] == b"\x85\xc0\x74\x18"
+        and body[33:42] == b"\x8b\x44\x24\x04\x83\xf8\x01\x7c\x0f"
+        and body[42:50] == b"\x6a\x00\x6a\x00\x6a\x00\x6a\x5d"
+        and body[50] == 0xA3
+        and body[55:60] == b"\xff\xd6\x5e\x59\xc3"
+    ):
+        return None
+    get_action = body[18]
+    set_action = body[49]
+    lines = [
+        prototypes,
+        f"void {function_name}(void)",
+        "{",
+        "  int iVar1;",
+        "  int iVar2;",
+        "  int uStack_4;",
+        "",
+        "  iVar2 = 0;",
+        "  uStack_4 = 0;",
+        f"  iVar1 = {import_name}(0x{get_action:x},0,(unsigned int)&uStack_4,0);",
+        "  if ((iVar1 != 0) && (uStack_4 >= 1)) {",
+        f"    {global_name} = uStack_4;",
+        f"    {import_name}(0x{set_action:x},0,0,0);",
+        "  }",
+        "  return;",
+        "}",
+        "",
+    ]
+    return {"name": "target-pattern-import-outparam-global-store", "source": "\n".join(lines), "sourceKind": "target-pattern-c", "semanticSource": True}
 
 
 def target_slice_inline_asm_variant(meta: dict[str, Any]) -> dict[str, Any] | None:

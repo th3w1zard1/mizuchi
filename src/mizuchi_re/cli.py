@@ -99,18 +99,22 @@ def build_parser() -> argparse.ArgumentParser:
     sweep = sub.add_parser("sweep-package", help="Generate source-shape/compiler variants and compare each against packaged target slices.")
     add_package_verify_args(sweep)
     sweep.add_argument("--max-variants-per-function", type=int, default=8, help="Maximum generated source variants per function.")
-    sweep.add_argument("--clang-profile", action="append", default=[], help="Comma-separated clang args for one profile, for example --clang-profile=-O2 or --clang-profile=-O2,-fomit-frame-pointer. Repeat for multiple profiles.")
+    sweep.add_argument("--compiler-profile", "--clang-profile", dest="compiler_profile", action="append", default=[], help="Comma-separated compiler args for one profile, for example --compiler-profile=-O2 or --compiler-profile=/O2,/GS-,/Oy. Repeat for multiple profiles.")
     return parser
 
 
 def add_package_verify_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("package", type=Path, help="Path to recovered-source directory or manifest.json.")
     parser.add_argument("--out-dir", type=Path, help="Verification output directory. Defaults to <package>/verification.")
+    parser.add_argument("--compiler", choices=["clang", "msvc"], default="clang", help="Compiler backend used for object/code comparison.")
     parser.add_argument("--clang", default="clang", help="Clang executable used for syntax/object tiers.")
     parser.add_argument("--clang-arg", action="append", default=[], help="Extra clang argument. Repeat for multiple flags, for example --clang-arg=-O2.")
     parser.add_argument("--timeout", type=int, default=30, help="Timeout per function/tier in seconds.")
     parser.add_argument("--no-object", action="store_true", help="Only run syntax tier; do not compile object files.")
     parser.add_argument("--clang-target", default="i686-pc-windows-msvc", help="Optional clang target triple for object tier; empty string disables target override.")
+    parser.add_argument("--msvc-root", type=Path, help="MSVC root containing bin/cl.exe. Defaults to VC_ROOT or local toolchain discovery.")
+    parser.add_argument("--wine", default="wine", help="Wine executable used by the MSVC backend.")
+    parser.add_argument("--wineprefix", type=Path, help="Wine prefix used by the MSVC backend.")
     parser.add_argument("--objcopy", default="objcopy", help="objcopy executable used to extract candidate .text for code comparison.")
     parser.add_argument("--objdump", default="objdump", help="objdump executable used for relocations and disassembly evidence.")
 
@@ -213,11 +217,15 @@ def run_verify_package(args: argparse.Namespace) -> int:
     report = verify_recovered_source_package(
         args.package,
         out_dir=args.out_dir,
+        compiler=args.compiler,
         clang=args.clang,
         clang_args=args.clang_arg,
         timeout=args.timeout,
         object_compile=not args.no_object,
         clang_target=args.clang_target or None,
+        msvc_root=args.msvc_root,
+        wine=args.wine,
+        wineprefix=args.wineprefix,
         code_compare=bool(getattr(args, "code_compare", False)),
         objcopy=args.objcopy,
         objdump=args.objdump,
@@ -230,11 +238,15 @@ def run_match_package(args: argparse.Namespace) -> int:
     report = verify_recovered_source_package(
         args.package,
         out_dir=args.out_dir,
+        compiler=args.compiler,
         clang=args.clang,
         clang_args=args.clang_arg,
         timeout=args.timeout,
         object_compile=not args.no_object,
         clang_target=args.clang_target or None,
+        msvc_root=args.msvc_root,
+        wine=args.wine,
+        wineprefix=args.wineprefix,
         code_compare=True,
         objcopy=args.objcopy,
         objdump=args.objdump,
@@ -244,15 +256,19 @@ def run_match_package(args: argparse.Namespace) -> int:
 
 
 def run_sweep_package(args: argparse.Namespace) -> int:
-    profiles = parse_clang_profiles(args.clang_profile)
+    profiles = parse_clang_profiles(args.compiler_profile)
     report = sweep_recovered_source_package(
         args.package,
         out_dir=args.out_dir,
+        compiler=args.compiler,
         clang=args.clang,
         clang_args=args.clang_arg,
         clang_profiles=profiles or None,
         timeout=args.timeout,
         clang_target=args.clang_target or None,
+        msvc_root=args.msvc_root,
+        wine=args.wine,
+        wineprefix=args.wineprefix,
         objcopy=args.objcopy,
         objdump=args.objdump,
         max_variants_per_function=args.max_variants_per_function,
