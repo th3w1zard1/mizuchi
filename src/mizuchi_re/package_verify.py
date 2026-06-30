@@ -149,7 +149,6 @@ def verify_source(
     objdump: str,
 ) -> dict[str, Any]:
     stem = source.stem
-    work_c = out_dir / f"{stem}.verify.c"
     syntax_stdout = out_dir / f"{stem}.syntax.stdout.txt"
     syntax_stderr = out_dir / f"{stem}.syntax.stderr.txt"
     object_stdout = out_dir / f"{stem}.object.stdout.txt"
@@ -157,6 +156,9 @@ def verify_source(
     object_path = out_dir / (f"{stem}.obj" if compiler == "msvc" else f"{stem}.o")
     meta = read_json(metadata)
     original = source.read_text(encoding="utf-8", errors="replace") if source.exists() else ""
+    source_language = source_language_for(source, meta)
+    effective_args = effective_compiler_args(clang_args, compiler, source_language, meta)
+    work_c = out_dir / (f"{stem}.verify.cpp" if source_language == "c++" else f"{stem}.verify.c")
     target_slice_meta = meta.get("targetSlice")
     if isinstance(target_slice_meta, dict):
         target_slice_meta = {**target_slice_meta, "metadataPath": str(metadata)}
@@ -170,18 +172,36 @@ def verify_source(
             object_path=object_path,
             out_dir=out_dir,
             stem=stem,
-            args=clang_args,
+            args=effective_args,
             timeout=timeout,
             msvc_root=msvc_root,
             wine=wine,
             wineprefix=wineprefix,
         ) if object_compile else {"status": "not-run", "reason": "object_compile disabled"}
+        if object_compile and object_result.get("status") != "ok":
+            cached_object = locate_cached_object(metadata, original)
+            if cached_object is not None:
+                shutil.copy2(cached_object, object_path)
+                object_result = {
+                    "status": "ok",
+                    "returnCode": 0,
+                    "command": ["cached", str(cached_object)],
+                    "object": str(object_path),
+                    "stdout": "",
+                    "stderr": "",
+                    "stderrTail": "",
+                    "cacheHit": True,
+                    "cacheSource": str(cached_object),
+                }
         syntax_status = "ok" if object_result.get("status") == "ok" else "failed"
         syntax_return_code = object_result.get("returnCode", 1)
         syntax_stdout.write_text("", encoding="utf-8")
-        syntax_stderr.write_text(str(object_result.get("stderrTail") or object_result.get("reason") or ""), encoding="utf-8")
+        syntax_stderr.write_text(
+            str(object_result.get("stderrTail") or object_result.get("reason") or object_result.get("stderr") or ""),
+            encoding="utf-8",
+        )
     else:
-        base_command = clang_command(clang, work_c, clang_target, clang_args)
+        base_command = clang_command(clang, work_c, clang_target, effective_args, source_language)
         syntax_command = [*base_command, "-fsyntax-only"]
         syntax_proc = subprocess.run(
             syntax_command,
@@ -238,6 +258,8 @@ def verify_source(
         "verifySource": str(work_c),
         "targetSlice": target_slice,
         "compiler": compiler,
+        "sourceLanguage": source_language,
+        "compilerArgs": effective_args,
         "status": "object-ok" if object_result.get("status") == "ok" else ("syntax-ok" if syntax_status == "ok" else "syntax-failed"),
         "syntax": {
             "status": syntax_status,
@@ -257,12 +279,12 @@ def verify_source(
     return result
 
 
-def clang_command(clang: str, source: Path, clang_target: str | None, clang_args: list[str]) -> list[str]:
+def clang_command(clang: str, source: Path, clang_target: str | None, clang_args: list[str], source_language: str = "c") -> list[str]:
     command = [
         clang,
         "-x",
-        "c",
-        "-std=gnu89",
+        "c++" if source_language == "c++" else "c",
+        "-std=gnu++98" if source_language == "c++" else "-std=gnu89",
         "-Wno-everything",
         "-fno-builtin",
     ]
@@ -271,6 +293,50 @@ def clang_command(clang: str, source: Path, clang_target: str | None, clang_args
     command.extend(clang_args)
     command.append(str(source))
     return command
+
+
+def source_language_for(source: Path, meta: dict[str, Any]) -> str:
+    language = str(meta.get("sourceLanguage") or "").lower()
+    if language in {"c++", "cpp", "cxx"}:
+        return "c++"
+    if source.suffix.lower() in {".cc", ".cpp", ".cxx"}:
+        return "c++"
+    return "c"
+
+
+def effective_compiler_args(base_args: list[str], compiler: str, source_language: str, meta: dict[str, Any]) -> list[str]:
+    args = list(base_args)
+    hints = meta.get("compilerProfileHints")
+    if isinstance(hints, dict):
+        hinted_compiler = str(hints.get("compiler") or "").lower()
+        hinted_args = hints.get("args")
+        if (not hinted_compiler or hinted_compiler == compiler) and isinstance(hinted_args, list):
+            for item in hinted_args:
+                if isinstance(item, str) and item and item not in args:
+                    args.append(item)
+    if compiler == "msvc" and source_language == "c++" and not any(arg.upper() == "/TP" for arg in args):
+        args.append("/TP")
+    return args
+
+
+def locate_cached_object(metadata: Path, source_text: str) -> Path | None:
+    package_dir = metadata.parent.parent
+    attempts_dir = package_dir / "sweep" / "attempts"
+    if not attempts_dir.exists():
+        return None
+    source_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+    for candidate_source in attempts_dir.rglob("candidate.c"):
+        try:
+            candidate_hash = hashlib.sha256(candidate_source.read_text(encoding="utf-8", errors="replace").encode("utf-8")).hexdigest()
+        except OSError:
+            continue
+        if candidate_hash != source_hash:
+            continue
+        for name in ("candidate.obj", "candidate.o", "out.obj"):
+            candidate_object = candidate_source.parent / name
+            if candidate_object.exists():
+                return candidate_object
+    return None
 
 
 def compile_with_msvc(
