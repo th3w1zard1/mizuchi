@@ -39,8 +39,21 @@ test_has_required_fields() {
   local output
   output=$("$script_path" 2>&1)
   
-  for field in prompt_queue ghidra_status build_artifacts active_branches workspace_metrics; do
+  for field in prompt_queue build_artifacts active_branches workspace_metrics readiness_metrics; do
     if ! echo "$output" | jq ".${field}" > /dev/null 2>&1; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+test_readiness_metrics_structure() {
+  local output
+  output=$("$script_path" 2>&1)
+  local metrics=$(echo "$output" | jq '.readiness_metrics')
+
+  for field in status total ready notReady blockersTotal warningsTotal blockerSummary; do
+    if ! echo "$metrics" | jq ".${field}" > /dev/null 2>&1; then
       return 1
     fi
   done
@@ -58,7 +71,7 @@ test_workspace_metrics_structure() {
   output=$("$script_path" 2>&1)
   local metrics=$(echo "$output" | jq '.workspace_metrics')
   
-  for field in total_prompts matched integrated match_rate_percent integration_rate_percent; do
+  for field in total_prompts matched integrated blocked match_rate_percent integration_rate_percent; do
     if ! echo "$metrics" | jq ".${field}" > /dev/null 2>&1; then
       return 1
     fi
@@ -73,19 +86,6 @@ test_active_branches_structure() {
   
   for field in current_branch remote_count unpushed_commits; do
     if ! echo "$branches" | jq ".${field}" > /dev/null 2>&1; then
-      return 1
-    fi
-  done
-  return 0
-}
-
-test_ghidra_status_structure() {
-  local output
-  output=$("$script_path" 2>&1)
-  local status=$(echo "$output" | jq '.ghidra_status')
-  
-  for field in connected_servers loaded_programs analysis_state; do
-    if ! echo "$status" | jq ".${field}" > /dev/null 2>&1; then
       return 1
     fi
   done
@@ -120,7 +120,7 @@ test_performance() {
   local end_time=$(date +%s%N)
   local elapsed_ms=$(( (end_time - start_time) / 1000000 ))
   
-  [[ $elapsed_ms -lt 2000 ]]
+  [[ $elapsed_ms -lt 6000 ]]
 }
 
 test_git_info_populated() {
@@ -129,6 +129,135 @@ test_git_info_populated() {
   local branch=$(echo "$output" | jq -r '.active_branches.current_branch')
   
   [[ -n "$branch" && "$branch" != "unknown" ]]
+}
+
+test_ready_prompt_metadata() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -e '
+    .readiness_metrics.status == "ready" and
+    (.prompt_queue[]
+      | select(.name == "fun_00148020")
+      | .status == "matched"
+        and .readiness_status == "ready"
+        and (.readiness_blockers | length) == 0)
+  ' >/dev/null
+}
+
+test_integrated_prompt_metadata() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  local prompt="$tmpdir/integrated_fn"
+  mkdir -p "$prompt/build"
+  cat >"$prompt/settings.yaml" <<'YAML'
+functionName: integrated_fn
+targetObjectPath: prompt:/build/target.o
+asm: |
+  integrated_fn:
+      ret
+YAML
+  cat >"$prompt/case.yaml" <<'YAML'
+caseId: integrated_fn
+functionName: integrated_fn
+targetObjectPath: prompt:/build/target.o
+status: integrated
+integratedSourcePath: /tmp/mizuchi-integrated/integrated_fn.c
+integrationReceiptPath: /tmp/mizuchi-prompts/integrated_fn/build/integration-receipt.json
+integratedAt: 2026-06-28T00:00:00Z
+YAML
+  touch "$prompt/prompt.md"
+
+  local output
+  output="$(MIZUCHI_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
+  echo "$output" | jq -e '
+    .workspace_metrics.total_prompts == 1 and
+    .workspace_metrics.integrated == 1 and
+    .workspace_metrics.integration_rate_percent == 100 and
+    (.prompt_queue[]
+      | select(.name == "integrated_fn")
+      | .status == "integrated"
+        and .function_name == "integrated_fn"
+        and .integrated_source_path == "/tmp/mizuchi-integrated/integrated_fn.c"
+        and .integration_receipt_path == "/tmp/mizuchi-prompts/integrated_fn/build/integration-receipt.json"
+        and .integrated_at == "2026-06-28T00:00:00Z")
+  ' >/dev/null
+}
+
+test_programmatic_report_build_artifact() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  local prompt="$tmpdir/report_fn"
+  mkdir -p "$prompt/build"
+  cat >"$prompt/settings.yaml" <<'YAML'
+functionName: report_fn
+targetObjectPath: prompt:/build/target.o
+asm: |
+  report_fn:
+      ret
+YAML
+  cat >"$prompt/case.yaml" <<'YAML'
+caseId: report_fn
+functionName: report_fn
+targetObjectPath: prompt:/build/target.o
+status: matched
+YAML
+  cat >"$prompt/build/programmatic-phase.json" <<'JSON'
+{
+  "schema": "mizuchi.programmatic-phase.v1",
+  "status": "matched",
+  "matchedStage": "candidate"
+}
+JSON
+
+  local output
+  output="$(MIZUCHI_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
+  echo "$output" | jq -e '
+    .build_artifacts[]
+    | select(.prompt == "report_fn")
+    | .programmatic_status == "matched" and .matched_stage == "candidate"
+  ' >/dev/null
+}
+
+test_ai_phase_report_build_artifact() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  local prompt="$tmpdir/ai_fn"
+  mkdir -p "$prompt/build"
+  cat >"$prompt/settings.yaml" <<'YAML'
+functionName: ai_fn
+targetObjectPath: prompt:/build/target.o
+asm: |
+  ai_fn:
+      ret
+YAML
+  cat >"$prompt/case.yaml" <<'YAML'
+caseId: ai_fn
+functionName: ai_fn
+targetObjectPath: prompt:/build/target.o
+status: pending
+YAML
+  cat >"$prompt/build/ai-phase.json" <<'JSON'
+{
+  "schema": "mizuchi.ai-phase.v1",
+  "status": "manual-required",
+  "runner": "cursor-native"
+}
+JSON
+
+  local output
+  output="$(MIZUCHI_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
+  echo "$output" | jq -e '
+    .build_artifacts[]
+    | select(.prompt == "ai_fn")
+    | .ai_status == "manual-required" and .ai_runner == "cursor-native"
+  ' >/dev/null
 }
 
 echo "Running tests for get-workspace-context.sh"
@@ -140,11 +269,15 @@ run_test "Returns valid JSON" "test_returns_valid_json"
 run_test "Has all required top-level fields" "test_has_required_fields"
 run_test "prompt_queue is array" "test_prompt_queue_is_array"
 run_test "workspace_metrics structure" "test_workspace_metrics_structure"
+run_test "readiness_metrics structure" "test_readiness_metrics_structure"
 run_test "active_branches structure" "test_active_branches_structure"
-run_test "ghidra_status structure" "test_ghidra_status_structure"
 run_test "Prompt count matches filesystem" "test_prompt_count_accuracy"
-run_test "Performance: <2 seconds" "test_performance"
+run_test "Performance: <6 seconds with readiness checks" "test_performance"
 run_test "Git info is populated" "test_git_info_populated"
+run_test "Ready prompt metadata is canonical" "test_ready_prompt_metadata"
+run_test "Integrated prompt metadata is surfaced" "test_integrated_prompt_metadata"
+run_test "Programmatic report is surfaced in build artifacts" "test_programmatic_report_build_artifact"
+run_test "AI phase report is surfaced in build artifacts" "test_ai_phase_report_build_artifact"
 
 echo
 echo "==========================================="

@@ -6,13 +6,13 @@ Reverse engineers need **verifiable** C recovery for legacy binaries (game ports
 
 ## Our approach
 
-Use a **phased pipeline**: gather types/asm (Get Context + Ghidra) → programmatic m2c/compile/objdiff/permuter → sandboxed AI iteration → optional integrator. **objdiff 0** is the sole match gate.
+Use a **phased pipeline**: gather target assembly/object-slice context → programmatic m2c/compile/objdiff/permuter → sandboxed AI iteration → optional integrator. **objdiff 0** is the sole match gate.
 
 ## Who it's for
 
 - Decomp project contributors matching functions in C
 - AI agents assisting matching under sandbox + verification rules
-- Odyssey/KOTOR-style workflows using shared Ghidra + Mizuchi patterns
+- Odyssey/KOTOR-style workflows using Mizuchi-style prompt, compile, and objdiff loops
 
 ## Success signals
 
@@ -32,9 +32,9 @@ Use a **phased pipeline**: gather types/asm (Get Context + Ghidra) → programma
 
 Cursor plugin: `~/.cursor/plugins/local/matching-decompilation-re/`
 
-Commands: `/decomp-function`, `/decomp-prompt`, `/ghidra-scout`
+Commands: `/decomp-function`, `/decomp-prompt`
 
 ## Evidence
 
 - [OFFICIAL] Macabeus article + Mizuchi README — see `matching-decompilation-re/docs/research-brief.md`
-- [SYNTH] This workspace uses AgentDecompile MCP + optional Mizuchi CLI when installed
+- [SYNTH] This workspace uses prompt folders plus local compile/objdiff wrappers to mirror the upstream Mizuchi loop

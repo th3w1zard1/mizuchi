@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .context_export import ExportConfig, export_context
-from .functions import analyze_function_candidates_with_agentdecompile, analyze_function_candidates_with_objdump, discover_function_candidates, write_function_candidates
+from .functions import analyze_function_candidates_with_objdump, discover_function_candidates, write_function_candidates
 from .inventory import build_binary_inventory, write_inventory
 from .sourcegen import generate_source_candidates
 from .state import RunState, atomic_write_json, config_fingerprint, now
@@ -48,9 +48,6 @@ class RecoveryConfig:
     enable_legacy_adapters: bool = False
     snapshot_existing_label: str | None = None
     function_analysis: str = "auto"
-    agentdecompile_server_url: str | None = None
-    agentdecompile_mode: str = "local"
-    agentdecompile_batch_size: int = 25
     function_facts_jsonl: Path | None = None
     source_task_limit: int = 500
     source_task_offset: int = 0
@@ -171,9 +168,6 @@ class RecoveryRunner:
             "enableLegacyAdapters": self.config.enable_legacy_adapters,
             "snapshotExistingLabel": self.config.snapshot_existing_label,
             "functionAnalysis": self.config.function_analysis,
-            "agentdecompileServerUrl": self.config.agentdecompile_server_url,
-            "agentdecompileMode": self.config.agentdecompile_mode,
-            "agentdecompileBatchSize": self.config.agentdecompile_batch_size,
             "functionFactsJsonl": str(self.config.function_facts_jsonl) if self.config.function_facts_jsonl else None,
             "sourceTaskLimit": self.config.source_task_limit,
             "sourceTaskOffset": self.config.source_task_offset,
@@ -388,25 +382,6 @@ class RecoveryRunner:
             return summary
         capabilities = json.loads((self.run_dir / "capabilities.json").read_text(encoding="utf-8"))
         objdump = (capabilities.get("tools") or {}).get("objdump") or {}
-        if self.config.function_analysis in {"auto", "agentdecompile"}:
-            target = self.load_analysis_target()
-            analyzed = analyze_function_candidates_with_agentdecompile(
-                candidates,
-                binary_path=target.binary_path,
-                facts_path=self.run_dir / "function-facts.jsonl",
-                run_dir=self.run_dir,
-                limit=self.config.source_task_limit,
-                timeout=max(self.config.stage_timeout, 600),
-                offset=self.config.source_task_offset,
-                batch_size=self.config.agentdecompile_batch_size,
-                server_url=self.config.agentdecompile_server_url,
-                mode=self.config.agentdecompile_mode,
-            )
-            write_function_candidates(candidates_path, analyzed)
-            atomic_write_json(out_path, analyzed.get("toolAnalysis", {}))
-            if self.config.function_analysis == "agentdecompile" or str((analyzed.get("toolAnalysis") or {}).get("status")) == "complete":
-                return analyzed.get("toolAnalysis", {})
-            candidates = analyzed
         if self.config.function_analysis in {"auto", "objdump"} and objdump.get("available"):
             target = self.load_analysis_target()
             analyzed = analyze_function_candidates_with_objdump(candidates, target.binary_path, self.config.stage_timeout)

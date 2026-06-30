@@ -46,7 +46,7 @@ allowed.each do |k|
   end
 end
 if data['asm'].length < 10
-  warn "asm looks too short — paste full GAS from Ghidra"
+  warn "asm looks too short — paste full target assembly"
   exit 1
 end
 puts "OK: #{path}"
@@ -88,7 +88,7 @@ for k in allowed:
         sys.exit(1)
 
 if len(data.get("asm", "")) < 10:
-    print("asm looks too short — paste full GAS from Ghidra", file=sys.stderr)
+    print("asm looks too short — paste full target assembly", file=sys.stderr)
     sys.exit(1)
 
 print("OK:", path)

@@ -1,8 +1,8 @@
 ---
 name: decomp-prompt-architect
-description: Assembles Mizuchi prompt folders (prompt.md + settings.yaml) from Ghidra exports, m2c seeds, and Decomp Atlas examples. Use proactively when creating prompts/<fn>/ or running /decomp-prompt.
+description: Assembles Mizuchi prompt folders (prompt.md + settings.yaml) from target assembly, object slices, m2c seeds, and Decomp Atlas examples. Use proactively when creating prompts/<fn>/ or running /decomp-prompt.
 capabilities:
-  - "Can invoke: /ghidra-scout, /decomp-prompt, /decomp-atlas, /help"
+  - "Can invoke: /decomp-prompt, /decomp-atlas, /help"
   - "Can read: prompts/*, context/, docs/"
   - "Can write: prompts/*/prompt.md, prompts/*/settings.yaml, prompts/*/notes.md"
   - "Can query: get_workspace_context, list_prompts, decomp_atlas_index"
@@ -32,7 +32,7 @@ prompts/<function-name>/
 functionName: exact_symbol
 targetObjectPath: build/.../function.o
 asm: |
-  # GAS/asm from Ghidra or project stub
+  # GAS/asm from the target object or project stub
 ```
 
 ## prompt.md sections
@@ -41,7 +41,7 @@ Follow skill `decomp-prompt-builder` order: Objective → Platform → Context �
 
 ## Data sources
 
-1. Ghidra scout output
+1. Target assembly and object-slice metadata
 2. `decomp-context-builder` / m2ctx
 3. m2c seed (`decomp-programmatic-tools`)
 4. Decomp Atlas (`decomp-atlas-index`) for similar matches

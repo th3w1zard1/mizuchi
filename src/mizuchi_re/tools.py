@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_GHIDRA = Path("/home/brunner56/.local/opt/ghidra/current/support/analyzeHeadless")
 DEFAULT_STEAMLESS = Path("target/steamless-release/extracted/Steamless.CLI.exe")
 STEAMLESS_ENV = "MIZUCHI_STEAMLESS_CLI"
 
@@ -54,13 +53,7 @@ def inspect_capabilities(repo_root: Path) -> dict[str, Any]:
         "objcopy": inspect_tool("objcopy", ["objcopy", "--version"]),
         "wine": inspect_tool("wine", ["wine", "--version"]),
         "mono": inspect_tool("mono", ["mono", "--version"]),
-        "ghidra": inspect_executable("ghidra", DEFAULT_GHIDRA) if DEFAULT_GHIDRA.exists() else inspect_tool("analyzeHeadless"),
         "uv": inspect_tool("uv", ["uv", "--version"]),
-        "agentdecompileCheckout": {
-            "name": "agentdecompileCheckout",
-            "path": "/run/media/brunner56/MyBook/Workspaces/agentdecompile",
-            "available": Path("/run/media/brunner56/MyBook/Workspaces/agentdecompile/pyproject.toml").exists(),
-        },
     }
     local = {
         "oneShotSource": (repo_root / "scripts/one-shot-source.py").exists(),

@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "agdec-http": {
-      "transport": "http",
-      "url": "http://170.9.241.140:13100/mcp"
-    },
     "mizuchi": {
       "transport": "stdio",
       "command": "mizuchi",

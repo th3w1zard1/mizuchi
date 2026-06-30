@@ -8,7 +8,7 @@ Use `decomp-prompt-architect` and `prompts/_template/` to assemble a valid promp
 
 - Target function name (required).
 - Optional target object path.
-- Optional asm or Ghidra scout output.
+- Optional target assembly or object-slice metadata.
 
 ## Procedure
 

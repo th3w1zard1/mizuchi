@@ -25,7 +25,7 @@ Displays the full capability matrix and reference guide.
 
 Reference the output in your prompts to understand what operations you can invoke. Example:
 
-> You can invoke commands like `/decomp-function` or `/ghidra-scout` from the help output.
+> You can invoke commands like `/decomp-function` or `/decomp-prompt` from the help output.
 > You can query workspace state via `get_workspace_context()` MCP tool.
 > You can list available work via `list_prompts(status=in_progress)` MCP tool.
 

@@ -8,7 +8,7 @@ usage() {
   cat <<'EOF'
 usage: bootstrap-re-pipeline.sh --prompt <prompts/<name>/>
 
-Creates prompt.md and settings.yaml when missing, then validates settings format.
+Creates prompt.md, settings.yaml, and case.yaml when missing, then validates settings format.
 Existing files are preserved.
 EOF
 }
@@ -33,6 +33,7 @@ mkdir -p "$PROMPT_DIR"
 
 prompt_md="$PROMPT_DIR/prompt.md"
 settings_yaml="$PROMPT_DIR/settings.yaml"
+case_yaml="$PROMPT_DIR/case.yaml"
 
 if [[ ! -f "$prompt_md" ]]; then
   cat >"$prompt_md" <<'EOF'
@@ -52,12 +53,24 @@ if [[ ! -f "$settings_yaml" ]]; then
 functionName: replace_me
 targetObjectPath: path/to/{{functionName}}.o
 asm: |
-  # Paste Ghidra/objdump assembly for the target function.
+  # Paste target assembly for the target function.
   nop
   nop
   nop
 EOF
 fi
 
+if [[ ! -f "$case_yaml" ]]; then
+  cat >"$case_yaml" <<'EOF'
+caseId: replace_me
+functionName: replace_me
+targetObjectPath: path/to/{{functionName}}.o
+targetFamily: unknown
+proof: objdiff-0
+status: pending
+EOF
+fi
+
 "$ROOT/scripts/validate-prompt-settings.sh" "$PROMPT_DIR"
+"$ROOT/scripts/validate-case-manifests.sh" "$(dirname "$PROMPT_DIR")"
 echo "RE_BOOTSTRAP_OK prompt=$PROMPT_DIR"

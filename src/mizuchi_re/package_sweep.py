@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .package_verify import GLOBAL_RE, is_code_match, resolve_manifest_path, resolve_msvc_root, resolve_package_path, strip_trailing_padding, verify_source, verify_target_slice
+from .package_verify import GLOBAL_RE, effective_compiler_args, is_code_match, resolve_manifest_path, resolve_msvc_root, resolve_package_path, source_language_for, strip_trailing_padding, verify_source, verify_target_slice
 from .state import atomic_write_json
 
 
@@ -77,7 +77,10 @@ def sweep_recovered_source_package(
 
             for variant_index, variant in enumerate(variants):
                 for profile_index, profile_args in enumerate(profiles):
-                    attempt_id = safe_attempt_id(meta, variant["name"], profile_args, variant_index, profile_index)
+                    profile_arg_set = [*base_args, *profile_args]
+                    source_language = source_language_for(source, meta)
+                    effective_args = effective_compiler_args(profile_arg_set, compiler, source_language, meta)
+                    attempt_id = safe_attempt_id(meta, variant["name"], effective_args, variant_index, profile_index)
                     attempt_dir = sweep_dir / "attempts" / attempt_id
                     attempt_dir.mkdir(parents=True, exist_ok=True)
                     variant_source = attempt_dir / "candidate.c"
@@ -90,7 +93,7 @@ def sweep_recovered_source_package(
                         msvc_root=msvc_root,
                         wine=wine,
                         wineprefix=wineprefix,
-                        compiler_args=[*base_args, *profile_args],
+                        compiler_args=effective_args,
                         clang_target=clang_target,
                     )
                     cached = previous_attempts.get(cache_key)
@@ -106,7 +109,7 @@ def sweep_recovered_source_package(
                             out_dir=attempt_dir,
                             compiler=compiler,
                             clang=clang,
-                            clang_args=[*base_args, *profile_args],
+                            clang_args=effective_args,
                             timeout=timeout,
                             object_compile=True,
                             clang_target=clang_target,
@@ -123,7 +126,7 @@ def sweep_recovered_source_package(
                     attempt["attemptKey"] = cache_key
                     attempt["sourceSha256"] = source_sha256(variant["source"])
                     attempt["compiler"] = compiler
-                    attempt["compilerArgs"] = [*base_args, *profile_args]
+                    attempt["compilerArgs"] = effective_args
                     attempt["clangTarget"] = clang_target
                     attempt["targetSliceSha256"] = target_slice_sha256(meta)
                     attempts_out.write(json.dumps(attempt, sort_keys=True) + "\n")
@@ -373,17 +376,14 @@ def generate_source_variants(source: str, meta: dict[str, Any], max_variants: in
         variants.append(inline_asm)
 
     variant_limit = max(1, max_variants)
-    semantic_limit = variant_limit
     fallback_variant = next((variant for variant in reversed(variants) if not bool(variant.get("semanticSource", True))), None)
-    if fallback_variant is not None:
-        semantic_limit = max(0, variant_limit - 1)
 
     deduped: list[dict[str, Any]] = []
     seen: set[str] = set()
     for variant in variants:
         if not bool(variant.get("semanticSource", True)):
             continue
-        if len(deduped) >= semantic_limit:
+        if len(deduped) >= variant_limit:
             break
         digest = hashlib.sha256(variant["source"].encode("utf-8")).hexdigest()
         if digest in seen:
@@ -392,7 +392,7 @@ def generate_source_variants(source: str, meta: dict[str, Any], max_variants: in
         deduped.append(variant)
     if fallback_variant is not None:
         digest = hashlib.sha256(fallback_variant["source"].encode("utf-8")).hexdigest()
-        if digest not in seen and len(deduped) < variant_limit:
+        if digest not in seen:
             deduped.append(fallback_variant)
     return deduped
 
@@ -1017,7 +1017,7 @@ def normalize_positive_relations(source: str) -> str:
 
 
 def normalize_byte_offset_pointer_arithmetic(source: str) -> str:
-    """Preserve Ghidra's byte-offset global-address idiom under C pointer rules."""
+    """Preserve decompiler byte-offset global-address idioms under C pointer rules."""
 
     type_name = r"(?:unsigned\s+int|signed\s+int|unsigned\s+long|signed\s+long|undefined[0-9]+|uint|int|ulong|long|ushort|short|byte|uchar|char|float|double|[A-Za-z_][A-Za-z0-9_]*)"
     global_name = r"(?:UNK|DAT|PTR|LAB|iRam|uRam|g_)[A-Za-z0-9_]*"

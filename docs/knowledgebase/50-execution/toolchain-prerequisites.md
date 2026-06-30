@@ -6,17 +6,27 @@
 
 | Tool | Purpose | Install hint |
 |------|---------|--------------|
-| **objdiff** | 0 diff = perfect match | [simonlindholm/objdiff](https://github.com/simonlindholm/objdiff) |
+| **objdiff** | 0 diff = perfect match | [encounter/objdiff](https://github.com/encounter/objdiff) |
 | **Project compiler** | Rebuild candidate `.o` with same flags as game | MSVC / clang / agbcc per project |
 | **jq** | Match-claim hook (`.cursor/hooks.json`) | `dnf install jq` / `apt install jq` |
 | **ruby** (or PyYAML) | `scripts/validate-prompt-settings.sh` | Ruby stdlib YAML preferred; else `pip install pyyaml` |
 
-## Ghidra exploration
+Current local verifier:
 
-| Tool | Purpose |
-|------|---------|
-| **AgentDecompile MCP** (`agdec-http`) | Decompile, xrefs, types, cross-build match |
-| **Ghidra shared server** | Odyssey programs at `170.9.241.140:13100/Odyssey` when configured |
+| Tool | Observed |
+|------|----------|
+| `objdiff` | `objdiff-cli 3.7.2` |
+
+## Local MSVC profiles for `swkotor.exe`
+
+| Profile | Root | Banner |
+|---------|------|--------|
+| `vc71` | `target/toolchain-acquire/vctoolkit2003/msitools-extract/Program Files/Microsoft Visual C++ Toolkit 2003/` | `Microsoft (R) 32-bit C/C++ Optimizing Compiler Version 13.10.3052 for 80x86` |
+| `vc80` | `/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main/` | `Microsoft (R) 32-bit C/C++ Optimizing Compiler Version 14.00.50727.42 for 80x86` |
+
+VC7.1 was acquired from `VCToolkitSetup.exe` and extracted with `msitools`.
+The installer SHA256 is
+`03aad135c22e953e0928b118705338afdbd08abf8e4039038ef77945504e65fa`.
 
 ## Programmatic phase
 
@@ -43,26 +53,11 @@
 | Workspace config template | `mizuchi.example.yaml` |
 | Prompt template | `prompts/_template/` |
 
-## Ghidra shared-server constraints
-
-`[REPO]` Observed on `170.9.241.140:13100/Odyssey` (2026-05-29):
-
-| Program | Decompiler | Disassembly (`get-function`) |
-|---------|------------|----------------------------|
-| `/K1/k1_win_gog_swkotor.exe` | Failed to launch | Use other binaries or asm-only path |
-| `/TSL/k2_win_gog_aspyr_swkotor2.exe` | Failed to launch | Same |
-| `/TSL/k2_linux_swkotor2.elf` | Failed to launch | Same |
-| `/TSL/k2_xbox_default.xbe` | Failed to launch | **Works** — use for xref/asm export |
-
-When decompiler is down: export **disassembly** from `get-function`, build prompts from asm, seed m2c manually.
-
-**MCP tip:** Always pass `program_path` as a quoted JSON string, e.g. `"/TSL/k2_xbox_default.xbe"`.
-
 ## Example prompt in this workspace
 
 | Path | Role |
 |------|------|
-| `prompts/fun_00148020/` | 12-byte Xbox getter scaffolded from Ghidra asm |
+| `prompts/fun_00148020/` | 12-byte Xbox getter scaffolded from target assembly |
 | `prompts/_template/` | Copy for new functions |
 
 ## `[OPEN]` Not yet verified in this workspace

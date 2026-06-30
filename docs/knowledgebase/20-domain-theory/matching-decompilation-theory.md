@@ -17,7 +17,7 @@
 
 [OFFICIAL] Decomp communities (e.g. Zelda OoT, game ports) use matching to prove behavioral equivalence at instruction level without executing original binary in CI.
 
-[SYNTH] Ghidra pseudocode optimizes for readability, not register allocation — it cannot substitute for objdiff.
+[SYNTH] Decompiler pseudocode optimizes for readability, not register allocation; it cannot substitute for objdiff.
 
 ## Programmatic vs AI
 
@@ -54,7 +54,7 @@ Matching proves **object** equivalence for one translation unit. Integrator prov
 | `targetObjectPath` | Golden `.o` for objdiff |
 | `asm` | Full function assembly (GAS) from same build |
 
-Optional provenance (tier, program, Ghidra address) belongs in **`notes.md`** or `prompt.md` — not extra YAML keys.
+Optional provenance (tier, binary, address) belongs in **`notes.md`** or `prompt.md` — not extra YAML keys.
 
 ### compile_and_view_assembly
 

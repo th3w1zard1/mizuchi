@@ -6,7 +6,6 @@ usage() {
 Usage: ./scripts/decomp-cli.sh <command> [args]
 
 Commands:
-  ghidra-scout <target>
   decomp-prompt <prompt-name>
   decomp-validate <prompt-name|--all>
   decomp-readiness <prompt-name|--all>
@@ -39,7 +38,7 @@ Commands:
   pe-code-source-roundtrip --binary <game-exe> --out-dir <dir>
   pe-segmented-code-source-roundtrip --binary <game-exe> --package <one-shot-source-dir> --prompts-dir prompts --out-dir <dir>
   source-parity-one-shot <folder-or-binary> [--resume] [--stop-after <stage>]
-  recover <folder-or-binary> [--resume] [--stop-after <stage>] [--function-analysis auto|none|objdump|agentdecompile] [--function-facts-jsonl <facts.jsonl>] [--snapshot-existing-recovery <label>]
+  recover <folder-or-binary> [--resume] [--stop-after <stage>] [--function-analysis auto|none|objdump] [--function-facts-jsonl <facts.jsonl>] [--snapshot-existing-recovery <label>]
   source-parity-feature-index [--out-dir <dir>]
   source-parity-profile-corpus [--max-cases N]
   source-parity-synthesize [--limit N] [--dry-run]
@@ -127,14 +126,6 @@ fi
 shift || true
 
 case "$cmd" in
-  ghidra-scout)
-    target="${1:-}"
-    if [[ -z "$target" ]]; then
-      echo "missing target" >&2
-      exit 1
-    fi
-    echo "Use /ghidra-scout for interactive MCP discovery of: $target"
-    ;;
   decomp-prompt)
     prompt_name="${1:-}"
     if [[ -z "$prompt_name" ]]; then

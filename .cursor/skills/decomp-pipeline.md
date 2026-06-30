@@ -3,7 +3,7 @@
 Purpose: orchestrate full function pipeline end-to-end.
 
 ## Stages
-1. Scout in Ghidra
+1. Gather target assembly, object-slice metadata, and source context
 2. Build prompt folder
 3. Run programmatic phase
 4. Run AI loop only if needed

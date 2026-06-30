@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from .agentdecompile import run_agentdecompile_analysis
 from .context_batch import main as context_batch_main
 from .context_export import ExportConfig, export_context
 from .package_sweep import sweep_recovered_source_package
@@ -18,7 +16,6 @@ from .pipeline import RecoveryConfig, RecoveryRunner
 from .source_parity_profile_corpus import main as source_parity_profile_corpus_main
 from .source_parity_synthesize import main as source_parity_synthesize_main
 from .targets import identify_binary
-from .tools import resolve_steamless_cli
 from .windows import run_recovery_windows
 
 
@@ -84,11 +81,8 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--byte-authority", action="store_true", help="Emit generic byte-exact source authority package.")
     recover.add_argument("--legacy-adapters", action="store_true", help="Allow explicit dispatch to legacy target-specific scripts.")
     recover.add_argument("--snapshot-existing-recovery", metavar="LABEL", help="Copy any previously verified recovery artifacts for this target into a labeled snapshot, for example rev1.")
-    recover.add_argument("--function-analysis", choices=["auto", "none", "objdump", "agentdecompile"], default="auto", help="Tool-backed function-boundary analysis mode.")
-    recover.add_argument("--agentdecompile-server-url", help="Optional AgentDecompile MCP/CLI server URL. Omit to use uvx local mode.")
-    recover.add_argument("--agentdecompile-mode", choices=["auto", "local"], default="local", help="AgentDecompile execution mode. local uses uvx plus PyGhidra in-process.")
-    recover.add_argument("--agentdecompile-batch-size", type=int, default=25, help="Seed/decompile this many function candidates per AgentDecompile subprocess.")
-    recover.add_argument("--function-facts-jsonl", type=Path, help="Machine-generated function facts JSONL, for example AgentDecompile list/decompile output.")
+    recover.add_argument("--function-analysis", choices=["auto", "none", "objdump"], default="auto", help="Tool-backed function-boundary analysis mode.")
+    recover.add_argument("--function-facts-jsonl", type=Path, help="Machine-generated function facts JSONL used as source-candidate context.")
     recover.add_argument("--source-task-limit", type=int, default=500, help="Maximum function candidates to queue for automatic source generation.")
     recover.add_argument("--source-task-offset", type=int, default=0, help="Skip this many eligible function candidates before analysis/source generation.")
     recover.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
@@ -113,10 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("--window-size", type=int, default=25, help="Function candidates per recovery window.")
     windows.add_argument("--start-offset", type=int, default=0, help="Recoverable candidate offset for the first window.")
     windows.add_argument("--max-windows", type=int, help="Maximum number of windows to process in this invocation.")
-    windows.add_argument("--function-analysis", choices=["auto", "none", "objdump", "agentdecompile"], default="agentdecompile", help="Tool-backed function-boundary analysis mode for each window.")
-    windows.add_argument("--agentdecompile-server-url", help="Optional AgentDecompile MCP/CLI server URL. Omit to use uvx local mode.")
-    windows.add_argument("--agentdecompile-mode", choices=["auto", "local"], default="local", help="AgentDecompile execution mode.")
-    windows.add_argument("--agentdecompile-batch-size", type=int, default=25, help="Seed/decompile this many function candidates per AgentDecompile subprocess.")
+    windows.add_argument("--function-analysis", choices=["auto", "none", "objdump"], default="auto", help="Tool-backed function-boundary analysis mode for each window.")
     windows.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
     windows.add_argument("--context-format", choices=["json", "md"], default="json", help="LLM-readable context export format used by the recover pipeline.")
     windows.add_argument("--context-binary-analysis", choices=["light", "standard", "deep"], default="standard", help="Binary analysis depth for the recover context stage.")
@@ -173,20 +164,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_package_verify_args(sweep)
     sweep.add_argument("--max-variants-per-function", type=int, default=8, help="Maximum generated source variants per function.")
     sweep.add_argument("--compiler-profile", "--clang-profile", dest="compiler_profile", action="append", default=[], help="Comma-separated compiler args for one profile, for example --compiler-profile=-O2 or --compiler-profile=/O2,/GS-,/Oy. Repeat for multiple profiles.")
-
-    agent = sub.add_parser("agentdecompile", help="Run AgentDecompile directly against one binary and emit function facts JSONL.")
-    agent.add_argument("input", type=Path, help="Binary to analyze.")
-    agent.add_argument("--out", type=Path, required=True, help="Output JSONL for function facts.")
-    agent.add_argument("--run-dir", type=Path, default=Path("target/agentdecompile"), help="Working directory for AgentDecompile cache and project state.")
-    agent.add_argument("--limit", type=int, default=25, help="Maximum functions to discover or decompile per run.")
-    agent.add_argument("--offset", type=int, default=0, help="Skip this many eligible seed candidates before decompiling.")
-    agent.add_argument("--timeout", type=int, default=240, help="Per tool-seq timeout in seconds.")
-    agent.add_argument("--batch-size", type=int, default=25, help="Seed batch size for decompile stage.")
-    agent.add_argument("--seed-facts-jsonl", type=Path, help="Optional seed function facts JSONL to prioritize decompilation.")
-    agent.add_argument("--no-auto-analysis-image", action="store_true", help="Do not attempt Steamless unpacking for PE inputs before AgentDecompile.")
-    agent.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare packed PE analysis images when available.")
-    agent.add_argument("--agentdecompile-server-url", help="Optional AgentDecompile MCP/CLI server URL.")
-    agent.add_argument("--agentdecompile-mode", choices=["auto", "local"], default="local", help="AgentDecompile execution mode. local uses uvx plus PyGhidra in-process.")
 
     profile = sub.add_parser("compiler-profile-corpus", help="Select and sweep a compiler-profile corpus from verified matched examples.")
     profile.add_argument("--matched-examples", type=Path, default=Path("target/source-parity-index/swkotor/matched-examples.jsonl"))
@@ -262,9 +239,6 @@ def run_recover(args: argparse.Namespace) -> int:
         enable_legacy_adapters=args.legacy_adapters,
         snapshot_existing_label=args.snapshot_existing_recovery,
         function_analysis=args.function_analysis,
-        agentdecompile_server_url=args.agentdecompile_server_url,
-        agentdecompile_mode=args.agentdecompile_mode,
-        agentdecompile_batch_size=args.agentdecompile_batch_size,
         function_facts_jsonl=args.function_facts_jsonl,
         source_task_limit=args.source_task_limit,
         source_task_offset=args.source_task_offset,
@@ -297,9 +271,6 @@ def run_recover_windows(args: argparse.Namespace) -> int:
         progress_width=args.progress_width,
         stage_timeout=args.stage_timeout,
         function_analysis=args.function_analysis,
-        agentdecompile_server_url=args.agentdecompile_server_url,
-        agentdecompile_mode=args.agentdecompile_mode,
-        agentdecompile_batch_size=args.agentdecompile_batch_size,
         steamless_cli=args.steamless_cli,
         context_format=args.context_format,
         context_binary_analysis=args.context_binary_analysis,
@@ -479,113 +450,6 @@ def run_sweep_package(args: argparse.Namespace) -> int:
     return 0 if report.get("status") == "matched" else 1
 
 
-def run_agentdecompile(args: argparse.Namespace) -> int:
-    input_path, prep_summary = prepare_agentdecompile_input(args)
-    seed_facts_path = args.seed_facts_jsonl or default_agentdecompile_seed_facts(args.input, input_path)
-    seed_rows: list[dict] = []
-    if seed_facts_path and seed_facts_path.exists():
-        for line in seed_facts_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                seed_rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    summary = run_agentdecompile_analysis(
-        binary_path=input_path,
-        out_path=args.out,
-        run_dir=args.run_dir,
-        limit=args.limit,
-        timeout=args.timeout,
-        offset=args.offset,
-        candidate_functions=seed_rows,
-        batch_size=args.batch_size,
-        server_url=args.agentdecompile_server_url,
-        mode=args.agentdecompile_mode,
-    )
-    summary["analysisInput"] = prep_summary
-    if seed_facts_path:
-        summary["seedFactsPath"] = str(seed_facts_path)
-    print(json.dumps(summary, indent=2, sort_keys=True))
-    return 0 if summary.get("status") == "complete" else 1
-
-
-def prepare_agentdecompile_input(args: argparse.Namespace) -> tuple[Path, dict[str, object]]:
-    identity = identify_binary(args.input)
-    summary: dict[str, object] = {
-        "originalBinaryPath": str(identity.binary_path),
-        "analysisBinaryPath": str(identity.binary_path),
-        "status": "original",
-        "transform": None,
-        "claimBoundary": "analysis image is an acquisition input; it is not source parity proof",
-    }
-    if args.no_auto_analysis_image or identity.format != "pe":
-        return identity.binary_path, summary
-
-    steamless = resolve_steamless_cli(Path.cwd(), args.steamless_cli)
-    mono = shutil.which("mono")
-    if not steamless or not mono:
-        summary.update(
-            {
-                "status": "original",
-                "transformAttempted": "steamless-unpacked-pe",
-                "transformResult": "missing-tool",
-                "steamlessCli": str(steamless) if steamless else None,
-                "mono": mono,
-            }
-        )
-        return identity.binary_path, summary
-
-    image_dir = (args.run_dir / "analysis-image").resolve()
-    image_dir.mkdir(parents=True, exist_ok=True)
-    original_copy = image_dir / identity.binary_path.name
-    if not original_copy.exists() or original_copy.stat().st_size != identity.binary_path.stat().st_size:
-        shutil.copy2(identity.binary_path, original_copy)
-    unpacked = Path(str(original_copy) + ".unpacked.exe")
-    proc: subprocess.CompletedProcess[str] | None = None
-    if not unpacked.exists():
-        proc = subprocess.run(
-            ["mono", str(steamless), "--quiet", "--keepbind", "--dumppayload", "--dumpdrmp", str(original_copy)],
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=args.timeout,
-        )
-    if unpacked.exists():
-        summary.update(
-            {
-                "analysisBinaryPath": str(unpacked),
-                "status": "transformed",
-                "transform": "steamless-unpacked-pe",
-                "transformTool": str(steamless),
-                "transformReturnCode": proc.returncode if proc is not None else None,
-            }
-        )
-        return unpacked, summary
-    summary.update(
-        {
-            "status": "original",
-            "transformAttempted": "steamless-unpacked-pe",
-            "transformResult": "not-produced",
-            "transformTool": str(steamless),
-            "transformReturnCode": proc.returncode if proc is not None else None,
-            "transformStdout": proc.stdout[-4000:] if proc is not None else "",
-            "transformStderr": proc.stderr[-4000:] if proc is not None else "",
-        }
-    )
-    return identity.binary_path, summary
-
-
-def default_agentdecompile_seed_facts(original_input: Path, analysis_input: Path) -> Path | None:
-    """Use the checked-in SWKOTOR acquisition convention when the caller gives the Steam exe directly."""
-
-    names = {original_input.name.lower(), analysis_input.name.lower()}
-    if "swkotor.exe" not in names and "swkotor.original.exe.unpacked.exe" not in names:
-        return None
-    candidate = Path("target/swkotor-unpack/facts/function-inventory.jsonl")
-    return candidate if candidate.exists() else None
-
-
 def run_source_parity_synthesize(args: argparse.Namespace) -> int:
     argv = [
         "--queue",
@@ -687,8 +551,6 @@ def main(argv: list[str] | None = None) -> int:
         return run_compiler_profile_corpus(args)
     if args.command == "source-parity-synthesize":
         return run_source_parity_synthesize(args)
-    if args.command == "agentdecompile":
-        return run_agentdecompile(args)
     parser.print_help()
     return 2
 

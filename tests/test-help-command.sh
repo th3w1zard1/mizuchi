@@ -169,13 +169,90 @@ test_quick_reference_not_empty() {
   [[ "$count" -gt 0 ]]
 }
 
+test_quick_reference_mentions_blocked_filter() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'list_prompts(status=blocked)'
+}
+
+test_quick_reference_mentions_decomp_function_receipt() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'build/decomp-function.json'
+}
+
+test_quick_reference_mentions_matcher() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh matcher'
+}
+
+test_quick_reference_mentions_vacuum_init_primary() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh vacuum init'
+}
+
+test_quick_reference_mentions_scorer() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh scorer'
+}
+
+test_quick_reference_mentions_vacuum() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh vacuum start' && \
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q -- '--timeout 30m'
+}
+
+test_quick_reference_mentions_vacuum_reset() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'vacuum resume|status|reset-queue'
+}
+
+test_quick_reference_mentions_commit_verified_match() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh commit-verified-match'
+}
+
+test_quick_reference_mentions_vacuum_init() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh vacuum init'
+}
+
+test_quick_reference_mentions_import_one_shot_tasks() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh import-one-shot-tasks'
+}
+
+test_quick_reference_mentions_one_shot_task_coverage() {
+  local output
+  output=$("$script_path" 2>&1)
+
+  echo "$output" | jq -r '.quick_reference.sections[].content' | grep -q 'decomp-cli.sh one-shot-task-coverage'
+}
+
 # Test 15: Agents include expected names
 test_expected_agent_names() {
   local output
   output=$("$script_path" 2>&1)
   
   # Check for expected agent names
-  echo "$output" | jq '.agents.items[].name' | grep -q "ghidra-binary-scout" && \
   echo "$output" | jq '.agents.items[].name' | grep -q "decomp-prompt-architect"
 }
 
@@ -185,7 +262,6 @@ test_expected_command_names() {
   output=$("$script_path" 2>&1)
   
   # Check for some expected commands
-  echo "$output" | jq '.commands.items[].name' | grep -q "/ghidra-scout" || \
   echo "$output" | jq '.commands.items[].name' | grep -q "/decomp-function"
 }
 
@@ -197,7 +273,8 @@ test_required_mcp_tools() {
   # Check for required tools
   echo "$output" | jq '.mcp_tools.items[].name' | grep -q "get_workspace_context" && \
   echo "$output" | jq '.mcp_tools.items[].name' | grep -q "list_prompts" && \
-  echo "$output" | jq '.mcp_tools.items[].name' | grep -q "run_objdiff"
+  echo "$output" | jq '.mcp_tools.items[].name' | grep -q "run_objdiff" && \
+  echo "$output" | jq '.mcp_tools.items[].name' | grep -q "integrate_verified_match"
 }
 
 # Test 18: Timestamp is valid ISO format
@@ -253,9 +330,20 @@ main() {
   run_test "MCP tool items have required fields (name, description)" test_mcp_tool_items_have_fields
   run_test "Quick reference section has correct structure" test_quick_reference_valid
   run_test "Quick reference has content sections" test_quick_reference_not_empty
+run_test "Quick reference mentions blocked prompt filter" test_quick_reference_mentions_blocked_filter
+run_test "Quick reference mentions decomp-function receipt" test_quick_reference_mentions_decomp_function_receipt
+run_test "Quick reference mentions matcher command" test_quick_reference_mentions_matcher
+run_test "Quick reference mentions vacuum init as primary init" test_quick_reference_mentions_vacuum_init_primary
+run_test "Quick reference mentions scorer command" test_quick_reference_mentions_scorer
+run_test "Quick reference mentions vacuum command" test_quick_reference_mentions_vacuum
+run_test "Quick reference mentions vacuum resume/reset" test_quick_reference_mentions_vacuum_reset
+run_test "Quick reference mentions commit verified match" test_quick_reference_mentions_commit_verified_match
+run_test "Quick reference mentions vacuum init" test_quick_reference_mentions_vacuum_init
+run_test "Quick reference mentions import one-shot tasks" test_quick_reference_mentions_import_one_shot_tasks
+run_test "Quick reference mentions one-shot task coverage" test_quick_reference_mentions_one_shot_task_coverage
   run_test "Agents include expected names" test_expected_agent_names
-  run_test "Commands include expected names (ghidra-scout, decomp-function)" test_expected_command_names
-  run_test "MCP tools include required tools (get_workspace_context, list_prompts, run_objdiff)" test_required_mcp_tools
+  run_test "Commands include expected names (decomp-function)" test_expected_command_names
+  run_test "MCP tools include required tools (get_workspace_context, list_prompts, run_objdiff, integrate_verified_match)" test_required_mcp_tools
   run_test "Timestamp is valid ISO format" test_timestamp_valid_format
   run_test ".cursor/commands/help.md file exists" test_help_command_file_exists
   run_test "Agent AGENT.md files have capabilities section" test_agent_files_have_capabilities

@@ -5,7 +5,6 @@ set -euo pipefail
 # Usage: inject-context.sh <agent-name> [--json]
 # 
 # Examples:
-#   inject-context.sh ghidra-binary-scout
 #   inject-context.sh decomp-function-agent --json
 #
 # Output formats:
@@ -43,7 +42,6 @@ parse_arguments() {
     echo "Usage: inject-context.sh <agent-name> [--json]" >&2
     echo "" >&2
     echo "Available agents:" >&2
-    echo "  - ghidra-binary-scout" >&2
     echo "  - decomp-prompt-architect" >&2
     echo "  - decomp-function-agent" >&2
     exit 1
@@ -117,13 +115,16 @@ extract_context_field() {
         total_prompts: .workspace_metrics.total_prompts,
         matched: .workspace_metrics.matched,
         integrated: .workspace_metrics.integrated,
-        in_progress: (.workspace_metrics.total_prompts - .workspace_metrics.matched - .workspace_metrics.integrated),
+        blocked: (.workspace_metrics.blocked // 0),
+        runnable: (.workspace_metrics.total_prompts - .workspace_metrics.matched - .workspace_metrics.integrated - (.workspace_metrics.blocked // 0)),
         match_rate: .workspace_metrics.match_rate_percent
       }'
       ;;
     prompt_queue_summary)
       echo "$context_json" | jq -c '{
         total: (.prompt_queue | length),
+        blocked: ([.prompt_queue[] | select(.status == "blocked")] | length),
+        blocked_prompts: ([.prompt_queue[] | select(.status == "blocked") | {name: .name, blocked_reason: .blocked_reason}] | .[0:3]),
         recent: (.prompt_queue | sort_by(.last_updated_mtime) | reverse | .[0:3] | map({name: .name, status: .status}))
       }'
       ;;
@@ -133,9 +134,6 @@ extract_context_field() {
         branch: .active_branches.current_branch,
         unpushed: .active_branches.unpushed_commits
       }'
-      ;;
-    ghidra_status)
-      echo "$context_json" | jq -c '.ghidra_status'
       ;;
     constraints)
       # Static constraints (not extracted from context)
@@ -170,36 +168,32 @@ build_markdown_context() {
     
     case "$field" in
       workspace_state)
-        local total matched integrated match_rate
+        local total matched integrated blocked runnable match_rate
         total=$(echo "$field_data" | jq -r '.total_prompts')
         matched=$(echo "$field_data" | jq -r '.matched')
         integrated=$(echo "$field_data" | jq -r '.integrated')
+        blocked=$(echo "$field_data" | jq -r '.blocked')
+        runnable=$(echo "$field_data" | jq -r '.runnable')
         match_rate=$(echo "$field_data" | jq -r '.match_rate')
         
         context_summary+="**Workspace State:**
 - Total prompts: $total
-- Matched: $matched | Integrated: $integrated | Match rate: ${match_rate}%
+- Matched: $matched | Integrated: $integrated | Blocked: $blocked | Runnable: $runnable | Match rate: ${match_rate}%
 "
         ;;
       prompt_queue_summary)
-        local queue_total
+        local queue_total blocked_count
         queue_total=$(echo "$field_data" | jq -r '.total')
+        blocked_count=$(echo "$field_data" | jq -r '.blocked')
         
         context_summary+="**Recent Work:**
 - Queued: $queue_total prompts
+- Blocked: $blocked_count prompts
 "
         ;;
       recent_activity)
         context_summary+="**Recent Activity:**
 - Latest operations in this session
-"
-        ;;
-      ghidra_status)
-        local server_count
-        server_count=$(echo "$field_data" | jq -r '.connected_servers | length')
-        
-        context_summary+="**Ghidra Status:**
-- Servers: $server_count connected
 "
         ;;
       constraints)

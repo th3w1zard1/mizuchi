@@ -116,7 +116,7 @@ get_mcp_tools() {
     # Map server names to tool names
     case "$server" in
       workspace-context)
-        tools+=("$(jq -n --arg n 'get_workspace_context' --arg d 'Query current workspace state: prompt queue, ghidra status, build artifacts, active branches' '{name: $n, description: $d}')")
+        tools+=("$(jq -n --arg n 'get_workspace_context' --arg d 'Query current workspace state: prompt queue, build artifacts, active branches' '{name: $n, description: $d}')")
         ;;
       list-prompts)
         tools+=("$(jq -n --arg n 'list_prompts' --arg d 'List available prompt folders with metadata; optional filter by status' '{name: $n, description: $d}')")
@@ -126,9 +126,7 @@ get_mcp_tools() {
         ;;
       mizuchi)
         tools+=("$(jq -n --arg n 'compile_and_view_assembly' --arg d 'Compile C code and view resulting assembly for matching comparison' '{name: $n, description: $d}')")
-        ;;
-      agdec-http)
-        tools+=("$(jq -n --arg n 'agentdecompile_mcp' --arg d 'AgentDecompile MCP: search-everything, get-function, get-call-graph, match-function' '{name: $n, description: $d}')")
+        tools+=("$(jq -n --arg n 'integrate_verified_match' --arg d 'Re-run match verification, land candidate source, and record integration receipt' '{name: $n, description: $d}')")
         ;;
     esac
   done <<< "$servers"
@@ -146,19 +144,27 @@ get_quick_reference() {
   jq -n \
     --arg title "Quick Reference" \
     --arg section1_title "Typical Workflow" \
-    --arg section1 "1. Use /ghidra-scout to find a function in Ghidra
-2. Use /decomp-prompt or decomp-prompt-architect to create a prompt folder
-3. Use /decomp-function or decomp-function-agent to run matching loop
-4. Use /decomp-integrate to land matched function into source tree
-5. Check status anytime with get_workspace_context() or list_prompts()" \
+    --arg section1 "1. Use /decomp-prompt or decomp-prompt-architect to create a prompt folder from target assembly, m2c seed, and known source context
+2a. Import one-shot package tasks with ./scripts/decomp-cli.sh import-one-shot-tasks --package target/<app>/one-shot-source --prompts-dir prompts
+2b. Audit imported task coverage with ./scripts/decomp-cli.sh one-shot-task-coverage --package target/<app>/one-shot-source --prompts-dir prompts --queue state/queue.json
+3. Initialize autonomous vacuum state with ./scripts/decomp-cli.sh vacuum init --queue state/queue.json --prompts-dir prompts
+4. Score queue order with ./scripts/decomp-cli.sh scorer --queue state/queue.json --update-queue --out state/scores.json
+5. Run ./scripts/decomp-cli.sh vacuum start --queue state/queue.json --max-functions 1 --timeout 30m for persistent autonomous orchestration
+6. Use ./scripts/decomp-cli.sh matcher <name> for a fixed one-shot trial.c, or /decomp-function for full programmatic → AI flow
+7. Inspect build/matcher.json and build/decomp-function.json for receipts
+8. Optionally commit a verified unit with ./scripts/decomp-cli.sh commit-verified-match --prompt prompts/<name> --dry-run
+9. Use /decomp-integrate to land matched function into source tree
+10. Resume or triage with ./scripts/decomp-cli.sh vacuum resume|status|reset-queue --name <fn>
+11. Check status anytime with get_workspace_context(), list_prompts(), or queue summary" \
     --arg section2_title "Common Queries (for agents)" \
     --arg section2 "get_workspace_context()      — Get full workspace snapshot
 list_prompts(status=matched)   — List only matched functions
+list_prompts(status=blocked)   — List prompts blocked by missing proof inputs/toolchains
 list_prompts(status=in_progress) — List work in progress
-run_objdiff(target, candidate) — Verify match before integration" \
+run_objdiff(target, candidate) — Verify match before integration
+integrate_verified_match(prompt, source_out) — Land verified match with receipt" \
     --arg section3_title "Capabilities by Role" \
-    --arg section3 "ghidra-binary-scout: Exploration only (no matching)
-decomp-prompt-architect: Prompt assembly (no matching)
+    --arg section3 "decomp-prompt-architect: Prompt assembly (no matching)
 decomp-function-agent: End-to-end matching + verification" \
     '{title: $title, sections: [
        {title: $section1_title, content: $section1},
@@ -210,4 +216,3 @@ main() {
 }
 
 main "$@"
-

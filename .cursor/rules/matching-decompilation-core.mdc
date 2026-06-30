@@ -26,14 +26,13 @@ A function is **matched** only when **objdiff reports 0 differences** between th
 
 Never say "matched", "done", or "byte-identical" without running objdiff and reporting **0** diffs.
 
-Ghidra pseudocode ≠ proof. m2c output ≠ proof.
+Decompiler pseudocode ≠ proof. m2c output ≠ proof.
 
 ## Skills to load
 
 | Task | Skill |
 |------|-------|
 | Overview | `matching-decompilation-overview` |
-| Ghidra | `ghidra-re-workflow` |
 | Pipeline | `decomp-pipeline` |
 | Verify | `decomp-verify-match` |
 

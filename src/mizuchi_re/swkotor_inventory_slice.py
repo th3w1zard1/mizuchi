@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a COFF target object from a Ghidra swkotor function inventory row."""
+"""Create a COFF target object from a swkotor function inventory row."""
 
 from __future__ import annotations
 

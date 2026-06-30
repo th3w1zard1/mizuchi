@@ -1,52 +1,92 @@
 ---
-last_updated: 2026-05-29
+last_updated: 2026-06-29
 ---
 
-# Strategy — Mizuchi / Odyssey matching decompilation
+# Strategy — Mizuchi source parity recovery
 
 ## Target problem
 
-KOTOR and related Odyssey binaries need **provably correct** C recovery: pseudocode that compiles and matches the **original object file byte-for-byte**. Readable decompilation alone does not ship; only **objdiff 0** counts as matched.
+KOTOR and related compiled binaries need **provable source parity**, not just
+readable decompiler output. The real target is high-level C/C++ that rebuilds
+the original executable code through the original-equivalent compiler, flags,
+ABI, object boundaries, and linker behavior. Readable pseudocode, byte replay,
+and whole-file hash roundtrips are useful support lanes, but they are not
+source recovery.
 
 ## Our approach
 
-**Ghidra for discovery, Mizuchi-style pipeline for proof.**
+**Acquisition first, compiler forensics second, matching third.**
 
-1. **Explore** in Ghidra (AgentDecompile MCP): find functions, types, xrefs, assembly.
-2. **Package** each target as `prompts/<fn>/` (`prompt.md` + strict `settings.yaml`).
-3. **Run** setup → programmatic (m2c, compile, objdiff, permuter) → sandboxed AI (`compile_and_view_assembly` loop).
-4. **Integrate** only after objdiff 0, via worktree or manual stub replacement.
+1. **Acquire the real code target.** For packed PE targets such as
+   `swkotor.exe`, operate on the unpacked analysis image and maintain an
+   executable coverage map.
+2. **Recover boundaries and context without heavyweight decompiler services.**
+   Prefer binary inventory, symbol/map data, disassembly, existing unmatched
+   assembly, upstream Mizuchi prompts, m2c, decomp-permuter, and compiler
+   feedback. These are candidate-generation inputs, not proof.
+3. **Build a compiler-profile corpus.** Identify compiler family, version,
+   flags, ABI, and object granularity through diverse small probes before
+   spending effort on large functions.
+4. **Match one function or one object at a time.** Generate high-level source
+   candidates automatically, compile with a recorded toolchain profile, and
+   accept only `objdiff 0` against a relocation-aware target object or an
+   equivalent stronger gate.
+5. **Promote upward only after proof.** Move from function matches to
+   translation units, then to linked executable-code parity, while keeping
+   data/resources/debug metadata explicitly separate.
 
-Cursor plugin `matching-decompilation-re` encodes skills, agents, rules, and hooks so agents follow this discipline without benchmarks or scoring studies.
+This workspace exists to make that loop operational and agent-usable. It is not
+a claim that arbitrary whole-program source recovery is already solved.
 
 ## Who it's for
 
-- Contributors matching functions in an Odyssey/KOTOR decomp tree
-- AI agents operating under sandbox + verification invariants
-- Anyone bridging shared Ghidra (`Odyssey` server) with local Mizuchi runs
+- Contributors recovering source parity for game binaries such as KOTOR
+- AI agents operating under strict proof and claim-boundary rules
+- Reverse engineers who need a simple bridge from binary/disassembly context to
+  compiler-in-the-loop verification
 
 ## Key metrics
 
 | Metric | Where | What good looks like |
 |--------|-------|----------------------|
-| Match gate | objdiff per function | **0 differences** |
-| Prompt queue | `prompts/*/notes.md` state | `matched` / `integrated` growth |
-| Atlas coverage | `mizuchi-db.json` (when indexed) | More similar matched examples in new prompts |
-| Integrator health | Post-match build | Green compare after stub swap |
+| Function parity | Target object or relocation-aware slice compare | **objdiff 0** or equivalent strong object parity |
+| Compiler forensics | Profile corpus receipts | Multiple idiom classes agree on one profile |
+| Source coverage | `recovered-source/coverage.json` | More verified high-level functions, not just generated candidates |
+| Translation-unit parity | Source-built object compare | Full object match, not isolated byte snippets |
+| Link parity | Executable-code compare | Rebuilt code ranges match unpacked target code |
 
 ## Tracks
 
-1. **Ghidra scout → prompt** — Recon binaries (`/K1/...`, `/TSL/...`), export asm + types into prompt folders.
-2. **Programmatic first** — m2c + permuter before spending AI tokens; stop on perfect match.
-3. **Sandboxed AI** — Agent uses `compile_and_view_assembly` only; no direct source edits until integrate.
-4. **Integrate & index** — Land verified C; refresh Decomp Atlas for the next function.
+1. **Executable acquisition and coverage**
+   - Unpack, inventory, and map executable ranges, thunks, imports, globals,
+     RTTI/vtables, jump tables, and undecoded regions.
+2. **Compiler-profile corpus**
+   - Sweep candidate toolchains and flags across diverse small probes; persist
+     positive and negative evidence as first-class artifacts.
+3. **Relocation-aware function/object verification**
+   - Promote from weak code-slice byte checks toward true target-object
+     reconstruction and `objdiff` parity.
+4. **Automatic candidate generation**
+   - Use matched-example retrieval, source-shape synthesis, one-shot generation,
+     m2c/decomp-permuter style programmatic tools, and local repair loops to
+     propose C/C++ automatically.
+5. **Translation-unit and link parity**
+   - Reassemble verified functions, data objects, and libraries into source
+     shards, then into linked executable-code parity.
 
 ## Not working on
 
-- 60-function benchmark methodology or model leaderboards (article evaluation only)
-- Semantic-only decompilation without objdiff proof
-- Unsandboxed agent writes to the main tree during matching loops
+- Claiming semantic source recovery from byte emitters, `.incbin`, inline
+  assembly, or copied target bytes
+- Treating decompiler pseudocode as proof rather than context
+- Trusting current LLM decompiler output without compiler-in-the-loop
+  verification
+- Pretending whole-executable parity is already available before function,
+  object, translation-unit, and linker evidence exists
 
 ## Marketing (optional)
 
-Workflow grounded in [Macabeus's matching decompilation article](https://gambiconf.substack.com/p/can-llms-really-do-matching-decompilation) and [Mizuchi](https://github.com/macabeus/mizuchi). This workspace packages the **operational RE path**, not the paper's scoring experiment.
+Workflow grounded in Bruno Macabeus' matching-decompilation methodology, Chris
+Lewis' one-shot throughput workflow, objdiff/decomp.dev style proof gates, and
+compiler-in-the-loop repair. This workspace aims to operationalize the real
+source-parity path, not to market semantic decompilation as already solved.

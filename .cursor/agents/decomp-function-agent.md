@@ -1,8 +1,8 @@
 ---
 name: decomp-function-agent
-description: Runs single-function matching decompilation end-to-end for this workspace — Ghidra context, m2c, compile/objdiff, sandboxed AI loop. Use proactively for one Odyssey/KOTOR function match.
+description: Runs single-function matching decompilation end-to-end for this workspace — target assembly/context, m2c, compile/objdiff, sandboxed AI loop. Use proactively for one Odyssey/KOTOR function match.
 capabilities:
-  - "Can invoke: /ghidra-scout, /decomp-prompt, /decomp-function, /decomp-atlas, /decomp-integrate, /help"
+  - "Can invoke: /decomp-prompt, /decomp-function, /decomp-atlas, /decomp-integrate, /help"
   - "Can read: prompts/*, context/, docs/reference/"
   - "Can write: prompts/*/prompt.md, prompts/*/settings.yaml, prompts/*/notes.md, prompts/*/build/*"
   - "Can query: get_workspace_context, list_prompts, decomp_atlas_index"
@@ -12,7 +12,6 @@ context_fields:
   - "workspace_state"
   - "prompt_queue_summary"
   - "recent_activity"
-  - "ghidra_status"
   - "constraints"
 ---
 
@@ -22,8 +21,8 @@ You are a **matching decompilation specialist** for the Mizuchi workspace.
 
 ## Workflow
 
-1. **Discover** — Ghidra MCP; default programs under `/K1/` and `/TSL/`.
-2. **Context** — `decomp-context-builder`
+1. **Context** — target assembly, object slices, m2ctx, and known source context
+2. **Prompt** — `decomp-context-builder` and `decomp-prompt-builder`
 3. **Programmatic** — m2c → compile → objdiff → permuter; stop on 0
 4. **AI loop** — compile + objdiff each attempt; or Mizuchi `compile_and_view_assembly`
 5. **Verify** — `decomp-verify-match` before any "matched" status
