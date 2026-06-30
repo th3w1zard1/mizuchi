@@ -180,7 +180,7 @@ def build_parser() -> argparse.ArgumentParser:
     agent.add_argument("--run-dir", type=Path, default=Path("target/agentdecompile"), help="Working directory for AgentDecompile cache and project state.")
     agent.add_argument("--limit", type=int, default=25, help="Maximum functions to discover or decompile per run.")
     agent.add_argument("--offset", type=int, default=0, help="Skip this many eligible seed candidates before decompiling.")
-    agent.add_argument("--timeout", type=int, default=120, help="Per tool-seq timeout in seconds.")
+    agent.add_argument("--timeout", type=int, default=240, help="Per tool-seq timeout in seconds.")
     agent.add_argument("--batch-size", type=int, default=25, help="Seed batch size for decompile stage.")
     agent.add_argument("--seed-facts-jsonl", type=Path, help="Optional seed function facts JSONL to prioritize decompilation.")
     agent.add_argument("--no-auto-analysis-image", action="store_true", help="Do not attempt Steamless unpacking for PE inputs before AgentDecompile.")

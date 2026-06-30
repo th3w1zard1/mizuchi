@@ -56,7 +56,26 @@ def run_agentdecompile_analysis(
         mode=mode,
         sequence=sequence,
     )
-    proc = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False, timeout=timeout)
+    try:
+        proc = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        write_facts(out_path, [])
+        return {
+            "tool": "agentdecompile",
+            "status": "failed",
+            "reason": "timeout",
+            "timeout": timeout,
+            "returnCode": None,
+            "factsPath": str(out_path),
+            "functionsFound": 0,
+            "seedCandidates": len(seed_candidates),
+            "candidateOffset": max(0, offset),
+            "mode": mode,
+            "serverUrl": server_url,
+            "command": redact_command(command),
+            "stdout": timeout_text(exc.stdout),
+            "stderr": timeout_text(exc.stderr),
+        }
     parsed = parse_cli_json(proc.stdout)
     facts = facts_from_tool_seq(parsed, binary_path)
     decompile_summary: dict[str, Any] = {
@@ -71,9 +90,7 @@ def run_agentdecompile_analysis(
             "stdout": proc.stdout[-2000:],
             "stderr": proc.stderr[-2000:],
         }
-    with out_path.open("w", encoding="utf-8") as fh:
-        for fact in facts:
-            fh.write(json.dumps(fact, sort_keys=True) + "\n")
+    write_facts(out_path, facts)
     return {
         "tool": "agentdecompile",
         "status": "complete" if proc.returncode == 0 and facts else "failed",
@@ -120,7 +137,24 @@ def run_seeded_agentdecompile_analysis(
             mode=mode,
             sequence=sequence,
         )
-        proc = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False, timeout=timeout)
+        try:
+            proc = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False, timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            stdout_tail = (stdout_tail + "\n" + timeout_text(exc.stdout))[-4000:]
+            stderr_tail = (stderr_tail + "\n" + timeout_text(exc.stderr))[-4000:]
+            batches.append(
+                {
+                    "index": index,
+                    "seedCandidates": len(chunk),
+                    "factsFound": 0,
+                    "decompiled": 0,
+                    "returnCode": None,
+                    "status": "timeout",
+                    "timeout": timeout,
+                    "command": redact_command(command),
+                }
+            )
+            break
         parsed = parse_cli_json(proc.stdout)
         batch_facts = seeded_facts_from_tool_seq(parsed, binary_path, chunk)
         facts.extend(batch_facts)
@@ -138,15 +172,15 @@ def run_seeded_agentdecompile_analysis(
             }
         )
 
-    with out_path.open("w", encoding="utf-8") as fh:
-        for fact in facts:
-            fh.write(json.dumps(fact, sort_keys=True) + "\n")
+    write_facts(out_path, facts)
 
     nonzero = [code for code in return_codes if code != 0]
-    return_code = nonzero[-1] if nonzero else (return_codes[-1] if return_codes else 1)
+    timed_out = any(batch.get("status") == "timeout" for batch in batches)
+    return_code = nonzero[-1] if nonzero else (return_codes[-1] if return_codes else None if timed_out else 1)
     return {
         "tool": "agentdecompile",
-        "status": "complete" if return_code == 0 and facts else "failed",
+        "status": "complete" if return_code == 0 and facts and not timed_out else "failed",
+        "reason": "timeout" if timed_out else None,
         "returnCode": return_code,
         "factsPath": str(out_path),
         "functionsFound": len(facts),
@@ -170,6 +204,20 @@ def run_seeded_agentdecompile_analysis(
 
 def chunks(items: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
     return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def write_facts(path: Path, facts: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as fh:
+        for fact in facts:
+            fh.write(json.dumps(fact, sort_keys=True) + "\n")
+
+
+def timeout_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")[-4000:]
+    return value[-4000:]
 
 
 def build_list_sequence(binary_path: Path, limit: int, seed_candidates: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
