@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from .pipeline import RecoveryConfig, RecoveryRunner
 from .source_parity_profile_corpus import main as source_parity_profile_corpus_main
 from .source_parity_synthesize import main as source_parity_synthesize_main
 from .targets import identify_binary
+from .tools import resolve_steamless_cli
 from .windows import run_recovery_windows
 
 
@@ -180,6 +183,8 @@ def build_parser() -> argparse.ArgumentParser:
     agent.add_argument("--timeout", type=int, default=120, help="Per tool-seq timeout in seconds.")
     agent.add_argument("--batch-size", type=int, default=25, help="Seed batch size for decompile stage.")
     agent.add_argument("--seed-facts-jsonl", type=Path, help="Optional seed function facts JSONL to prioritize decompilation.")
+    agent.add_argument("--no-auto-analysis-image", action="store_true", help="Do not attempt Steamless unpacking for PE inputs before AgentDecompile.")
+    agent.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare packed PE analysis images when available.")
     agent.add_argument("--agentdecompile-server-url", help="Optional AgentDecompile MCP/CLI server URL.")
     agent.add_argument("--agentdecompile-mode", choices=["auto", "local"], default="local", help="AgentDecompile execution mode. local uses uvx plus PyGhidra in-process.")
 
@@ -475,9 +480,11 @@ def run_sweep_package(args: argparse.Namespace) -> int:
 
 
 def run_agentdecompile(args: argparse.Namespace) -> int:
+    input_path, prep_summary = prepare_agentdecompile_input(args)
+    seed_facts_path = args.seed_facts_jsonl or default_agentdecompile_seed_facts(args.input, input_path)
     seed_rows: list[dict] = []
-    if args.seed_facts_jsonl and args.seed_facts_jsonl.exists():
-        for line in args.seed_facts_jsonl.read_text(encoding="utf-8").splitlines():
+    if seed_facts_path and seed_facts_path.exists():
+        for line in seed_facts_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             try:
@@ -485,7 +492,7 @@ def run_agentdecompile(args: argparse.Namespace) -> int:
             except json.JSONDecodeError:
                 continue
     summary = run_agentdecompile_analysis(
-        binary_path=args.input,
+        binary_path=input_path,
         out_path=args.out,
         run_dir=args.run_dir,
         limit=args.limit,
@@ -496,8 +503,87 @@ def run_agentdecompile(args: argparse.Namespace) -> int:
         server_url=args.agentdecompile_server_url,
         mode=args.agentdecompile_mode,
     )
+    summary["analysisInput"] = prep_summary
+    if seed_facts_path:
+        summary["seedFactsPath"] = str(seed_facts_path)
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary.get("status") == "complete" else 1
+
+
+def prepare_agentdecompile_input(args: argparse.Namespace) -> tuple[Path, dict[str, object]]:
+    identity = identify_binary(args.input)
+    summary: dict[str, object] = {
+        "originalBinaryPath": str(identity.binary_path),
+        "analysisBinaryPath": str(identity.binary_path),
+        "status": "original",
+        "transform": None,
+        "claimBoundary": "analysis image is an acquisition input; it is not source parity proof",
+    }
+    if args.no_auto_analysis_image or identity.format != "pe":
+        return identity.binary_path, summary
+
+    steamless = resolve_steamless_cli(Path.cwd(), args.steamless_cli)
+    mono = shutil.which("mono")
+    if not steamless or not mono:
+        summary.update(
+            {
+                "status": "original",
+                "transformAttempted": "steamless-unpacked-pe",
+                "transformResult": "missing-tool",
+                "steamlessCli": str(steamless) if steamless else None,
+                "mono": mono,
+            }
+        )
+        return identity.binary_path, summary
+
+    image_dir = (args.run_dir / "analysis-image").resolve()
+    image_dir.mkdir(parents=True, exist_ok=True)
+    original_copy = image_dir / identity.binary_path.name
+    if not original_copy.exists() or original_copy.stat().st_size != identity.binary_path.stat().st_size:
+        shutil.copy2(identity.binary_path, original_copy)
+    unpacked = Path(str(original_copy) + ".unpacked.exe")
+    proc: subprocess.CompletedProcess[str] | None = None
+    if not unpacked.exists():
+        proc = subprocess.run(
+            ["mono", str(steamless), "--quiet", "--keepbind", "--dumppayload", "--dumpdrmp", str(original_copy)],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=args.timeout,
+        )
+    if unpacked.exists():
+        summary.update(
+            {
+                "analysisBinaryPath": str(unpacked),
+                "status": "transformed",
+                "transform": "steamless-unpacked-pe",
+                "transformTool": str(steamless),
+                "transformReturnCode": proc.returncode if proc is not None else None,
+            }
+        )
+        return unpacked, summary
+    summary.update(
+        {
+            "status": "original",
+            "transformAttempted": "steamless-unpacked-pe",
+            "transformResult": "not-produced",
+            "transformTool": str(steamless),
+            "transformReturnCode": proc.returncode if proc is not None else None,
+            "transformStdout": proc.stdout[-4000:] if proc is not None else "",
+            "transformStderr": proc.stderr[-4000:] if proc is not None else "",
+        }
+    )
+    return identity.binary_path, summary
+
+
+def default_agentdecompile_seed_facts(original_input: Path, analysis_input: Path) -> Path | None:
+    """Use the checked-in SWKOTOR acquisition convention when the caller gives the Steam exe directly."""
+
+    names = {original_input.name.lower(), analysis_input.name.lower()}
+    if "swkotor.exe" not in names and "swkotor.original.exe.unpacked.exe" not in names:
+        return None
+    candidate = Path("target/swkotor-unpack/facts/function-inventory.jsonl")
+    return candidate if candidate.exists() else None
 
 
 def run_source_parity_synthesize(args: argparse.Namespace) -> int:

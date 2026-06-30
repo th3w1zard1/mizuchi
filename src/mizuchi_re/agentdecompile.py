@@ -61,33 +61,15 @@ def run_agentdecompile_analysis(
     facts = facts_from_tool_seq(parsed, binary_path)
     decompile_summary: dict[str, Any] = {
         "attempted": len(seed_candidates) if seed_candidates else 0,
-        "returnCode": proc.returncode if seed_candidates else None,
+        "returnCode": proc.returncode,
     }
     if facts and proc.returncode == 0 and not seed_candidates:
-        decompile_sequence = build_decompile_sequence(binary_path.name, [str(row["name"]) for row in facts])
-        decompile_command, decompile_env, decompile_cwd = build_command(
-            run_dir=run_dir,
-            server_url=server_url,
-            mode=mode,
-            sequence=decompile_sequence,
-        )
-        decompile_proc = subprocess.run(
-            decompile_command,
-            cwd=decompile_cwd,
-            env=decompile_env,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=timeout,
-        )
-        decompiled = decompiled_from_tool_seq(parse_cli_json(decompile_proc.stdout))
-        for row in facts:
-            row["decompiled"] = decompiled.get(str(row["name"]), "")
         decompile_summary = {
-            "attempted": len(decompile_sequence),
-            "returnCode": decompile_proc.returncode,
-            "stdout": decompile_proc.stdout[-2000:],
-            "stderr": decompile_proc.stderr[-2000:],
+            "attempted": 0,
+            "returnCode": proc.returncode,
+            "reason": "skipped because unseeded list-only mode",
+            "stdout": proc.stdout[-2000:],
+            "stderr": proc.stderr[-2000:],
         }
     with out_path.open("w", encoding="utf-8") as fh:
         for fact in facts:
@@ -237,7 +219,7 @@ def select_seed_candidates(candidates: list[dict[str, Any]], limit: int, offset:
     seen: set[int] = set()
     eligible: list[tuple[int, dict[str, Any]]] = []
     for row in candidates:
-        address = row.get("address")
+        address = row.get("address", row.get("entryOffset"))
         if address is None:
             continue
         if str(row.get("source")) == "executable-range":
@@ -260,7 +242,8 @@ def select_seed_candidates(candidates: list[dict[str, Any]], limit: int, offset:
         name = normalize_seed_name(str(row.get("name") or f"sub_{address_int:x}"), address_int)
         absolute_index = start + index
         next_address = eligible[absolute_index + 1][0] if absolute_index + 1 < len(eligible) else None
-        end_address = address_int + 0x3ff
+        body_bytes = parse_address(row.get("bodyBytes") or row.get("size"))
+        end_address = address_int + max(1, body_bytes or 0x400) - 1
         if next_address is not None and next_address > address_int:
             end_address = min(end_address, next_address - 1)
         selected.append({"name": name, "address": address_int, "endAddress": end_address})
@@ -356,10 +339,18 @@ def build_command(
     mode: str,
     sequence: list[dict[str, Any]],
 ) -> tuple[list[str], dict[str, str], Path]:
+    effective_mode = mode
+    if mode == "auto" and not server_url:
+        effective_mode = "local"
+    ghidra_root = Path(os.environ.get("AGENTDECOMPILE_GHIDRA_INSTALL_DIR", str(DEFAULT_GHIDRA))).resolve()
+    if effective_mode == "local" and not ghidra_root.exists():
+        raise SystemExit(f"--local mode requested but GHIDRA not found at {ghidra_root}")
     env = {
         **os.environ,
         "UV_CACHE_DIR": str((ROOT / "target/uv-cache").resolve()),
-        "GHIDRA_INSTALL_DIR": str(DEFAULT_GHIDRA),
+        "GHIDRA_INSTALL_DIR": str(ghidra_root),
+        "CC": os.environ.get("CC", "gcc"),
+        "CXX": os.environ.get("CXX", "g++"),
         "HOME": str((run_dir / "agentdecompile-home").resolve()),
         "XDG_CONFIG_HOME": str((run_dir / "agentdecompile-config").resolve()),
         "XDG_CACHE_HOME": str((run_dir / "agentdecompile-cache").resolve()),
@@ -369,16 +360,13 @@ def build_command(
         Path(env[key]).mkdir(parents=True, exist_ok=True)
     command = [
         "uvx",
-        "--refresh",
-        "--python",
-        "3.13",
         "--from",
         AGENTDECOMPILE_FROM,
         "agentdecompile-cli",
         "-f",
         "json",
     ]
-    if mode == "local":
+    if effective_mode == "local":
         command.extend(["--local", "--local-project-path", str((run_dir / "agentdecompile-project").resolve())])
     elif server_url:
         command.extend(["--server-url", server_url])
@@ -412,6 +400,26 @@ def parse_cli_json(text: str) -> Any:
     return None
 
 
+def parse_address(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        s = value.strip()
+        try:
+            return int(s, 0)
+        except ValueError:
+            try:
+                return int(s, 16)
+            except ValueError:
+                return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def facts_from_tool_seq(parsed: Any, binary_path: Path) -> list[dict[str, Any]]:
     payloads = extract_payloads(parsed)
     functions: list[dict[str, Any]] = []
@@ -428,7 +436,9 @@ def facts_from_tool_seq(parsed: Any, binary_path: Path) -> list[dict[str, Any]]:
                 decompiled_by_name[str(name)] = str(code)
     facts = []
     for row in functions:
-        address = int(str(row.get("address")), 16)
+        address = parse_address(row.get("address"))
+        if address is None:
+            continue
         name = str(row.get("name"))
         facts.append(
             {
