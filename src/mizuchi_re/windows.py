@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import shutil
 from dataclasses import replace
@@ -11,6 +13,7 @@ from typing import Any
 from .package_sweep import sweep_recovered_source_package
 from .package_verify import resolve_msvc_root
 from .pipeline import RecoveryConfig, RecoveryRunner
+from .source_parity_synthesize import main as source_parity_synthesize_main
 from .sourcegen import is_recoverable_candidate
 from .state import atomic_write_json, now
 
@@ -34,6 +37,24 @@ def run_recovery_windows(
     wineprefix: Path | None = None,
     objcopy: str = "objcopy",
     objdump: str = "objdump",
+    source_parity_synthesis: bool = False,
+    source_parity_queue: Path | None = None,
+    source_parity_inventory: Path | None = None,
+    source_parity_remaining_features: Path | None = None,
+    source_parity_retrieval: Path | None = None,
+    source_parity_matched_summaries: list[Path] | None = None,
+    source_parity_out_dir: Path | None = None,
+    source_parity_limit: int = 25,
+    source_parity_offset: int = 0,
+    source_parity_max_variants_per_function: int = 8,
+    source_parity_strategies: str | None = None,
+    source_parity_dry_run: bool = False,
+    source_parity_clean: bool = False,
+    source_parity_vc_root: Path | None = None,
+    source_parity_wine: str | None = None,
+    source_parity_timeout: int | None = None,
+    source_parity_progress_every: int = 0,
+    source_parity_compiler_profiles: list[str] | None = None,
 ) -> dict[str, Any]:
     if window_size <= 0:
         raise ValueError("window_size must be positive")
@@ -128,6 +149,32 @@ def run_recovery_windows(
         objcopy=objcopy,
         objdump=objdump,
     )
+    aggregate["sourceParitySynthesis"] = run_source_parity_synthesis(
+        enabled=source_parity_synthesis,
+        base_dir=base_dir,
+        queue=source_parity_queue,
+        inventory=source_parity_inventory,
+        remaining_features=source_parity_remaining_features,
+        retrieval=source_parity_retrieval,
+        matched_summaries=source_parity_matched_summaries or [],
+        out_dir=source_parity_out_dir,
+        limit=source_parity_limit,
+        offset=source_parity_offset,
+        max_variants_per_function=source_parity_max_variants_per_function,
+        strategies=source_parity_strategies,
+        dry_run=source_parity_dry_run,
+        clean=source_parity_clean,
+        vc_root=source_parity_vc_root or msvc_root,
+        wine=source_parity_wine or wine,
+        wineprefix=wineprefix,
+        timeout=source_parity_timeout or semantic_sweep_timeout or base_config.stage_timeout,
+        progress_every=source_parity_progress_every,
+        compiler_profiles=source_parity_compiler_profiles,
+    )
+    aggregate["sourceParityPromotion"] = promote_source_parity_accepts(
+        source_package,
+        aggregate["sourceParitySynthesis"],
+    )
     aggregate.update(summarize_aggregate(aggregate))
     aggregate["coverage"] = write_window_coverage(base_dir, aggregate)
     aggregate["completedAt"] = now()
@@ -170,7 +217,15 @@ def sorted_windows(window_by_offset: dict[int, dict[str, Any]]) -> list[dict[str
 def window_is_complete(window: dict[str, Any] | None) -> bool:
     if not window:
         return False
-    return window.get("returnCode") == 0 and window.get("sourceStatus") not in {None, "blocked"}
+    return window_has_source_progress(window)
+
+
+def window_has_source_progress(window: dict[str, Any]) -> bool:
+    return (
+        window.get("returnCode") == 0
+        and window.get("sourceStatus") not in {None, "blocked", "queued-no-source"}
+        and int(window.get("generatedSourceCandidates") or 0) > 0
+    )
 
 
 def summarize_window(shard_dir: Path, offset: int, limit: int, return_code: int) -> dict[str, Any]:
@@ -182,7 +237,13 @@ def summarize_window(shard_dir: Path, offset: int, limit: int, return_code: int)
         "limit": limit,
         "workDir": str(shard_dir),
         "returnCode": return_code,
-        "status": "complete" if return_code == 0 and source.get("status") else "failed",
+        "status": "complete" if window_has_source_progress(
+            {
+                "returnCode": return_code,
+                "sourceStatus": source.get("status"),
+                "generatedSourceCandidates": source.get("generatedSourceCandidates", 0),
+            }
+        ) else "failed",
         "analysisStatus": analysis.get("status"),
         "analysisReturnCode": analysis.get("returnCode"),
         "functionsFound": analysis.get("functionsFound", 0),
@@ -201,15 +262,19 @@ def summarize_window(shard_dir: Path, offset: int, limit: int, return_code: int)
 
 def summarize_aggregate(aggregate: dict[str, Any]) -> dict[str, Any]:
     windows = aggregate.get("windows", [])
-    failed = [row for row in windows if row.get("returnCode") != 0 or row.get("sourceStatus") in {None, "blocked"}]
+    failed = [row for row in windows if not window_has_source_progress(row)]
     status = "failed" if failed else "complete"
     semantic_sweep = aggregate.get("semanticSweep")
     if status == "complete" and isinstance(semantic_sweep, dict) and semantic_sweep.get("enabled"):
         if semantic_sweep.get("status") != "matched":
             status = "semantic-incomplete"
+    source_parity = aggregate.get("sourceParitySynthesis")
+    if status == "complete" and isinstance(source_parity, dict) and source_parity.get("enabled"):
+        if source_parity.get("status") not in {"complete", "generated-only"}:
+            status = "source-parity-synthesis-incomplete"
     return {
         "status": status,
-        "windowsComplete": sum(1 for row in windows if row.get("returnCode") == 0),
+        "windowsComplete": sum(1 for row in windows if window_has_source_progress(row)),
         "windowsFailed": len(failed),
         "functionsFound": sum(int(row.get("functionsFound") or 0) for row in windows),
         "decompiled": sum(int(row.get("decompiled") or 0) for row in windows),
@@ -223,19 +288,32 @@ def summarize_aggregate(aggregate: dict[str, Any]) -> dict[str, Any]:
 def write_window_coverage(base_dir: Path, aggregate: dict[str, Any]) -> dict[str, Any]:
     package = aggregate.get("sourcePackage") if isinstance(aggregate.get("sourcePackage"), dict) else {}
     package_dir = Path(str(package.get("packageDir") or base_dir / "recovered-source"))
+    manifest = read_json(Path(str(package.get("manifest") or package_dir / "manifest.json")))
     coverage_path = package_dir / "coverage.json"
     coverage_md_path = package_dir / "COVERAGE.md"
     semantic = aggregate.get("semanticSweep") if isinstance(aggregate.get("semanticSweep"), dict) else {}
+    source_parity = aggregate.get("sourceParitySynthesis") if isinstance(aggregate.get("sourceParitySynthesis"), dict) else {}
+    promotion = aggregate.get("sourceParityPromotion") if isinstance(aggregate.get("sourceParityPromotion"), dict) else {}
     sweep = read_json(Path(str(semantic.get("report") or "")))
     windows = aggregate.get("windows") if isinstance(aggregate.get("windows"), list) else []
     recoverable_total = int(aggregate.get("recoverableCandidateTotal") or 0)
-    source_functions = int(package.get("functionCount") or 0)
+    source_functions = int(manifest.get("functionCount") or package.get("functionCount") or 0)
     matched_functions = int(semantic.get("matchedFunctions") or 0)
     semantic_matched = int(semantic.get("semanticMatchedFunctions") or 0)
+    source_parity_accepted = int(manifest.get("sourceParityAcceptedFunctionCount") or package.get("sourceParityAcceptedFunctionCount") or 0)
     matched_rows, unmatched_rows = semantic_coverage_rows(sweep)
+    parity_rows = source_parity_coverage_rows(manifest)
     coverage = {
         "schema": "mizuchi.recovery-window-coverage.v1",
-        "status": coverage_status(recoverable_total, source_functions, matched_functions, semantic_matched, semantic),
+        "status": coverage_status(
+            recoverable_total,
+            source_functions,
+            matched_functions,
+            semantic_matched,
+            source_parity_accepted,
+            semantic,
+            source_parity,
+        ),
         "generatedAt": now(),
         "input": aggregate.get("input"),
         "workDir": aggregate.get("workDir"),
@@ -253,7 +331,7 @@ def write_window_coverage(base_dir: Path, aggregate: dict[str, Any]) -> dict[str
         "sourceCoverage": {
             "packagedFunctions": source_functions,
             "taskCount": int(package.get("taskCount") or aggregate.get("taskCount") or 0),
-            "targetSlicedFunctions": int(package.get("functionCount") or 0),
+            "targetSlicedFunctions": source_functions,
             "generatedSourceCandidates": int(aggregate.get("generatedSourceCandidates") or 0),
             "freshGeneratedSourceCandidates": int(aggregate.get("freshGeneratedSourceCandidates") or 0),
             "reusedSourceCandidates": int(aggregate.get("reusedSourceCandidates") or 0),
@@ -276,9 +354,32 @@ def write_window_coverage(base_dir: Path, aggregate: dict[str, Any]) -> dict[str
             "compilerResolution": semantic.get("compilerResolution"),
             "compilerProfiles": semantic.get("compilerProfiles"),
         },
-        "matchedFunctions": matched_rows,
+        "sourceParityCoverage": {
+            "enabled": bool(source_parity.get("enabled")),
+            "status": source_parity.get("status"),
+            "inspectedFunctions": int(source_parity.get("inspectedFunctions") or 0),
+            "attemptedCandidates": int(source_parity.get("attemptedCandidates") or 0),
+            "acceptedCandidates": int(source_parity.get("acceptedCandidates") or 0),
+            "promotedFunctions": int(promotion.get("promotedFunctions") or 0),
+            "acceptedPackagedFunctions": source_parity_accepted,
+            "acceptedPackagePercent": percent(source_parity_accepted, source_functions),
+            "acceptedRecoverablePercent": percent(source_parity_accepted, recoverable_total),
+            "attemptsPath": source_parity.get("attemptsPath"),
+            "acceptedPath": source_parity.get("acceptedPath"),
+            "promotion": promotion,
+        },
+        "matchedFunctions": [*matched_rows, *parity_rows],
         "unmatchedFunctions": unmatched_rows,
-        "nextAction": coverage_next_action(aggregate, semantic, recoverable_total, source_functions, matched_functions, semantic_matched),
+        "nextAction": coverage_next_action(
+            aggregate,
+            semantic,
+            source_parity,
+            recoverable_total,
+            source_functions,
+            matched_functions,
+            semantic_matched,
+            source_parity_accepted,
+        ),
         "claimBoundary": (
             "Coverage is per-function source-candidate and code-byte evidence only. "
             "Full source parity remains false until every recoverable function and required data/linker artifact is rebuilt and verified."
@@ -320,11 +421,49 @@ def semantic_coverage_rows(sweep: dict[str, Any]) -> tuple[list[dict[str, Any]],
     return matched, unmatched
 
 
-def coverage_status(recoverable_total: int, source_functions: int, matched_functions: int, semantic_matched: int, semantic: dict[str, Any]) -> str:
+def source_parity_coverage_rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for fn in manifest.get("functions", []) if isinstance(manifest.get("functions"), list) else []:
+        if not isinstance(fn, dict) or fn.get("proofTier") != "target-object-objdiff-match":
+            continue
+        rows.append(
+            {
+                "name": fn.get("name"),
+                "address": fn.get("address"),
+                "source": fn.get("source"),
+                "metadata": fn.get("metadata"),
+                "semanticMatched": True,
+                "proofTier": fn.get("proofTier"),
+                "variant": fn.get("sourceParityVariant"),
+                "sourceKind": "generated-c",
+                "semanticSource": True,
+                "codeCompareStatus": "objdiff-zero",
+                "verifyReport": fn.get("verifyReport"),
+                "differences": fn.get("differences"),
+            }
+        )
+    return rows
+
+
+def coverage_status(
+    recoverable_total: int,
+    source_functions: int,
+    matched_functions: int,
+    semantic_matched: int,
+    source_parity_accepted: int,
+    semantic: dict[str, Any],
+    source_parity: dict[str, Any],
+) -> str:
     if recoverable_total <= 0:
         return "no-recoverable-functions"
     if source_functions <= 0:
         return "no-source-candidates"
+    if source_parity.get("enabled") and source_parity_accepted == source_functions and source_functions < recoverable_total:
+        return "partial-source-parity-match"
+    if source_parity.get("enabled") and source_parity_accepted == recoverable_total:
+        return "all-recoverable-functions-source-parity-matched"
+    if source_parity.get("enabled") and source_parity_accepted:
+        return "partial-source-parity-match"
     if semantic.get("enabled") and semantic_matched == source_functions and source_functions < recoverable_total:
         return "partial-semantic-match"
     if semantic.get("enabled") and semantic_matched == recoverable_total:
@@ -343,10 +482,12 @@ def coverage_status(recoverable_total: int, source_functions: int, matched_funct
 def coverage_next_action(
     aggregate: dict[str, Any],
     semantic: dict[str, Any],
+    source_parity: dict[str, Any],
     recoverable_total: int,
     source_functions: int,
     matched_functions: int,
     semantic_matched: int,
+    source_parity_accepted: int,
 ) -> dict[str, Any]:
     if source_functions < recoverable_total:
         return {
@@ -366,6 +507,13 @@ def coverage_next_action(
                 "--max-windows",
                 "1",
             ],
+        }
+    if source_parity.get("enabled") and source_parity_accepted < source_functions:
+        return {
+            "kind": "improve-source-parity-synthesis",
+            "reason": "not all packaged functions have objdiff-zero generated C evidence",
+            "sourceParityAcceptedFunctions": source_parity_accepted,
+            "sourceParityUnmatchedFunctions": source_functions - source_parity_accepted,
         }
     if semantic.get("enabled") and semantic_matched < source_functions:
         if matched_functions > semantic_matched:
@@ -433,6 +581,223 @@ def render_coverage_markdown(coverage: dict[str, Any]) -> str:
         lines.append("- None")
     lines.extend(["", "## Next Action", "", f"- Kind: `{coverage['nextAction']['kind']}`", f"- Reason: {coverage['nextAction']['reason']}", "", coverage["claimBoundary"], ""])
     return "\n".join(lines)
+
+
+def run_source_parity_synthesis(
+    *,
+    enabled: bool,
+    base_dir: Path,
+    queue: Path | None,
+    inventory: Path | None,
+    remaining_features: Path | None,
+    retrieval: Path | None,
+    matched_summaries: list[Path],
+    out_dir: Path | None,
+    limit: int,
+    offset: int,
+    max_variants_per_function: int,
+    strategies: str | None,
+    dry_run: bool,
+    clean: bool,
+    vc_root: Path | None,
+    wine: str,
+    wineprefix: Path | None,
+    timeout: int,
+    progress_every: int,
+    compiler_profiles: list[str] | None = None,
+) -> dict[str, Any]:
+    schema = "mizuchi.recovery-windows-source-parity-synthesis.v1"
+    if not enabled:
+        return {"schema": schema, "enabled": False, "status": "disabled"}
+    if queue is None or inventory is None:
+        return {
+            "schema": schema,
+            "enabled": True,
+            "status": "missing-inputs",
+            "reason": "--source-parity-queue and --source-parity-inventory are required when synthesis is enabled",
+        }
+
+    synthesis_dir = out_dir or base_dir / "source-parity-synthesis"
+    synthesis_dir.mkdir(parents=True, exist_ok=True)
+    empty_remaining = synthesis_dir / "remaining-features.empty.jsonl"
+    empty_retrieval = synthesis_dir / "retrieval.empty.jsonl"
+    if remaining_features is None and not empty_remaining.exists():
+        empty_remaining.write_text("", encoding="utf-8")
+    if retrieval is None and not empty_retrieval.exists():
+        empty_retrieval.write_text("", encoding="utf-8")
+
+    argv = [
+        "--queue",
+        str(queue.resolve()),
+        "--inventory",
+        str(inventory.resolve()),
+        "--remaining-features",
+        str((remaining_features or empty_remaining).resolve()),
+        "--retrieval",
+        str((retrieval or empty_retrieval).resolve()),
+        "--out-dir",
+        str(synthesis_dir.resolve()),
+        "--limit",
+        str(limit),
+        "--offset",
+        str(offset),
+        "--max-variants-per-function",
+        str(max_variants_per_function),
+        "--timeout",
+        str(timeout),
+        "--progress-every",
+        str(progress_every),
+    ]
+    for matched_summary in matched_summaries:
+        argv.extend(["--matched-summary", str(matched_summary.resolve())])
+    for profile in compiler_profiles or []:
+        argv.extend(["--compiler-profile", profile])
+    if strategies:
+        argv.extend(["--strategies", strategies])
+    if dry_run:
+        argv.append("--dry-run")
+    if clean:
+        argv.append("--clean")
+    if vc_root:
+        argv.extend(["--vc-root", str(vc_root.resolve())])
+    if wine:
+        argv.extend(["--wine", wine])
+    if wineprefix:
+        argv.extend(["--wineprefix", str(wineprefix.resolve())])
+
+    stdout = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(stdout):
+            return_code = source_parity_synthesize_main(argv)
+    except Exception as exc:
+        return {
+            "schema": schema,
+            "enabled": True,
+            "status": "failed",
+            "outDir": str(synthesis_dir),
+            "reason": str(exc),
+        }
+
+    summary = read_json(synthesis_dir / "summary.json")
+    return {
+        "schema": schema,
+        "enabled": True,
+        "status": summary.get("status", "failed") if return_code == 0 else "failed",
+        "returnCode": return_code,
+        "outDir": str(synthesis_dir),
+        "summary": str(synthesis_dir / "summary.json"),
+        "attemptsPath": summary.get("attemptsPath"),
+        "acceptedPath": summary.get("acceptedPath"),
+        "inspectedFunctions": summary.get("inspectedFunctions"),
+        "generatedCandidates": summary.get("generatedCandidates"),
+        "attemptedCandidates": summary.get("attemptedCandidates"),
+        "acceptedCandidates": summary.get("acceptedCandidates"),
+        "unsupportedFunctions": summary.get("unsupportedFunctions"),
+        "compileFailedCandidates": summary.get("compileFailedCandidates"),
+        "sliceFailedCandidates": summary.get("sliceFailedCandidates"),
+        "mismatchedCandidates": summary.get("mismatchedCandidates"),
+        "stdout": stdout.getvalue()[-4000:],
+        "claimBoundary": summary.get("claimBoundary"),
+    }
+
+
+def promote_source_parity_accepts(source_package: dict[str, Any], source_parity: dict[str, Any]) -> dict[str, Any]:
+    schema = "mizuchi.recovery-windows-source-parity-promotion.v1"
+    if not source_parity.get("enabled"):
+        return {"schema": schema, "enabled": False, "status": "disabled"}
+    accepted_path_value = source_parity.get("acceptedPath")
+    package_dir_value = source_package.get("packageDir")
+    if not accepted_path_value or not package_dir_value:
+        return {"schema": schema, "enabled": True, "status": "missing-inputs", "promotedFunctions": 0}
+    accepted_path = Path(str(accepted_path_value))
+    package_dir = Path(str(package_dir_value))
+    manifest_path = package_dir / "manifest.json"
+    functions_dir = package_dir / "functions"
+    if not accepted_path.exists() or not manifest_path.exists():
+        return {"schema": schema, "enabled": True, "status": "missing-inputs", "promotedFunctions": 0}
+
+    manifest = read_json(manifest_path)
+    if not manifest:
+        return {"schema": schema, "enabled": True, "status": "invalid-manifest", "promotedFunctions": 0}
+    functions = list(manifest.get("functions") or [])
+    existing_keys = {(str(fn.get("name")), str(fn.get("address") or fn.get("entry"))) for fn in functions if isinstance(fn, dict)}
+    promoted: list[dict[str, Any]] = []
+    functions_dir.mkdir(parents=True, exist_ok=True)
+    for row in iter_jsonl(accepted_path):
+        if row.get("status") != "matched" or int(row.get("differences", -1)) != 0:
+            continue
+        key = (str(row.get("name")), str(row.get("entry")))
+        if key in existing_keys:
+            continue
+        source = resolve_path(row.get("source"))
+        if not source.exists():
+            continue
+        stem = safe_function_file_stem({"name": row.get("name"), "address": row.get("entry")})
+        copied_c = functions_dir / f"{stem}{source_suffix(source)}"
+        copied_json = functions_dir / f"{stem}.json"
+        shutil.copy2(source, copied_c)
+        metadata = {
+            "schema": "mizuchi.recovered-source-function.v1",
+            "name": row.get("name"),
+            "entry": row.get("entry"),
+            "address": row.get("entry"),
+            "status": "source-parity-accepted",
+            "proofTier": "target-object-objdiff-match",
+            "source": str(copied_c),
+            "sourceOrigin": row.get("sourceOrigin"),
+            "sourceSha256": row.get("sourceSha256"),
+            "callconv": row.get("callconv"),
+            "symbol": row.get("symbol"),
+            "section": row.get("section"),
+            "bodyBytes": row.get("bodyBytes"),
+            "instructionCount": row.get("instructionCount"),
+            "rule": row.get("rule"),
+            "variant": row.get("variant"),
+            "differences": row.get("differences"),
+            "message": row.get("message"),
+            "verifyReport": row.get("verifyReport"),
+            "attempt": row,
+            "claimBoundary": "Promoted only because source-parity synthesis recorded objdiff zero for this generated C candidate.",
+        }
+        atomic_write_json(copied_json, metadata)
+        function = {
+            "name": row.get("name"),
+            "address": row.get("entry"),
+            "entry": row.get("entry"),
+            "status": "source-parity-accepted",
+            "proofTier": "target-object-objdiff-match",
+            "source": str(copied_c),
+            "metadata": str(copied_json),
+            "verifyReport": row.get("verifyReport"),
+            "sourceParityRule": row.get("rule"),
+            "sourceParityVariant": row.get("variant"),
+            "differences": row.get("differences"),
+        }
+        functions.append(function)
+        promoted.append(function)
+        existing_keys.add(key)
+
+    manifest["functions"] = functions
+    manifest["functionCount"] = len(functions)
+    manifest["sourceParityAcceptedFunctionCount"] = sum(1 for fn in functions if isinstance(fn, dict) and fn.get("proofTier") == "target-object-objdiff-match")
+    manifest["claimBoundary"] = (
+        "Package may contain generated-unverified candidates plus source-parity accepted generated C. "
+        "Only functions with proofTier=target-object-objdiff-match have objdiff-zero evidence; full source parity remains false."
+    )
+    atomic_write_json(manifest_path, manifest)
+    (package_dir / "README.md").write_text(render_source_index(manifest), encoding="utf-8")
+    source_package["functionCount"] = manifest["functionCount"]
+    source_package["sourceParityAcceptedFunctionCount"] = manifest["sourceParityAcceptedFunctionCount"]
+    source_package["claimBoundary"] = manifest["claimBoundary"]
+    return {
+        "schema": schema,
+        "enabled": True,
+        "status": "complete",
+        "packageDir": str(package_dir),
+        "manifest": str(manifest_path),
+        "promotedFunctions": len(promoted),
+        "sourceParityAcceptedFunctionCount": manifest["sourceParityAcceptedFunctionCount"],
+    }
 
 
 def run_source_package_semantic_sweep(
@@ -539,6 +904,22 @@ def read_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def iter_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not path.exists():
+        return rows
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            rows.append(data)
+    return rows
+
+
 def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]) -> dict[str, Any]:
     package_dir = base_dir / "recovered-source"
     functions_dir = package_dir / "functions"
@@ -588,7 +969,7 @@ def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]
                     source_path = resolve_path(source)
                     if source_path.exists():
                         stem = safe_function_file_stem(task)
-                        copied_c = functions_dir / f"{stem}.c"
+                        copied_c = functions_dir / f"{stem}{source_suffix(source_path)}"
                         copied_json = functions_dir / f"{stem}.json"
                         copied_slice = copy_target_slice(task, functions_dir / f"{stem}.target.bin")
                         shutil.copy2(source_path, copied_c)
@@ -624,7 +1005,7 @@ def build_recovered_source_package(base_dir: Path, windows: list[dict[str, Any]]
         "facts": str(facts_path),
         "tasks": str(tasks_path),
         "functions": functions,
-        "claimBoundary": "packaged sources are generated-unverified decompiler candidates until compiler and objdiff gates accept them",
+        "claimBoundary": "packaged sources are generated-unverified automatic candidates until compiler and objdiff gates accept them",
     }
     atomic_write_json(manifest_path, manifest)
     index_path.write_text(render_source_index(manifest), encoding="utf-8")
@@ -665,10 +1046,22 @@ def copy_target_slice(task: dict[str, Any], destination: Path) -> Path | None:
     return destination
 
 
+def source_suffix(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".c", ".cc", ".cpp", ".cxx"}:
+        return suffix
+    return ".c"
+
+
 def safe_function_file_stem(task: dict[str, Any]) -> str:
     name = str(task.get("name") or "sub")
     address = task.get("address")
-    suffix = f"{int(address):08x}" if address is not None else "unknown"
+    suffix = "unknown"
+    if address is not None:
+        try:
+            suffix = f"{int(str(address), 16):08x}" if isinstance(address, str) else f"{int(address):08x}"
+        except (TypeError, ValueError):
+            suffix = "".join(ch if ch.isalnum() else "_" for ch in str(address)) or "unknown"
     safe = "".join(ch if ch.isalnum() or ch in "._+-" else "_" for ch in name).strip("._") or "sub"
     return f"{safe}_{suffix}"
 

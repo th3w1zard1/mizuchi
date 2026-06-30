@@ -56,10 +56,13 @@ class RecoveryConfig:
     source_task_offset: int = 0
     steamless_cli: Path | None = None
     context_format: str = "json"
+    context_binary_analysis: str = "standard"
     context_max_files: int = 1000
     context_max_depth: int = 4
     context_strings_limit: int = 500
+    context_max_index_text_chars: int = 2_000
     context_extract_containers: bool = True
+    context_include_low_signal_members: bool = False
 
 
 class RecoveryRunner:
@@ -176,10 +179,13 @@ class RecoveryRunner:
             "sourceTaskOffset": self.config.source_task_offset,
             "steamlessCli": str(self.config.steamless_cli) if self.config.steamless_cli else None,
             "contextFormat": self.config.context_format,
+            "contextBinaryAnalysis": self.config.context_binary_analysis,
             "contextMaxFiles": self.config.context_max_files,
             "contextMaxDepth": self.config.context_max_depth,
             "contextStringsLimit": self.config.context_strings_limit,
+            "contextMaxIndexTextChars": self.config.context_max_index_text_chars,
             "contextExtractContainers": self.config.context_extract_containers,
+            "contextIncludeLowSignalMembers": self.config.context_include_low_signal_members,
             "stageTimeout": self.config.stage_timeout,
             "stage": stage.name,
         }
@@ -336,10 +342,13 @@ class RecoveryRunner:
                 input_path=target.input_path,
                 out_dir=self.run_dir / "context-export",
                 output_format=self.config.context_format,
+                binary_analysis=self.config.context_binary_analysis,
                 extract_containers=self.config.context_extract_containers,
+                include_low_signal_members=self.config.context_include_low_signal_members,
                 max_files=self.config.context_max_files,
                 max_depth=self.config.context_max_depth,
                 strings_limit=self.config.context_strings_limit,
+                max_index_text_chars=self.config.context_max_index_text_chars,
             )
         )
         return {

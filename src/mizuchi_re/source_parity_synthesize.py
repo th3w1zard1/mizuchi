@@ -41,6 +41,65 @@ class GeneratedCandidate:
     evidence: dict[str, Any] = field(default_factory=dict)
 
 
+DEFAULT_PROFILES: list[tuple[str, list[str]]] = [
+    ("O2_Oy_GSminus", ["/O2", "/Oy", "/GS-"]),
+    ("Od_Oyminus_GSminus", ["/Od", "/Oy-", "/GS-"]),
+]
+
+
+def parse_profile_flag_set(value: str) -> tuple[str, list[str]]:
+    if "=" in value:
+        name, flags = value.split("=", 1)
+    else:
+        name = "_".join(part.strip("/-").lower() for part in value.replace(",", " ").split() if part) or "custom"
+        flags = value
+    parsed = [item for item in flags.replace(",", " ").split() if item]
+    return name.strip() or "custom", parsed
+
+
+def normalize_profile_flags(profile_flags: list[str], overrides: list[str]) -> list[str]:
+    merged: list[str] = []
+    for flag in [*profile_flags, *overrides]:
+        if not isinstance(flag, str) or not flag:
+            continue
+        candidate = str(flag)
+        lowered = candidate.upper()
+        if lowered.startswith("/O"):
+            merged = [entry for entry in merged if not entry.upper().startswith("/O")]
+        elif lowered.startswith("/OY"):
+            merged = [entry for entry in merged if not entry.upper().startswith("/OY")]
+        elif lowered.startswith("/GS"):
+            merged = [entry for entry in merged if not entry.upper().startswith("/GS")]
+        merged.append(candidate)
+    return merged
+
+
+def extract_row_compiler_profile_hints(row: dict[str, Any]) -> list[str] | None:
+    hints = row.get("compilerProfileHints")
+    if not isinstance(hints, dict):
+        return None
+    compiler = str(hints.get("compiler") or "").lower()
+    if compiler and compiler != "msvc":
+        return None
+    args = hints.get("args")
+    if not isinstance(args, list):
+        return None
+    normalized = [item for item in args if isinstance(item, str) and item.strip()]
+    return normalized or None
+
+
+def resolve_profiles(
+    row: dict[str, Any],
+    cli_profiles: list[tuple[str, list[str]]],
+) -> list[tuple[str, list[str]]]:
+    if cli_profiles:
+        return cli_profiles
+    hint_args = extract_row_compiler_profile_hints(row)
+    if hint_args:
+        return [("row-hint", hint_args)]
+    return DEFAULT_PROFILES
+
+
 def run(args: list[str], *, env: dict[str, str] | None = None, timeout: int = 90) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(args, cwd=Path.cwd(), env=env, text=True, capture_output=True, check=False, timeout=timeout)
@@ -3075,16 +3134,16 @@ def attempt_candidate(
     out_dir: Path,
     *,
     inventory: Path,
+    compiler_profiles: list[tuple[str, list[str]]],
     vc_root: Path | None,
     wine: str,
     wineprefix: Path | None,
     timeout: int,
     dry_run: bool,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     case_dir = out_dir / "cases" / candidate_id(row, candidate)
     case_dir.mkdir(parents=True, exist_ok=True)
     candidate_c = case_dir / "candidate.c"
-    candidate_obj = case_dir / "candidate.obj"
     candidate_c.write_text(candidate.source, encoding="utf-8")
 
     base_record = {
@@ -3107,7 +3166,16 @@ def attempt_candidate(
     }
     write_json(case_dir / "generation.json", base_record)
     if dry_run:
-        return {**base_record, "status": "generated-only", "differences": -1}
+        return [
+            {
+                **base_record,
+                "status": "generated-only",
+                "differences": -1,
+                "attemptDir": str(case_dir),
+                "compilerProfileName": "dry-run",
+                "compilerProfileArgs": [],
+            },
+        ]
 
     slice_proc = run(
         [
@@ -3128,36 +3196,74 @@ def attempt_candidate(
     (case_dir / "slice.stdout").write_text(slice_proc.stdout, encoding="utf-8")
     (case_dir / "slice.stderr").write_text(slice_proc.stderr, encoding="utf-8")
     if slice_proc.returncode != 0:
-        return {**base_record, "status": "slice-failed", "differences": -1, "stderr": slice_proc.stderr[-2000:]}
+        return [
+            {
+                **base_record,
+                "status": "slice-failed",
+                "differences": -1,
+                "stderr": slice_proc.stderr[-2000:],
+                "attemptDir": str(case_dir),
+                "compilerProfileName": "slice-failed",
+                "compilerProfiles": [name for name, _ in compiler_profiles],
+            },
+        ]
 
-    compile_result = compile_with_msvc(
-        source=candidate_c,
-        object_path=candidate_obj,
-        out_dir=case_dir,
-        stem="candidate",
-        args=["/O2", "/GS-", "/Oy", *candidate.extra_flags],
-        timeout=timeout,
-        msvc_root=vc_root,
-        wine=wine,
-        wineprefix=wineprefix,
-    )
-    (case_dir / "compile.stdout").write_text(str(compile_result.get("stdout") or ""), encoding="utf-8")
-    (case_dir / "compile.stderr").write_text(str(compile_result.get("stderrTail") or compile_result.get("reason") or ""), encoding="utf-8")
-    if compile_result.get("status") != "ok":
-        return {**base_record, "status": "compile-failed", "differences": -1, "stderr": str(compile_result.get("stderrTail") or compile_result.get("reason") or "")[-2000:]}
-
-    report = run_objdiff(case_dir / "target.obj", candidate_obj, case_dir, timeout=timeout)
-    status = str(report.get("status"))
-    differences = int(report.get("differences", -1))
-    message = str(report.get("message") or "")
-    verify_json = case_dir / "verify.json"
-    return {
-        **base_record,
-        "status": status,
-        "differences": differences,
-        "message": message,
-        "verifyReport": str(verify_json),
-    }
+    attempts: list[dict[str, Any]] = []
+    resolved_profiles = resolve_profiles(row, compiler_profiles)
+    for profile_index, (profile_name, profile_args) in enumerate(resolved_profiles):
+        attempt_dir = case_dir / f"profile_{profile_index:02d}_{safe_dir_name(profile_name)}"
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        merged_flags = normalize_profile_flags(profile_args, list(candidate.extra_flags))
+        object_path = attempt_dir / "candidate.obj"
+        compile_result = compile_with_msvc(
+            source=candidate_c,
+            object_path=object_path,
+            out_dir=attempt_dir,
+            stem="candidate",
+            args=merged_flags,
+            timeout=timeout,
+            msvc_root=vc_root,
+            wine=wine,
+            wineprefix=wineprefix,
+        )
+        compile_stdout = str(compile_result.get("stdout") or "")
+        compile_stderr = str(compile_result.get("stderrTail") or compile_result.get("reason") or "")
+        (attempt_dir / "compile.stdout").write_text(compile_stdout, encoding="utf-8")
+        (attempt_dir / "compile.stderr").write_text(compile_stderr, encoding="utf-8")
+        record = {
+            **base_record,
+            "attemptDir": str(attempt_dir),
+            "compilerProfileName": profile_name,
+            "compilerProfileArgs": merged_flags,
+            "compilerProfiles": [name for name, _ in resolved_profiles],
+        }
+        if compile_result.get("status") != "ok":
+            attempts.append(
+                {
+                    **record,
+                    "status": "compile-failed",
+                    "differences": -1,
+                    "stderr": compile_stderr[-2000:],
+                }
+            )
+            continue
+        report = run_objdiff(case_dir / "target.obj", object_path, attempt_dir, timeout=timeout)
+        status = str(report.get("status"))
+        differences = int(report.get("differences", -1))
+        message = str(report.get("message") or "")
+        verify_json = attempt_dir / "verify.json"
+        attempts.append(
+            {
+                **record,
+                "status": status,
+                "differences": differences,
+                "message": message,
+                "verifyReport": str(verify_json),
+            }
+        )
+        if status == "matched" and differences == 0:
+            break
+    return attempts
 
 
 def run_objdiff(target_obj: Path, candidate_obj: Path, case_dir: Path, *, timeout: int) -> dict[str, Any]:
@@ -3255,6 +3361,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--offset", type=int, default=0, help="Eligible queued functions to skip before inspecting.")
     parser.add_argument("--max-variants-per-function", type=int, default=4)
     parser.add_argument("--strategies", help="Comma-separated strategy/tag filter, for example virtual-call-or-thiscall-model,compiler-profile-probe.")
+    parser.add_argument("--compiler-profile", action="append", default=[], help="Compiler profile as NAME='/O2 /Oy /GS-'. Repeat for multiple profiles.")
     parser.add_argument("--dry-run", action="store_true", help="Emit generated candidates without compiling or running objdiff.")
     parser.add_argument("--clean", action="store_true", help="Delete the previous synthesis output directory first.")
     parser.add_argument("--vc-root", type=Path, default=DEFAULT_VC_ROOT)
@@ -3275,6 +3382,7 @@ def main(argv: list[str] | None = None) -> int:
     strategies = None
     if args.strategies:
         strategies = {item.strip() for item in args.strategies.split(",") if item.strip()}
+    compiler_profiles = [parse_profile_flag_set(value) for value in args.compiler_profile if value.strip()]
     strategy_by_name = load_strategy(args.remaining_features)
     retrieval_by_name = load_retrieval(args.retrieval)
     matched = load_matched(args.matched_summary)
@@ -3321,10 +3429,11 @@ def main(argv: list[str] | None = None) -> int:
             continue
         generated += len(candidates)
         for candidate in candidates:
-            record = attempt_candidate(
+            records = attempt_candidate(
                 row,
                 candidate,
                 args.out_dir,
+                compiler_profiles=compiler_profiles,
                 inventory=args.inventory,
                 vc_root=args.vc_root,
                 wine=args.wine,
@@ -3332,23 +3441,24 @@ def main(argv: list[str] | None = None) -> int:
                 timeout=args.timeout,
                 dry_run=args.dry_run,
             )
-            record["strategyClass"] = strategy_by_name.get(str(row.get("name")))
-            record["nearestMatchedExamples"] = retrieval_by_name.get(str(row.get("name")), [])[:3]
-            append_jsonl(attempts_path, record)
-            attempted += 0 if args.dry_run else 1
-            status = record.get("status")
-            differences = int(record.get("differences", -1))
-            if status == "matched" and differences == 0:
-                matched_count += 1
-                append_jsonl(accepted_path, record)
-            elif status == "compile-failed":
-                compile_failed += 1
-            elif status == "slice-failed":
-                slice_failed += 1
-            elif status == "mismatched":
-                mismatched += 1
-            elif status not in {"generated-only"}:
-                errors += 1
+            for record in records:
+                record["strategyClass"] = strategy_by_name.get(str(row.get("name")))
+                record["nearestMatchedExamples"] = retrieval_by_name.get(str(row.get("name")), [])[:3]
+                append_jsonl(attempts_path, record)
+                attempted += 0 if args.dry_run else 1
+                status = record.get("status")
+                differences = int(record.get("differences", -1))
+                if status == "matched" and differences == 0:
+                    matched_count += 1
+                    append_jsonl(accepted_path, record)
+                elif status == "compile-failed":
+                    compile_failed += 1
+                elif status == "slice-failed":
+                    slice_failed += 1
+                elif status == "mismatched":
+                    mismatched += 1
+                elif status not in {"generated-only"}:
+                    errors += 1
             if args.progress_every and generated and generated % args.progress_every == 0:
                 print(
                     f"source-parity-synthesize: inspected={inspected} generated={generated} matched={matched_count}",
@@ -3378,6 +3488,7 @@ def main(argv: list[str] | None = None) -> int:
         "compileFailedCandidates": compile_failed,
         "sliceFailedCandidates": slice_failed,
         "errorCandidates": errors,
+        "compilerProfiles": [name for name, _ in compiler_profiles] if compiler_profiles else [name for name, _ in DEFAULT_PROFILES],
         "dryRun": args.dry_run,
         "strategies": sorted(strategies) if strategies else None,
         "claimBoundary": "candidate source is generated automatically from binary-derived features; accepted source requires objdiff zero",

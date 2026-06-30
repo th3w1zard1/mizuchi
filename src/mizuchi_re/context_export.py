@@ -96,6 +96,7 @@ class ExportConfig:
     max_binary_analysis_bytes: int = 256_000_000
     max_container_members: int = 300
     strings_limit: int = 500
+    max_index_text_chars: int = 2_000
     include_low_signal_members: bool = False
 
 
@@ -116,8 +117,11 @@ class ContextExporter:
         self.extracted_dir.mkdir(parents=True, exist_ok=True)
         self._walk(self.root, logical_prefix="", depth=0)
         tree = build_context_tree(self.rows)
+        llm_index = build_llm_context_index(self.root, self.rows, self.config)
         atomic_write_json(self.out_dir / "tree.json", tree)
+        atomic_write_json(self.out_dir / "LLM_CONTEXT.json", llm_index)
         (self.out_dir / "TREE.md").write_text(render_context_tree_markdown(self.root, tree), encoding="utf-8")
+        (self.out_dir / "LLM_CONTEXT.md").write_text(render_llm_context_markdown(llm_index), encoding="utf-8")
         manifest = {
             "schema": "mizuchi.context-export.v1",
             "createdAt": now(),
@@ -134,6 +138,7 @@ class ContextExporter:
                 "maxBinaryAnalysisBytes": self.config.max_binary_analysis_bytes,
                 "maxContainerMembers": self.config.max_container_members,
                 "stringsLimit": self.config.strings_limit,
+                "maxIndexTextChars": self.config.max_index_text_chars,
             },
             "includeLowSignalMembers": self.config.include_low_signal_members,
             "filesVisited": self.seen_files,
@@ -142,6 +147,10 @@ class ContextExporter:
             "tree": {
                 "json": "tree.json",
                 "markdown": "TREE.md",
+            },
+            "llmContext": {
+                "json": "LLM_CONTEXT.json",
+                "markdown": "LLM_CONTEXT.md",
             },
             "entries": self.rows,
         }
@@ -172,7 +181,7 @@ class ContextExporter:
         digest = str(digest_info["sha256"])
         rel = logical_prefix or path.name
         kind = classify_file(path)
-        export_path = self._write_surrogate(path, rel, kind, digest, stat.st_size, digest_info)
+        export_path, payload = self._write_surrogate(path, rel, kind, digest, stat.st_size, digest_info)
         row: dict[str, Any] = {
             "path": rel,
             "sourcePath": str(path),
@@ -183,6 +192,7 @@ class ContextExporter:
             "kind": kind,
             "mime": mimetypes.guess_type(path.name)[0],
             "export": str(export_path.relative_to(self.out_dir)),
+            "llmSummary": summarize_file_payload(payload, self.config.max_index_text_chars),
         }
         self.rows.append(row)
         if (
@@ -196,7 +206,7 @@ class ContextExporter:
             if extraction:
                 row["extraction"] = extraction
 
-    def _write_surrogate(self, path: Path, rel: str, kind: str, digest: str, size: int, digest_info: dict[str, Any]) -> Path:
+    def _write_surrogate(self, path: Path, rel: str, kind: str, digest: str, size: int, digest_info: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
         payload = build_file_payload(path, rel, kind, digest, size, self.config)
         payload["hashScope"] = digest_info["scope"]
         payload["bytesHashed"] = digest_info["bytesHashed"]
@@ -206,7 +216,7 @@ class ContextExporter:
             out_path.write_text(render_markdown(payload), encoding="utf-8")
         else:
             out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        return out_path
+        return out_path, payload
 
     def _extract_container(self, path: Path, rel: str, digest: str, depth: int) -> dict[str, Any] | None:
         if shutil.which("7z") is None:
@@ -688,6 +698,112 @@ def build_context_tree(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return freeze_tree(root)
 
 
+def summarize_file_payload(payload: dict[str, Any], max_text_chars: int) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "kind": payload.get("kind"),
+        "exportedPath": payload.get("path"),
+    }
+    text = str(payload.get("text") or "")
+    if text:
+        summary["textPreview"] = bounded_text(text, max_text_chars)
+        summary["textTruncated"] = len(text) > max_text_chars
+    strings = payload.get("strings")
+    if isinstance(strings, list):
+        summary["stringsPreview"] = [str(item) for item in strings[: min(40, len(strings))]]
+        summary["stringsCountInSurrogate"] = len(strings)
+    analysis = payload.get("analysis")
+    if isinstance(analysis, dict):
+        summary["analysis"] = summarize_analysis(analysis)
+    container = payload.get("container")
+    if isinstance(container, dict):
+        summary["container"] = summarize_container(container)
+    return {key: value for key, value in summary.items() if value not in (None, "", [], {})}
+
+
+def bounded_text(value: str, limit: int) -> str:
+    if limit <= 0:
+        return ""
+    if len(value) <= limit:
+        return value
+    return value[:limit].rstrip() + "\n[truncated]"
+
+
+def summarize_analysis(analysis: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    file_info = analysis.get("file")
+    if isinstance(file_info, dict):
+        result["file"] = first_nonempty_line(str(file_info.get("stdout") or ""))
+    strings = analysis.get("strings")
+    if isinstance(strings, list):
+        result["stringsPreview"] = [str(item) for item in strings[:40]]
+        result["stringsCountInSurrogate"] = len(strings)
+    head_strings = analysis.get("headStrings")
+    if isinstance(head_strings, list):
+        result["headStrings"] = [str(item) for item in head_strings[:40]]
+        result["headStringsCountInSurrogate"] = len(head_strings)
+    if analysis.get("headBytesScanned") is not None:
+        result["headBytesScanned"] = analysis.get("headBytesScanned")
+    for key in ("sevenZipMetadata", "objdumpHeaders", "rabinInfo", "rabinImports", "rabinSections", "exiftool"):
+        value = analysis.get(key)
+        if isinstance(value, dict):
+            result[key] = {
+                "returnCode": value.get("returnCode"),
+                "stdoutPreview": bounded_text(str(value.get("stdout") or ""), 1200),
+                "stderrPreview": bounded_text(str(value.get("stderr") or ""), 600),
+                "truncated": value.get("truncated"),
+            }
+    if analysis.get("status"):
+        result["status"] = analysis.get("status")
+        result["reason"] = analysis.get("reason")
+    return {key: value for key, value in result.items() if value not in (None, "", [], {})}
+
+
+def summarize_container(container: dict[str, Any]) -> dict[str, Any]:
+    listing = container.get("listing")
+    result: dict[str, Any] = {"status": container.get("status")}
+    if isinstance(listing, dict):
+        result["returnCode"] = listing.get("returnCode")
+        result["listingPreview"] = bounded_text(str(listing.get("stdout") or ""), 1600)
+        result["stderrPreview"] = bounded_text(str(listing.get("stderr") or ""), 600)
+    if container.get("reason"):
+        result["reason"] = container.get("reason")
+    return {key: value for key, value in result.items() if value not in (None, "", [], {})}
+
+
+def first_nonempty_line(value: str) -> str:
+    for line in value.splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def build_llm_context_index(input_path: Path, rows: list[dict[str, Any]], config: ExportConfig) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    for row in rows:
+        item = {
+            "path": row.get("path"),
+            "kind": row.get("kind"),
+            "size": row.get("size"),
+            "sha256": row.get("sha256"),
+            "hashScope": row.get("hashScope"),
+            "bytesHashed": row.get("bytesHashed"),
+            "mime": row.get("mime"),
+            "surrogate": row.get("export"),
+            "summary": row.get("llmSummary"),
+            "extraction": summarize_extraction(row.get("extraction")),
+        }
+        entries.append({key: value for key, value in item.items() if value not in (None, "", [], {})})
+    return {
+        "schema": "mizuchi.llm-context-index.v1",
+        "createdAt": now(),
+        "inputPath": str(input_path),
+        "outputFormat": config.output_format,
+        "entryCount": len(entries),
+        "entries": entries,
+        "claimBoundary": "This is an LLM-readable surrogate index over files, resources, strings, metadata, and extracted containers; it is not semantic source parity proof.",
+    }
+
+
 def summarize_extraction(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
@@ -753,6 +869,59 @@ def render_tree_node(node: dict[str, Any], lines: list[str], *, depth: int) -> N
     lines.append(f"{indent}- `{node.get('name')}` ({'; '.join(details)})")
 
 
+def render_llm_context_markdown(index: dict[str, Any]) -> str:
+    lines = [
+        "# Mizuchi LLM Context",
+        "",
+        f"Input: `{index.get('inputPath')}`",
+        f"Entries: `{index.get('entryCount')}`",
+        "",
+        f"Claim boundary: {index.get('claimBoundary')}",
+        "",
+        "## Entries",
+        "",
+    ]
+    for entry in index.get("entries", []):
+        path = entry.get("path")
+        lines.append(f"### `{path}`")
+        lines.append("")
+        lines.append(f"- Kind: `{entry.get('kind')}`")
+        lines.append(f"- Size: `{entry.get('size')}`")
+        if entry.get("mime"):
+            lines.append(f"- MIME: `{entry.get('mime')}`")
+        if entry.get("sha256"):
+            lines.append(f"- SHA256: `{entry.get('sha256')}`")
+        if entry.get("hashScope") != "full":
+            lines.append(f"- Hash scope: `{entry.get('hashScope')}` over `{entry.get('bytesHashed')}` bytes")
+        if entry.get("surrogate"):
+            lines.append(f"- Surrogate: `{entry.get('surrogate')}`")
+        extraction = entry.get("extraction")
+        if isinstance(extraction, dict) and extraction.get("status"):
+            lines.append(f"- Extraction: `{extraction.get('status')}`")
+        lines.append("")
+        render_summary_markdown(entry.get("summary"), lines)
+    return "\n".join(lines)
+
+
+def render_summary_markdown(summary: Any, lines: list[str]) -> None:
+    if not isinstance(summary, dict):
+        return
+    text = summary.get("textPreview")
+    if text:
+        lines.extend(["#### Text Preview", "", "```text", str(text), "```", ""])
+    strings = summary.get("stringsPreview")
+    if isinstance(strings, list) and strings:
+        lines.extend(["#### Strings", ""])
+        lines.extend(f"- `{line}`" for line in strings[:40])
+        lines.append("")
+    analysis = summary.get("analysis")
+    if isinstance(analysis, dict) and analysis:
+        lines.extend(["#### Analysis Summary", "", "```json", json.dumps(analysis, indent=2, sort_keys=True), "```", ""])
+    container = summary.get("container")
+    if isinstance(container, dict) and container:
+        lines.extend(["#### Container Summary", "", "```json", json.dumps(container, indent=2, sort_keys=True), "```", ""])
+
+
 def build_file_payload(path: Path, rel: str, kind: str, digest: str, size: int, config: ExportConfig) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema": "mizuchi.context-file.v1",
@@ -781,7 +950,10 @@ def build_file_payload(path: Path, rel: str, kind: str, digest: str, size: int, 
         else:
             payload["strings"] = extract_strings(path, config.strings_limit)
     else:
-        payload["strings"] = extract_strings(path, config.strings_limit)
+        if size > config.max_binary_analysis_bytes:
+            payload["analysis"] = limited_binary_analysis(path, config, size)
+        else:
+            payload["strings"] = extract_strings(path, config.strings_limit)
     return payload
 
 
@@ -813,7 +985,10 @@ def limited_binary_analysis(path: Path, config: ExportConfig, size: int) -> dict
         "file": run_command(["file", "-b", str(path)], timeout=15),
     }
     if config.strings_limit > 0:
-        analysis["headStrings"] = extract_strings_from_bytes(path.read_bytes()[: min(size, 2_000_000)], config.strings_limit)
+        preview_bytes = min(size, max(0, config.max_binary_analysis_bytes), 256 * 1024)
+        with path.open("rb") as fh:
+            analysis["headStrings"] = extract_strings_from_bytes(fh.read(preview_bytes), config.strings_limit)
+        analysis["headBytesScanned"] = preview_bytes
     return analysis
 
 
@@ -901,7 +1076,8 @@ def read_text_preview(path: Path, max_bytes: int) -> str:
 
 def is_probably_text(path: Path) -> bool:
     try:
-        data = path.read_bytes()[:8192]
+        with path.open("rb") as fh:
+            data = fh.read(8192)
     except OSError:
         return False
     if b"\0" in data:

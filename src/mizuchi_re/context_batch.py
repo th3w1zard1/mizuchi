@@ -13,6 +13,7 @@ from .state import atomic_write_json, now
 
 
 DEFAULT_SUFFIXES = sorted(ARCHIVE_SUFFIXES | BINARY_ANALYSIS_SUFFIXES)
+ITEM_MODES = {"matching-files", "top-level"}
 
 
 def safe_component(value: str) -> str:
@@ -20,28 +21,47 @@ def safe_component(value: str) -> str:
     return cleaned[:180] or "item"
 
 
-def find_inputs(root: Path, suffixes: set[str], max_items: int, *, min_size: int = 0) -> list[Path]:
+def find_inputs(root: Path, suffixes: set[str], max_items: int, *, min_size: int = 0, item_mode: str = "matching-files") -> list[Path]:
     root = root.expanduser().resolve()
     if root.is_file():
         return [root]
     if not root.is_dir():
         raise FileNotFoundError(f"input root does not exist: {root}")
+    if item_mode not in ITEM_MODES:
+        raise ValueError(f"unknown item mode: {item_mode}")
+    if item_mode == "top-level":
+        matches = []
+        for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+            if child.is_dir():
+                matches.append(child)
+            elif child.is_file() and suffix_matches(child, suffixes) and file_large_enough(child, min_size):
+                matches.append(child)
+            if len(matches) >= max_items:
+                break
+        return matches
     matches: list[Path] = []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in suffixes:
+        if not suffix_matches(path, suffixes):
             continue
-        try:
-            size = path.stat().st_size
-        except OSError:
-            continue
-        if size < min_size:
+        if not file_large_enough(path, min_size):
             continue
         matches.append(path)
         if len(matches) >= max_items:
             break
     return matches
+
+
+def suffix_matches(path: Path, suffixes: set[str]) -> bool:
+    return "*" in suffixes or path.suffix.lower() in suffixes
+
+
+def file_large_enough(path: Path, min_size: int) -> bool:
+    try:
+        return path.stat().st_size >= min_size
+    except OSError:
+        return False
 
 
 def item_output_dir(out_dir: Path, root: Path, item: Path) -> Path:
@@ -65,6 +85,7 @@ def export_context_batch(
     include_low_signal_members: bool,
     max_items: int,
     min_size: int,
+    item_mode: str,
     suffixes: set[str],
     max_files_per_item: int,
     max_depth: int,
@@ -73,11 +94,12 @@ def export_context_batch(
     max_binary_analysis_bytes: int,
     max_container_members: int,
     strings_limit: int,
+    max_index_text_chars: int,
 ) -> dict[str, Any]:
     root = input_path.expanduser().resolve()
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    inputs = find_inputs(root, suffixes, max_items, min_size=min_size)
+    inputs = find_inputs(root, suffixes, max_items, min_size=min_size, item_mode=item_mode)
     rows: list[dict[str, Any]] = []
     for index, item in enumerate(inputs, start=1):
         item_out = item_output_dir(out_dir, root, item)
@@ -96,6 +118,7 @@ def export_context_batch(
                 max_binary_analysis_bytes=max_binary_analysis_bytes,
                 max_container_members=max_container_members,
                 strings_limit=strings_limit,
+                max_index_text_chars=max_index_text_chars,
             )
         )
         try:
@@ -110,6 +133,8 @@ def export_context_batch(
                 "outputDirectory": str(item_out),
                 "manifest": str(item_out / "manifest.json"),
                 "treeMarkdown": str(item_out / "TREE.md"),
+                "llmContextJson": str(item_out / "LLM_CONTEXT.json"),
+                "llmContextMarkdown": str(item_out / "LLM_CONTEXT.md"),
                 "filesVisited": manifest.get("filesVisited"),
                 "filesExported": manifest.get("filesExported"),
                 "truncated": manifest.get("truncated"),
@@ -124,6 +149,7 @@ def export_context_batch(
         "outputFormat": output_format,
         "binaryAnalysis": binary_analysis,
         "extractContainers": extract_containers,
+        "itemMode": item_mode,
         "suffixes": sorted(suffixes),
         "limits": {
             "maxItems": max_items,
@@ -135,6 +161,7 @@ def export_context_batch(
             "maxBinaryAnalysisBytes": max_binary_analysis_bytes,
             "maxContainerMembers": max_container_members,
             "stringsLimit": strings_limit,
+            "maxIndexTextChars": max_index_text_chars,
         },
         "itemsDiscovered": len(inputs),
         "itemsExported": len(rows),
@@ -158,7 +185,7 @@ def render_batch_tree(report: dict[str, Any]) -> str:
         "## Items",
     ]
     for item in report.get("items", []):
-        lines.append(f"- `{item.get('path')}` -> `{item.get('manifest')}`")
+        lines.append(f"- `{item.get('path')}` -> `{item.get('llmContextMarkdown') or item.get('manifest')}`")
     lines.append("")
     lines.append(f"Claim boundary: {report.get('claimBoundary')}")
     lines.append("")
@@ -173,6 +200,9 @@ def parse_suffixes(values: list[str]) -> set[str]:
         for part in value.split(","):
             suffix = part.strip().lower()
             if not suffix:
+                continue
+            if suffix == "*":
+                suffixes.add("*")
                 continue
             if not suffix.startswith("."):
                 suffix = "." + suffix
@@ -190,14 +220,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--include-low-signal-members", action="store_true")
     parser.add_argument("--max-items", type=int, default=25)
     parser.add_argument("--min-size", type=int, default=0)
+    parser.add_argument("--item-mode", choices=sorted(ITEM_MODES), default="matching-files", help="matching-files scans recursively for suffixes; top-level exports immediate child directories plus matching files.")
     parser.add_argument("--suffix", action="append", default=[], help="Suffix or comma-separated suffix list. Defaults to EXE/archive/binary suffixes.")
     parser.add_argument("--max-files-per-item", type=int, default=250)
     parser.add_argument("--max-depth", type=int, default=3)
-    parser.add_argument("--max-hash-bytes", type=int, default=512_000_000)
+    parser.add_argument("--max-hash-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--max-text-bytes", type=int, default=2_000_000)
     parser.add_argument("--max-binary-analysis-bytes", type=int, default=256_000_000)
     parser.add_argument("--max-container-members", type=int, default=120)
     parser.add_argument("--strings-limit", type=int, default=200)
+    parser.add_argument("--max-index-text-chars", type=int, default=2_000)
     args = parser.parse_args(argv)
 
     report = export_context_batch(
@@ -209,6 +241,7 @@ def main(argv: list[str] | None = None) -> int:
         include_low_signal_members=args.include_low_signal_members,
         max_items=args.max_items,
         min_size=args.min_size,
+        item_mode=args.item_mode,
         suffixes=parse_suffixes(args.suffix),
         max_files_per_item=args.max_files_per_item,
         max_depth=args.max_depth,
@@ -217,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         max_binary_analysis_bytes=args.max_binary_analysis_bytes,
         max_container_members=args.max_container_members,
         strings_limit=args.strings_limit,
+        max_index_text_chars=args.max_index_text_chars,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
