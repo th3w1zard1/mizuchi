@@ -383,9 +383,19 @@ export class DecompPermuter {
     const contextContent = options.contextContent || '';
     await fs.writeFile(path.join(workingDir, 'context.h'), contextContent);
 
-    // Write base.c: include context + generated code only
-    const baseC = `#include "context.h"\n${options.cCode}`;
+    // Strip GCC asm extensions from the code so pycparser can parse it.
+    // These are restored by compile.sh via an asm_restore.h header.
+    const { cleanedCode, restoreHeader } = this.#stripAsmExtensions(options.cCode);
+
+    // Write base.c: include context + cleaned code (pycparser-friendly)
+    const baseC = `#include "context.h"\n${cleanedCode}`;
     await fs.writeFile(path.join(workingDir, 'base.c'), baseC);
+
+    // Write asm_restore.h: #define macros that compile.sh's preprocessor
+    // expands to restore the original asm constructs.
+    if (restoreHeader) {
+      await fs.writeFile(path.join(workingDir, 'asm_restore.h'), restoreHeader);
+    }
 
     // Copy the target object file
     await fs.copyFile(options.targetObjectPath, path.join(workingDir, 'target.o'));
@@ -430,6 +440,33 @@ export class DecompPermuter {
     // $1 = C source file, $2 = "-o", $3 = output object file
     // We cd into projectRoot before compiling so relative paths in the user's
     // compilerScript resolve correctly (e.g. tools/agbcc/bin/agbcc).
+    const hasAsmRestore = await fs.access(path.join(workingDir, 'asm_restore.h')).then(
+      () => true,
+      () => false,
+    );
+
+    // Build the asm restore step: if asm_restore.h exists, use cpp to expand
+    // the MIZUCHI_ASM_N() macros back to real asm statements, and use sed to
+    // restore `register TYPE VAR asm("REG")` from marker comments.
+    const asmRestoreStep = hasAsmRestore
+      ? `
+# Restore asm extensions stripped for pycparser compatibility
+ASM_RESTORE="${workingDir}/asm_restore.h"
+if [ -f "$ASM_RESTORE" ]; then
+  # Expand MIZUCHI_ASM_N() macros via preprocessor
+  cpp -P -nostdinc -include "$ASM_RESTORE" "$TMPDIR/stripped.c" > "$TMPDIR/asm_expanded.c"
+  mv "$TMPDIR/asm_expanded.c" "$TMPDIR/stripped.c"
+
+  # Restore register asm declarations from marker comments
+  # Pattern: /* MIZUCHI_REG_ASM: varName -> register type varName asm("reg") */
+  # The line after the comment has the plain declaration (e.g. "u8 slot")
+  # which needs to be replaced with the register asm version.
+  perl -0777 -pe 's{/\\* MIZUCHI_REG_ASM: (\\w+) -> (register .*?) \\*/\\n\\s*(\\w[\\w\\s*]*?)\\s+\\1\\b}{$2}g' "$TMPDIR/stripped.c" > "$TMPDIR/reg_restored.c"
+  mv "$TMPDIR/reg_restored.c" "$TMPDIR/stripped.c"
+fi
+`
+      : '';
+
     const compileScript = `#!/bin/bash
 set -e
 CFILE="$(realpath "$1")"
@@ -438,7 +475,7 @@ TMPDIR="$(mktemp -d)"
 
 # Strip block comments (old compilers like agbcc may not support them)
 perl -0777 -pe 's|/\\*.*?\\*/||gs' "$CFILE" > "$TMPDIR/stripped.c"
-
+${asmRestoreStep}
 # Preprocess
 cpp -P "$TMPDIR/stripped.c" "$TMPDIR/preprocessed.c"
 
@@ -710,5 +747,57 @@ fi
     } catch {
       return {};
     }
+  }
+
+  /**
+   * Strip GCC asm extensions from C code so pycparser can parse it.
+   *
+   * Handles two patterns:
+   *
+   * 1. `register TYPE VAR asm("rN")` declarations → replaced with `TYPE VAR`
+   *    and a `#define` macro in the restore header re-adds the `register asm`.
+   *
+   * 2. `asm("" : "+r"(VAR))` / `asm("" : "=r"(VAR) : "0"(EXPR))` statements
+   *    → replaced with `MIZUCHI_ASM_N()` placeholder calls (which pycparser
+   *    treats as function calls and preserves). The restore header `#define`s
+   *    each placeholder back to the original asm statement.
+   *
+   * The permuter mutates the cleaned code; compile.sh preprocesses with
+   * `-include asm_restore.h` so the macros expand back before compilation.
+   */
+  #stripAsmExtensions(code: string): { cleanedCode: string; restoreHeader: string } {
+    const restoreLines: string[] = [];
+    let cleaned = code;
+    let asmCounter = 0;
+
+    // Pattern 1: register TYPE VAR asm("REG") — declaration with optional initializer
+    // Handles pointer types like `u8 *` and multi-word types.
+    // The regex captures everything between `register ` and the variable name
+    // (which is immediately followed by ` asm(`).
+    cleaned = cleaned.replace(
+      /register\s+([\w\s*]+?)(\w+)\s+asm\s*\(\s*"([^"]+)"\s*\)/g,
+      (_match, type: string, varName: string, regName: string) => {
+        restoreLines.push(`/* MIZUCHI_REG_ASM: ${varName} -> register ${type.trim()} ${varName} asm("${regName}") */`);
+        return `${type.trim()} ${varName}`;
+      },
+    );
+
+    // Pattern 2: asm("" : ...) statements (barriers, constraints)
+    // These may contain nested parentheses like asm("" : "+r"(slot)),
+    // so we can't use [^)]* — instead we match balanced parens.
+    cleaned = cleaned.replace(/asm\s*\(""[^;]*\)\s*;/g, (match) => {
+      const id = asmCounter++;
+      const macroName = `MIZUCHI_ASM_${id}`;
+      restoreLines.push(`#define ${macroName}() ${match}`);
+      return `${macroName}();`;
+    });
+
+    // Build the restore header
+    // compile.sh will: cpp -P -include asm_restore.h <source>
+    // This expands the MIZUCHI_ASM_N() macros back to real asm statements.
+    // For register asm, compile.sh uses sed to restore from the marker comments.
+    const restoreHeader = restoreLines.length > 0 ? restoreLines.join('\n') + '\n' : '';
+
+    return { cleanedCode: cleaned, restoreHeader };
   }
 }

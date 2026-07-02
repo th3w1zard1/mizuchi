@@ -1,0 +1,79 @@
+{
+  "allMatch": false,
+  "totalScenarios": 100,
+  "matchCount": 3,
+  "mismatchCount": 97,
+  "scenarios": [
+    {
+      "index": 0,
+      "match": true,
+      "diffs": [],
+      "inputDescription": "Null pointer test: r0=0x00000000, r1=0x00"
+    },
+    {
+      "index": 1,
+      "match": true,
+      "diffs": [],
+      "inputDescription": "EWRAM pointer with zeroed data: r0=0x02000100, r1=0x00"
+    },
+    {
+      "index": 2,
+      "match": true,
+      "diffs": [],
+      "inputDescription": "IWRAM pointer with zeroed data: r0=0x03000200, r1=0x01"
+    },
+    {
+      "index": 3,
+      "match": false,
+      "diffs": [
+        "Memory write count: original=1, compiled=4",
+        "Extra compiled write: [0x02000284] = 0x0000 (u16)",
+        "Extra compiled write: [0x02000288] = 0x00000000 (u32)",
+        "Extra compiled write: [0x0200028C] = 0x0000000A (u32)"
+      ],
+      "inputDescription": "EWRAM pointer with random data: r0=0x02000100, r1=0x00, mem[0x02000268]=0xA3F1"
+    },
+    {
+      "index": 4,
+      "match": false,
+      "diffs": [
+        "Memory write count: original=1, compiled=4",
+        "Extra compiled write: [0x03000384] = 0x0000 (u16)",
+        "Extra compiled write: [0x03000388] = 0x00000000 (u32)",
+        "Extra compiled write: [0x0300038C] = 0x0000000A (u32)"
+      ],
+      "inputDescription": "IWRAM pointer with count: r0=0x03000200, r1=0x01, mem[0x03000368]=0x52B7"
+    },
+    {
+      "index": 5,
+      "match": false,
+      "diffs": ["Memory write count: original=1, compiled=4"],
+      "inputDescription": "random scenario #5 (seed=42): r0=0x020043A0, r1=0x00"
+    },
+    {
+      "index": 6,
+      "match": false,
+      "diffs": ["Memory write count: original=1, compiled=4"],
+      "inputDescription": "random scenario #6 (seed=42): r0=0x02008F10, r1=0x01"
+    },
+    {
+      "index": 7,
+      "match": false,
+      "diffs": ["Memory write count: original=1, compiled=4"],
+      "inputDescription": "random scenario #7 (seed=42): r0=0x0200C220, r1=0x00"
+    },
+    {
+      "index": 8,
+      "match": false,
+      "diffs": ["Memory write count: original=1, compiled=4", "Return value: original=0x00000000, compiled=0x00000001"],
+      "inputDescription": "random scenario #8 (seed=42): r0=0x02001B80, r1=0x01"
+    },
+    {
+      "index": 9,
+      "match": false,
+      "diffs": ["Memory write count: original=1, compiled=4"],
+      "inputDescription": "random scenario #9 (seed=42): r0=0x020055F0, r1=0x00"
+    }
+  ],
+  "summary": "97/100 scenarios failed (sub_807ECFC). First failure: EWRAM pointer with random data — compiled code produces extra memory writes"
+}
