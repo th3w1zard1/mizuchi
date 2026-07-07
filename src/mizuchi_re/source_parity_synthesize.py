@@ -2103,6 +2103,54 @@ def x86_64_two_args_min_max64(row: dict[str, Any], c_name: str, data: bytes) -> 
     ]
 
 
+X86_64_TWO_ARG_ABSDIFF64_OPS: dict[bytes, tuple[str, str]] = {
+    b"\x48\x89\xf0\x48\x29\xf8\x48\x29\xf7\x48\x0f\x43\xc7\xc3": (
+        "a > b ? a - b : b - a",
+        "mov-rax-rsi-sub-rax-rdi-sub-rdi-rsi-cmovae-rax-rdi-ret",
+    ),
+}
+
+
+def x86_64_two_args_absdiff64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_TWO_ARG_ABSDIFF64_OPS.get(body)
+    if decoded is None:
+        return []
+    expression, pattern = decoded
+    source = header("x86-64-two-args64-absdiff-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long a, unsigned long long b) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-two-args64-absdiff-cdecl",
+            variant="sysv-o2-register-args-uint64-absdiff-cmov",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArgs": ["rdi", "rsi"],
+                "valueType": "unsigned long long",
+                "returnType": "unsigned long long",
+                "expression": expression,
+                "cmov": "cmovae",
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_LEA_MULTIPLY_OPS: dict[bytes, tuple[int, str]] = {
     b"\x8d\x04\x3f\xc3": (2, "lea-eax-rdi-rdi-ret"),
     b"\x8d\x04\x7f\xc3": (3, "lea-eax-rdi-rdi2-ret"),
@@ -18730,6 +18778,7 @@ GENERATORS = [
     x86_64_return_second_arg,
     x86_64_two_args_binary_op64,
     x86_64_two_args_min_max64,
+    x86_64_two_args_absdiff64,
     x86_64_two_args_unsigned_compare64,
     x86_64_two_args_signed_compare64,
     compact_terminal_ret_masm,
@@ -18774,7 +18823,9 @@ GENERATORS = [
     x86_64_two_args_affine_lea,
     x86_64_two_args_affine_lea64,
     x86_64_two_args_binary_op,
+    x86_64_two_args_binary_op64,
     x86_64_two_args_min_max,
+    x86_64_two_args_min_max64,
     x86_64_arg_lea_multiply,
     x86_64_arg_const_min_max,
     x86_64_const_minus_arg,

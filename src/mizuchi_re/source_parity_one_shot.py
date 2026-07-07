@@ -714,7 +714,7 @@ def stage_queue(profile: ProfileConfig, state: dict[str, Any], *, queue_limit: i
     if result.returncode != 0:
         raise RuntimeError(result.stderr or "queue failed")
 
-def stage_index_examples(profile: ProfileConfig, state: dict[str, Any]) -> None:
+def stage_index_examples(profile: ProfileConfig, state: dict[str, Any], *, queue_limit: int) -> None:
     result = run_script(
         "source-parity-feature-index.py",
         "--inventory",
@@ -723,8 +723,16 @@ def stage_index_examples(profile: ProfileConfig, state: dict[str, Any]) -> None:
         str(profile.queue_jsonl),
         "--out-dir",
         str(profile.index_out_dir),
+        "--max-remaining",
+        str(max(queue_limit, 1)),
     )
-    mark_stage(state, "index-examples", "complete", returncode=result.returncode)
+    mark_stage(
+        state,
+        "index-examples",
+        "complete",
+        returncode=result.returncode,
+        indexedQueueLimit=queue_limit,
+    )
     if result.returncode != 0:
         raise RuntimeError(result.stderr or "index-examples failed")
 
@@ -818,7 +826,11 @@ def _register_runners() -> None:
                 ctx["state"],
                 queue_limit=int(ctx.get("queue_limit") or 250),
             ),
-            "index-examples": lambda ctx: stage_index_examples(ctx["profile"], ctx["state"]),
+            "index-examples": lambda ctx: stage_index_examples(
+                ctx["profile"],
+                ctx["state"],
+                queue_limit=int(ctx.get("queue_limit") or 250),
+            ),
             "profile-corpus": lambda ctx: stage_profile_corpus(ctx["profile"], ctx["state"]),
             "synthesize-candidates": lambda ctx: stage_synthesize(
                 ctx["profile"],
@@ -947,6 +959,13 @@ def run_pipeline(
         queue_stage = (state.get("stages") or {}).get("queue") or {}
         if name == "queue" and int(queue_stage.get("queueLimit") or 0) != int(queue_limit):
             force_stage = True
+        index_stage = (state.get("stages") or {}).get("index-examples") or {}
+        if name == "index-examples" and int(queue_stage.get("queueLimit") or 0) != int(queue_limit):
+            force_stage = True
+        if name == "index-examples" and index_stage.get("status") == "complete":
+            indexed_limit = int(index_stage.get("indexedQueueLimit") or 0)
+            if indexed_limit != int(queue_limit):
+                force_stage = True
         if ctx.get("force_export_downstream") and name in {"compile-source", "derive-coverage"}:
             force_stage = True
         if name == "compile-source":
