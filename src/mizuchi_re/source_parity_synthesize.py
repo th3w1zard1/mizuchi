@@ -1749,6 +1749,123 @@ def x86_64_arg_sign_mask(row: dict[str, Any], c_name: str, data: bytes) -> list[
     ]
 
 
+def decode_x86_64_arg_bitmask_bool(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x89\xf8\x83\xe0\x01\xc3":
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 0x00000001,
+            "pattern": "mov-eax-edi-and-eax-1-ret",
+        }
+    if body == b"\x89\xf8\xf7\xd0\x83\xe0\x01\xc3":
+        return {
+            "predicate": "zero",
+            "operator": "==",
+            "mask": 0x00000001,
+            "pattern": "mov-eax-edi-not-eax-and-eax-1-ret",
+        }
+    if len(body) == 9 and body[:3] == b"\x89\xf8\xc1" and body[3] == 0xE8 and body[5:8] == b"\x83\xe0\x01" and body[8] == 0xC3:
+        shift = body[4]
+        if not 1 <= shift <= 31:
+            return None
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 1 << shift,
+            "shift": shift,
+            "pattern": "mov-eax-edi-shr-eax-imm8-and-eax-1-ret",
+        }
+    if len(body) == 10 and body[:3] == b"\x31\xc0\x40" and body[3] == 0xF6 and body[4] == 0xC7 and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
+        mask = body[5]
+        setcc_opcode = body[7]
+        if mask == 0:
+            return None
+        if setcc_opcode == 0x94:
+            predicate = "zero"
+            operator = "=="
+            setcc = "sete"
+        elif setcc_opcode == 0x95:
+            predicate = "nonzero"
+            operator = "!="
+            setcc = "setne"
+        else:
+            return None
+        return {
+            "predicate": predicate,
+            "operator": operator,
+            "mask": mask,
+            "byteMask": mask,
+            "setcc": setcc,
+            "pattern": f"xor-eax-test-dil-imm8-{setcc}-al-ret",
+        }
+    if len(body) == 12 and body[:2] == b"\x31\xc0" and body[2:4] == b"\xf7\xc7" and body[8] == 0x0F and body[10:] == b"\xc0\xc3":
+        mask = int.from_bytes(body[4:8], "little", signed=False)
+        setcc_opcode = body[9]
+        if mask == 0:
+            return None
+        if setcc_opcode == 0x94:
+            predicate = "zero"
+            operator = "=="
+            setcc = "sete"
+        elif setcc_opcode == 0x95:
+            predicate = "nonzero"
+            operator = "!="
+            setcc = "setne"
+        else:
+            return None
+        return {
+            "predicate": predicate,
+            "operator": operator,
+            "mask": mask,
+            "setcc": setcc,
+            "pattern": f"xor-eax-test-edi-imm32-{setcc}-al-ret",
+        }
+    return None
+
+
+def x86_64_arg_bitmask_bool(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_bitmask_bool(data)
+    if decoded is None:
+        return []
+    mask = int(decoded["mask"])
+    operator = str(decoded["operator"])
+    predicate = str(decoded["predicate"])
+    source = header(f"x86-64-arg-bitmask-{predicate}-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(unsigned int value) {{",
+            f"    return (value & 0x{mask:08x}u) {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg-bitmask-{predicate}-cdecl",
+            variant=f"sysv-o2-register-arg-bitmask-{predicate}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": operator,
+                "predicate": predicate,
+                "mask": f"0x{mask:08x}",
+                "shift": decoded.get("shift"),
+                "setcc": decoded.get("setcc"),
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
@@ -14811,6 +14928,7 @@ GENERATORS = [
     x86_64_const_minus_arg,
     x86_64_arg_signbit_zero_compare,
     x86_64_arg_sign_mask,
+    x86_64_arg_bitmask_bool,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,
