@@ -2543,6 +2543,52 @@ def x86_64_arg_cast(row: dict[str, Any], c_name: str, data: bytes) -> list[Gener
     ]
 
 
+X86_64_ARG64_SIGN_EXTEND_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x48\x63\xc7\xc3": ("i32", "int", "long long", "(long long)value", "movsxd-rax-edi-ret"),
+    b"\x48\x0f\xbe\xc7\xc3": ("i8", "int", "long long", "(signed char)value", "movsx-rax-dil-ret"),
+    b"\x48\x0f\xbf\xc7\xc3": ("i16", "int", "long long", "(short)value", "movsx-rax-di-ret"),
+}
+
+
+def x86_64_arg64_sign_extend(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG64_SIGN_EXTEND_OPS.get(body)
+    if decoded is None:
+        return []
+    suffix, value_type, return_type, expression, pattern = decoded
+    source = header(f"x86-64-arg64-sign-extend-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg64-sign-extend-{suffix}-cdecl",
+            variant=f"sysv-o2-register-arg64-sign-extend-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=return_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "edi",
+                "valueType": value_type,
+                "returnType": return_type,
+                "expression": expression,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_narrow_imm8_compare(data: bytes) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if len(body) == 10 and body[:3] == b"\x31\xc0\x40" and body[3] == 0x80 and body[4] == 0xFF and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
@@ -15236,6 +15282,7 @@ GENERATORS = [
     short_direct_call_ret_masm,
     x86_64_arg64_lea_multiply,
     x86_64_arg_imm32_binary_op64,
+    x86_64_arg64_sign_extend,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
     byte_field_and_stack_byte,
