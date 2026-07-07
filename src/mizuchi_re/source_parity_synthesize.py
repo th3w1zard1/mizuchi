@@ -2447,6 +2447,66 @@ def x86_64_arg_sdiv_magic(row: dict[str, Any], c_name: str, data: bytes) -> list
     ]
 
 
+X86_64_ARG_SREM_MAGIC_OPS: dict[bytes, tuple[int, str, int, str]] = {
+    bytes.fromhex("4863c74869c8565555554889ca48c1ea3f48c1e92001d18d0c4929c8c3"): (3, "0x55555556", 32, "movsxd-rax-edi-imul-rcx-rax-magic-mov-rdx-rcx-shr-rdx-63-shr-rcx-32-add-ecx-edx-lea-ecx-rcx-rcx2-sub-eax-ecx-ret"),
+    bytes.fromhex("4863c74869c8676666664889ca48c1ea3f48c1f92101d18d0c8929c8c3"): (5, "0x66666667", 33, "movsxd-rax-edi-imul-rcx-rax-magic-mov-rdx-rcx-shr-rdx-63-sar-rcx-33-add-ecx-edx-lea-ecx-rcx-rcx4-sub-eax-ecx-ret"),
+    bytes.fromhex("4863c74869c8676666664889ca48c1ea3f48c1f92201d101c98d0c8929c8c3"): (10, "0x66666667", 34, "movsxd-rax-edi-imul-rcx-rax-magic-mov-rdx-rcx-shr-rdx-63-sar-rcx-34-add-ecx-edx-add-ecx-ecx-lea-ecx-rcx-rcx4-sub-eax-ecx-ret"),
+}
+
+
+def decode_x86_64_arg_srem_magic(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_SREM_MAGIC_OPS.get(body)
+    if decoded is None:
+        return None
+    divisor, multiplier, shift, pattern = decoded
+    return {
+        "divisor": divisor,
+        "multiplier": multiplier,
+        "shift": shift,
+        "pattern": pattern,
+    }
+
+
+def x86_64_arg_srem_magic(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_srem_magic(data)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("x86-64-arg-srem-magic-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return value % {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-srem-magic-cdecl",
+            variant=f"sysv-o2-register-arg-srem-{divisor}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": "%",
+                "divisor": divisor,
+                "multiplier": decoded["multiplier"],
+                "shift": int(decoded["shift"]),
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_bswap32(data: bytes) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if body == b"\x89\xf8\x0f\xc8\xc3":
@@ -16126,6 +16186,7 @@ GENERATORS = [
     x86_64_arg_udiv_magic,
     x86_64_arg_urem_magic,
     x86_64_arg_sdiv_magic,
+    x86_64_arg_srem_magic,
     x86_64_return_first_arg64,
     x86_64_return_second_arg,
     x86_64_two_args_binary_op64,
