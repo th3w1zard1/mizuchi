@@ -1732,6 +1732,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_const_minus_arg_candidate,
         x86_64_arg_signbit_zero_compare_candidate,
         x86_64_arg_sign_mask_candidate,
+        x86_64_arg64_bitmask_bool_candidate,
         x86_64_arg_bitmask_bool_candidate,
         x86_64_arg_udiv_pow2_candidate,
         x86_64_arg_bswap32_candidate,
@@ -5064,6 +5065,8 @@ def decode_x86_64_arg_bitmask_bool(data: bytes) -> dict[str, Any] | None:
 def x86_64_arg_bitmask_bool_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
     if not is_x86_64_task(task):
         return None
+    if x86_64_prefers_arg64_value(task):
+        return None
     decoded = decode_x86_64_arg_bitmask_bool(data)
     if decoded is None:
         return None
@@ -5096,6 +5099,144 @@ def x86_64_arg_bitmask_bool_candidate(task: dict[str, Any], data: bytes) -> dict
             "operator": operator,
             "predicate": predicate,
             "mask": f"0x{mask:08x}",
+            "shift": decoded.get("shift"),
+            "setcc": decoded.get("setcc"),
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def x86_64_prefers_arg64_value(task: dict[str, Any]) -> bool:
+    value_type = str(task.get("valueType") or task.get("argumentType") or "").strip().lower()
+    return (
+        task.get("argumentBitWidth") == 64
+        or task.get("argumentBits") == 64
+        or task.get("valueBits") == 64
+        or value_type in {"unsigned long long", "long long", "uint64_t", "int64_t", "size_t", "uintptr_t"}
+    )
+
+
+def decode_x86_64_arg64_bitmask_bool(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x48\x89\xf8\x83\xe0\x01\xc3":
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 0x0000000000000001,
+            "pattern": "mov-rax-rdi-and-eax-1-ret",
+        }
+    if len(body) == 10 and body[:3] == b"\x48\x89\xf8" and body[3:5] == b"\xc1\xe8" and body[6:9] == b"\x83\xe0\x01" and body[9] == 0xC3:
+        shift = body[5]
+        if not 1 <= shift <= 31:
+            return None
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 1 << shift,
+            "shift": shift,
+            "pattern": "mov-rax-rdi-shr-eax-imm8-and-eax-1-ret",
+        }
+    if len(body) == 11 and body[:3] == b"\x48\x89\xf8" and body[3:6] == b"\x48\xc1\xe8" and body[7:10] == b"\x83\xe0\x01" and body[10] == 0xC3:
+        shift = body[6]
+        if not 32 <= shift <= 63:
+            return None
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 1 << shift,
+            "shift": shift,
+            "pattern": "mov-rax-rdi-shr-rax-imm8-and-eax-1-ret",
+        }
+    if len(body) == 10 and body[:3] == b"\x31\xc0\x40" and body[3] == 0xF6 and body[4] == 0xC7 and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
+        mask = body[5]
+        setcc_opcode = body[7]
+        if mask == 0:
+            return None
+        if setcc_opcode == 0x94:
+            predicate = "zero"
+            operator = "=="
+            setcc = "sete"
+        elif setcc_opcode == 0x95:
+            predicate = "nonzero"
+            operator = "!="
+            setcc = "setne"
+        else:
+            return None
+        return {
+            "predicate": predicate,
+            "operator": operator,
+            "mask": mask,
+            "byteMask": mask,
+            "requiresWidthHint": True,
+            "setcc": setcc,
+            "pattern": f"xor-eax-test-dil-imm8-{setcc}-al-ret",
+        }
+    if len(body) == 12 and body[:2] == b"\x31\xc0" and body[2:4] == b"\xf7\xc7" and body[8] == 0x0F and body[10:] == b"\xc0\xc3":
+        mask = int.from_bytes(body[4:8], "little", signed=False)
+        setcc_opcode = body[9]
+        if mask == 0:
+            return None
+        if setcc_opcode == 0x94:
+            predicate = "zero"
+            operator = "=="
+            setcc = "sete"
+        elif setcc_opcode == 0x95:
+            predicate = "nonzero"
+            operator = "!="
+            setcc = "setne"
+        else:
+            return None
+        return {
+            "predicate": predicate,
+            "operator": operator,
+            "mask": mask,
+            "requiresWidthHint": True,
+            "setcc": setcc,
+            "pattern": f"xor-eax-test-edi-imm32-{setcc}-al-ret",
+        }
+    return None
+
+
+def x86_64_arg64_bitmask_bool_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg64_bitmask_bool(data)
+    if decoded is None:
+        return None
+    if decoded.get("requiresWidthHint") and not x86_64_prefers_arg64_value(task):
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    mask = int(decoded["mask"])
+    operator = str(decoded["operator"])
+    predicate = str(decoded["predicate"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 64-bit argument bitmask boolean pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(unsigned long long value) {{",
+            f"    return (value & 0x{mask:016x}ull) {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg64-bitmask-{predicate}-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "rdi",
+            "operator": operator,
+            "predicate": predicate,
+            "mask": f"0x{mask:016x}",
             "shift": decoded.get("shift"),
             "setcc": decoded.get("setcc"),
             "pattern": decoded["pattern"],

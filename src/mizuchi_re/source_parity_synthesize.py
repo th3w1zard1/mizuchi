@@ -276,6 +276,11 @@ def source_task_to_queue_row(task: dict[str, Any]) -> dict[str, Any] | None:
         "section": target_slice.get("section"),
         "targetFormat": task.get("targetFormat"),
         "architectureHint": task.get("architectureHint"),
+        "argumentBitWidth": task.get("argumentBitWidth"),
+        "argumentBits": task.get("argumentBits"),
+        "argumentType": task.get("argumentType"),
+        "valueBits": task.get("valueBits"),
+        "valueType": task.get("valueType"),
         "bytes": data.hex(),
         "bodyBytes": len(data),
         "instructionCount": fact.get("instructionCount"),
@@ -1875,6 +1880,8 @@ def decode_x86_64_arg_bitmask_bool(data: bytes) -> dict[str, Any] | None:
 def x86_64_arg_bitmask_bool(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
     if not is_x86_64_row(row):
         return []
+    if x86_64_prefers_arg64_value(row):
+        return []
     decoded = decode_x86_64_arg_bitmask_bool(data)
     if decoded is None:
         return []
@@ -1905,6 +1912,141 @@ def x86_64_arg_bitmask_bool(row: dict[str, Any], c_name: str, data: bytes) -> li
                 "operator": operator,
                 "predicate": predicate,
                 "mask": f"0x{mask:08x}",
+                "shift": decoded.get("shift"),
+                "setcc": decoded.get("setcc"),
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
+def x86_64_prefers_arg64_value(row: dict[str, Any]) -> bool:
+    value_type = str(row.get("valueType") or row.get("argumentType") or "").strip().lower()
+    return (
+        row.get("argumentBitWidth") == 64
+        or row.get("argumentBits") == 64
+        or row.get("valueBits") == 64
+        or value_type in {"unsigned long long", "long long", "uint64_t", "int64_t", "size_t", "uintptr_t"}
+    )
+
+
+def decode_x86_64_arg64_bitmask_bool(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x48\x89\xf8\x83\xe0\x01\xc3":
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 0x0000000000000001,
+            "pattern": "mov-rax-rdi-and-eax-1-ret",
+        }
+    if len(body) == 10 and body[:3] == b"\x48\x89\xf8" and body[3:5] == b"\xc1\xe8" and body[6:9] == b"\x83\xe0\x01" and body[9] == 0xC3:
+        shift = body[5]
+        if not 1 <= shift <= 31:
+            return None
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 1 << shift,
+            "shift": shift,
+            "pattern": "mov-rax-rdi-shr-eax-imm8-and-eax-1-ret",
+        }
+    if len(body) == 11 and body[:3] == b"\x48\x89\xf8" and body[3:6] == b"\x48\xc1\xe8" and body[7:10] == b"\x83\xe0\x01" and body[10] == 0xC3:
+        shift = body[6]
+        if not 32 <= shift <= 63:
+            return None
+        return {
+            "predicate": "nonzero",
+            "operator": "!=",
+            "mask": 1 << shift,
+            "shift": shift,
+            "pattern": "mov-rax-rdi-shr-rax-imm8-and-eax-1-ret",
+        }
+    if len(body) == 10 and body[:3] == b"\x31\xc0\x40" and body[3] == 0xF6 and body[4] == 0xC7 and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
+        mask = body[5]
+        setcc_opcode = body[7]
+        if mask == 0:
+            return None
+        if setcc_opcode == 0x94:
+            predicate = "zero"
+            operator = "=="
+            setcc = "sete"
+        elif setcc_opcode == 0x95:
+            predicate = "nonzero"
+            operator = "!="
+            setcc = "setne"
+        else:
+            return None
+        return {
+            "predicate": predicate,
+            "operator": operator,
+            "mask": mask,
+            "byteMask": mask,
+            "requiresWidthHint": True,
+            "setcc": setcc,
+            "pattern": f"xor-eax-test-dil-imm8-{setcc}-al-ret",
+        }
+    if len(body) == 12 and body[:2] == b"\x31\xc0" and body[2:4] == b"\xf7\xc7" and body[8] == 0x0F and body[10:] == b"\xc0\xc3":
+        mask = int.from_bytes(body[4:8], "little", signed=False)
+        setcc_opcode = body[9]
+        if mask == 0:
+            return None
+        if setcc_opcode == 0x94:
+            predicate = "zero"
+            operator = "=="
+            setcc = "sete"
+        elif setcc_opcode == 0x95:
+            predicate = "nonzero"
+            operator = "!="
+            setcc = "setne"
+        else:
+            return None
+        return {
+            "predicate": predicate,
+            "operator": operator,
+            "mask": mask,
+            "requiresWidthHint": True,
+            "setcc": setcc,
+            "pattern": f"xor-eax-test-edi-imm32-{setcc}-al-ret",
+        }
+    return None
+
+
+def x86_64_arg64_bitmask_bool(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg64_bitmask_bool(data)
+    if decoded is None:
+        return []
+    if decoded.get("requiresWidthHint") and not x86_64_prefers_arg64_value(row):
+        return []
+    mask = int(decoded["mask"])
+    operator = str(decoded["operator"])
+    predicate = str(decoded["predicate"])
+    source = header(f"x86-64-arg64-bitmask-{predicate}-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(unsigned long long value) {{",
+            f"    return (value & 0x{mask:016x}ull) {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg64-bitmask-{predicate}-cdecl",
+            variant=f"sysv-o2-register-arg64-bitmask-{predicate}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "rdi",
+                "operator": operator,
+                "predicate": predicate,
+                "mask": f"0x{mask:016x}",
                 "shift": decoded.get("shift"),
                 "setcc": decoded.get("setcc"),
                 "framePointer": False,
@@ -15457,6 +15599,7 @@ GENERATORS = [
     x86_64_arg64_rotate,
     x86_64_arg64_shift_imm8,
     x86_64_arg64_zero_nonzero,
+    x86_64_arg64_bitmask_bool,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
     byte_field_and_stack_byte,
