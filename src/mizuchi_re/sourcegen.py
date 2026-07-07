@@ -1794,6 +1794,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         two_stack_args_affine_stdcall_candidate,
         three_stack_args_commutative_op_candidate,
         three_stack_args_commutative_op_stdcall_candidate,
+        three_stack_args_add_sub_candidate,
+        three_stack_args_add_sub_stdcall_candidate,
         three_stack_args_mul_add_candidate,
         three_stack_args_mul_add_stdcall_candidate,
         two_stack_args_min_max_candidate,
@@ -8554,6 +8556,130 @@ def three_stack_args_commutative_op_stdcall_candidate(task: dict[str, Any], data
 
 
 I386_STACK_OFFSET_ARG: dict[int, str] = {4: "a", 8: "b", 12: "c"}
+
+
+I386_THREE_STACK_ARG_ADD_SUB_OPS: dict[int, tuple[str, str]] = {
+    0x03: ("add", "+"),
+    0x2B: ("sub", "-"),
+}
+
+
+def decode_three_stack_args_add_sub(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x0c\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) == 12 and core[:3] == b"\x8b\x44\x24" and core[5:7] == b"\x44\x24" and core[9:11] == b"\x44\x24":
+        first_opcode = core[4]
+        second_opcode = core[8]
+        if first_opcode == 0x03 and second_opcode == 0x03:
+            return None
+        first = I386_THREE_STACK_ARG_ADD_SUB_OPS.get(first_opcode)
+        second = I386_THREE_STACK_ARG_ADD_SUB_OPS.get(second_opcode)
+        offsets = {core[3], core[7], core[11]}
+        if first is None or second is None or offsets != {4, 8, 12}:
+            return None
+        initial = I386_STACK_OFFSET_ARG[core[3]]
+        first_arg = I386_STACK_OFFSET_ARG[core[7]]
+        second_arg = I386_STACK_OFFSET_ARG[core[11]]
+        expression = f"{initial} {first[1]} {first_arg} {second[1]} {second_arg}"
+        return {
+            "suffix": f"{first[0]}-{second[0]}",
+            "expression": expression,
+            "operandOrder": f"mov-{initial}-{first[0]}-{first_arg}-{second[0]}-{second_arg}",
+            "pattern": "mov-eax-stackX-op-eax-stackY-op-eax-stackZ",
+            "stackBytes": 12 if stdcall else 0,
+        }
+    if len(core) == 14 and core[:3] == b"\x8b\x44\x24" and core[4:7] == b"\x8b\x4c\x24" and core[8:11] == b"\x03\x4c\x24" and core[12:14] == b"\x29\xc8":
+        offsets = {core[3], core[7], core[11]}
+        if offsets != {4, 8, 12}:
+            return None
+        initial = I386_STACK_OFFSET_ARG[core[3]]
+        first_sum = I386_STACK_OFFSET_ARG[core[7]]
+        second_sum = I386_STACK_OFFSET_ARG[core[11]]
+        expression = f"{initial} - ({first_sum} + {second_sum})"
+        return {
+            "suffix": "sub-sum",
+            "expression": expression,
+            "operandOrder": f"mov-{initial}-sum-{first_sum}-{second_sum}-sub-sum",
+            "pattern": "mov-eax-stackX-mov-ecx-stackY-add-ecx-stackZ-sub-eax-ecx",
+            "stackBytes": 12 if stdcall else 0,
+        }
+    return None
+
+
+def three_stack_args_add_sub_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_three_stack_args_add_sub(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 three-argument add/sub pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "three-stack-args-add-sub-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "expression": decoded["expression"],
+            "operandOrder": decoded["operandOrder"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "three-argument add/sub is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def three_stack_args_add_sub_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_three_stack_args_add_sub(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall three-argument add/sub pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "three-stack-args-add-sub-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "expression": decoded["expression"],
+            "operandOrder": decoded["operandOrder"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 12,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall three-argument add/sub is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
 
 
 def decode_three_stack_args_mul_add(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:

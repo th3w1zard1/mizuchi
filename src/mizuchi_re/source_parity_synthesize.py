@@ -5243,6 +5243,118 @@ def three_stack_args_commutative_op_stdcall(row: dict[str, Any], c_name: str, da
 I386_STACK_OFFSET_ARG: dict[int, str] = {4: "a", 8: "b", 12: "c"}
 
 
+I386_THREE_STACK_ARG_ADD_SUB_OPS: dict[int, tuple[str, str]] = {
+    0x03: ("add", "+"),
+    0x2B: ("sub", "-"),
+}
+
+
+def decode_three_stack_args_add_sub(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x0c\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) == 12 and core[:3] == b"\x8b\x44\x24" and core[5:7] == b"\x44\x24" and core[9:11] == b"\x44\x24":
+        first_opcode = core[4]
+        second_opcode = core[8]
+        if first_opcode == 0x03 and second_opcode == 0x03:
+            return None
+        first = I386_THREE_STACK_ARG_ADD_SUB_OPS.get(first_opcode)
+        second = I386_THREE_STACK_ARG_ADD_SUB_OPS.get(second_opcode)
+        offsets = {core[3], core[7], core[11]}
+        if first is None or second is None or offsets != {4, 8, 12}:
+            return None
+        initial = I386_STACK_OFFSET_ARG[core[3]]
+        first_arg = I386_STACK_OFFSET_ARG[core[7]]
+        second_arg = I386_STACK_OFFSET_ARG[core[11]]
+        expression = f"{initial} {first[1]} {first_arg} {second[1]} {second_arg}"
+        return {
+            "suffix": f"{first[0]}-{second[0]}",
+            "expression": expression,
+            "operandOrder": f"mov-{initial}-{first[0]}-{first_arg}-{second[0]}-{second_arg}",
+            "pattern": "mov-eax-stackX-op-eax-stackY-op-eax-stackZ",
+            "stackBytes": 12 if stdcall else 0,
+        }
+    if len(core) == 14 and core[:3] == b"\x8b\x44\x24" and core[4:7] == b"\x8b\x4c\x24" and core[8:11] == b"\x03\x4c\x24" and core[12:14] == b"\x29\xc8":
+        offsets = {core[3], core[7], core[11]}
+        if offsets != {4, 8, 12}:
+            return None
+        initial = I386_STACK_OFFSET_ARG[core[3]]
+        first_sum = I386_STACK_OFFSET_ARG[core[7]]
+        second_sum = I386_STACK_OFFSET_ARG[core[11]]
+        expression = f"{initial} - ({first_sum} + {second_sum})"
+        return {
+            "suffix": "sub-sum",
+            "expression": expression,
+            "operandOrder": f"mov-{initial}-sum-{first_sum}-{second_sum}-sub-sum",
+            "pattern": "mov-eax-stackX-mov-ecx-stackY-add-ecx-stackZ-sub-eax-ecx",
+            "stackBytes": 12 if stdcall else 0,
+        }
+    return None
+
+
+def three_stack_args_add_sub(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_three_stack_args_add_sub(data, stdcall=False)
+    if decoded is None:
+        return []
+    source = header("three-stack-args-add-sub-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="three-stack-args-add-sub-cdecl",
+            variant=f"cdecl-o2-three-arg-{decoded['operandOrder']}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "expression": decoded["expression"],
+                "operandOrder": decoded["operandOrder"],
+            },
+        )
+    ]
+
+
+def three_stack_args_add_sub_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_three_stack_args_add_sub(data, stdcall=True)
+    if decoded is None:
+        return []
+    source = header("three-stack-args-add-sub-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="three-stack-args-add-sub-stdcall",
+            variant=f"stdcall12-o2-three-arg-{decoded['operandOrder']}",
+            c_name=c_name,
+            symbol=f"_{c_name}@12",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "expression": decoded["expression"],
+                "operandOrder": decoded["operandOrder"],
+                "stackBytes": 12,
+            },
+        )
+    ]
+
+
 def decode_three_stack_args_mul_add(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     ret = b"\xc2\x0c\x00" if stdcall else b"\xc3"
@@ -18227,6 +18339,8 @@ GENERATORS = [
     two_stack_args_affine_stdcall,
     three_stack_args_commutative_op,
     three_stack_args_commutative_op_stdcall,
+    three_stack_args_add_sub,
+    three_stack_args_add_sub_stdcall,
     three_stack_args_mul_add,
     three_stack_args_mul_add_stdcall,
     two_stack_args_min_max,
