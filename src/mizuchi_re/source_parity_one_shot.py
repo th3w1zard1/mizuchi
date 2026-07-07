@@ -762,6 +762,7 @@ def write_report(profile: ProfileConfig, state: dict[str, Any], report_path: Pat
     coverage = {}
     if profile.coverage_json.exists():
         coverage = json.loads(profile.coverage_json.read_text(encoding="utf-8"))
+    synth_stage = (state.get("stages") or {}).get("synthesize-candidates") or {}
     report = {
         "profile": profile.slug,
         "binaryPath": state.get("binaryPath"),
@@ -772,6 +773,12 @@ def write_report(profile: ProfileConfig, state: dict[str, Any], report_path: Pat
         "functionCount": coverage.get("functionCount"),
         "verifiedMatchedFunctionCount": coverage.get("verifiedMatchedFunctionCount"),
         "remainingFunctions": coverage.get("remainingFunctions"),
+        "synthesisLimit": synth_stage.get("synthesisLimit"),
+        "synthesisMaxAttemptsPerFunction": synth_stage.get("synthesisMaxAttemptsPerFunction"),
+        "synthesisMaxAttemptsPerFunctionPolicy": synth_stage.get("synthesisMaxAttemptsPerFunctionPolicy"),
+        "synthesisAttemptLimitPolicy": synth_stage.get("synthesisAttemptLimitPolicy"),
+        "synthesisAttemptLimitDistribution": synth_stage.get("synthesisAttemptLimitDistribution"),
+        "synthesisAttemptLimitReasonDistribution": synth_stage.get("synthesisAttemptLimitReasonDistribution"),
         "generatedAt": now_iso(),
     }
     atomic_write_json(report_path, report)
