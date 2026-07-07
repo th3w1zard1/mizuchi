@@ -1741,6 +1741,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_two_args_unsigned_compare_candidate,
         x86_64_two_args_signed_compare_candidate,
         x86_64_arg_signed_zero_compare_candidate,
+        x86_64_arg_nonzero_const_select_candidate,
         x86_64_arg_nonzero_candidate,
         x86_64_arg_zero_candidate,
         x86_64_framed_zero_return_candidate,
@@ -5610,6 +5611,83 @@ def x86_64_arg_signed_zero_compare_candidate(task: dict[str, Any], data: bytes) 
             "registerArg": "edi",
             "operator": operator,
             "immediate": 0,
+            "setcc": decoded["setcc"],
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_nonzero_const_select(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 15 or body[:4] != b"\x31\xc0\x85\xff" or body[4] != 0x0F or body[6:9] != b"\xc0\x8d\x04" or body[14] != 0xC3:
+        return None
+    setcc_opcode = body[5]
+    if setcc_opcode not in {0x94, 0x95}:
+        return None
+    sib = body[9]
+    if sib & 0x07 != 0x05 or ((sib >> 3) & 0x07) != 0x00:
+        return None
+    scale = 1 << ((sib >> 6) & 0x03)
+    if scale not in {2, 4, 8}:
+        return None
+    base_value = int.from_bytes(body[10:14], "little", signed=False)
+    scaled_value = base_value + scale
+    if setcc_opcode == 0x95:
+        false_value = base_value
+        true_value = scaled_value
+        setcc = "setne"
+    else:
+        false_value = scaled_value
+        true_value = base_value
+        setcc = "sete"
+    return {
+        "trueValue": true_value,
+        "falseValue": false_value,
+        "baseValue": base_value,
+        "scale": scale,
+        "setcc": setcc,
+        "pattern": f"xor-eax-test-edi-edi-{setcc}-al-lea-eax-rax{scale}-disp32-ret",
+    }
+
+
+def x86_64_arg_nonzero_const_select_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_nonzero_const_select(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    true_value = int(decoded["trueValue"])
+    false_value = int(decoded["falseValue"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 nonzero constant-select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value != 0 ? 0x{true_value:08x}u : 0x{false_value:08x}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-arg-nonzero-const-select-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "trueValue": f"0x{true_value:08x}",
+            "falseValue": f"0x{false_value:08x}",
+            "baseValue": int(decoded["baseValue"]),
+            "scale": int(decoded["scale"]),
             "setcc": decoded["setcc"],
             "pattern": decoded["pattern"],
             "framePointer": False,
