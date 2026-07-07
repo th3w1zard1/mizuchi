@@ -1434,6 +1434,53 @@ def x86_64_two_args_binary_op(row: dict[str, Any], c_name: str, data: bytes) -> 
     ]
 
 
+X86_64_TWO_ARG_BINARY_OPS64: dict[bytes, tuple[str, str, str]] = {
+    b"\x48\x8d\x04\x37\xc3": ("add", "+", "lea-rax-rdi-rsi-ret"),
+    b"\x48\x89\xf8\x48\x29\xf0\xc3": ("sub", "-", "mov-rax-rdi-sub-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x0f\xaf\xc6\xc3": ("mul", "*", "mov-rax-rdi-imul-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x21\xf0\xc3": ("and", "&", "mov-rax-rdi-and-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x09\xf0\xc3": ("or", "|", "mov-rax-rdi-or-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x31\xf0\xc3": ("xor", "^", "mov-rax-rdi-xor-rax-rsi-ret"),
+}
+
+
+def x86_64_two_args_binary_op64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_TWO_ARG_BINARY_OPS64.get(body)
+    if decoded is None:
+        return []
+    suffix, operator, pattern = decoded
+    source = header(f"x86-64-two-args64-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long a, unsigned long long b) {{",
+            f"    return a {operator} b;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-two-args64-{suffix}-cdecl",
+            variant=f"sysv-o2-register-args64-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArgs": ["rdi", "rsi"],
+                "operator": operator,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_TWO_ARG_MIN_MAX_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
     b"\x89\xf0\x39\xf7\x0f\x42\xc7\xc3": ("uint-min", "<", "unsigned int", "cmovb", "mov-eax-esi-cmp-edi-esi-cmovb-eax-edi-ret"),
     b"\x89\xf0\x39\xf7\x0f\x47\xc7\xc3": ("uint-max", ">", "unsigned int", "cmova", "mov-eax-esi-cmp-edi-esi-cmova-eax-edi-ret"),
@@ -15600,6 +15647,7 @@ GENERATORS = [
     x86_64_arg64_shift_imm8,
     x86_64_arg64_zero_nonzero,
     x86_64_arg64_bitmask_bool,
+    x86_64_two_args_binary_op64,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
     byte_field_and_stack_byte,

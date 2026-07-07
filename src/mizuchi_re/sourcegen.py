@@ -1725,6 +1725,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_add_two_args_candidate,
         x86_64_two_args_affine_lea_candidate,
         x86_64_two_args_binary_op_candidate,
+        x86_64_two_args_binary_op64_candidate,
         x86_64_two_args_min_max_candidate,
         x86_64_arg_lea_multiply_candidate,
         x86_64_arg64_lea_multiply_candidate,
@@ -4589,6 +4590,56 @@ def x86_64_two_args_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
             "rule": f"x86-64-two-args-{suffix}-cdecl",
             "bodyBytes": len(body),
             "registerArgs": ["edi", "esi"],
+            "operator": operator,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_TWO_ARG_BINARY_OPS64: dict[bytes, tuple[str, str, str]] = {
+    b"\x48\x8d\x04\x37\xc3": ("add", "+", "lea-rax-rdi-rsi-ret"),
+    b"\x48\x89\xf8\x48\x29\xf0\xc3": ("sub", "-", "mov-rax-rdi-sub-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x0f\xaf\xc6\xc3": ("mul", "*", "mov-rax-rdi-imul-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x21\xf0\xc3": ("and", "&", "mov-rax-rdi-and-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x09\xf0\xc3": ("or", "|", "mov-rax-rdi-or-rax-rsi-ret"),
+    b"\x48\x89\xf8\x48\x31\xf0\xc3": ("xor", "^", "mov-rax-rdi-xor-rax-rsi-ret"),
+}
+
+
+def x86_64_two_args_binary_op64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_TWO_ARG_BINARY_OPS64.get(body)
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit two-argument {suffix} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long a, unsigned long long b) {{",
+            f"    return a {operator} b;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-two-args64-{suffix}-cdecl",
+            "bodyBytes": len(body),
+            "registerArgs": ["rdi", "rsi"],
             "operator": operator,
             "pattern": pattern,
             "framePointer": False,
