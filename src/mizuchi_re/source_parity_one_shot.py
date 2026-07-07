@@ -25,13 +25,13 @@ STAGES: tuple[str, ...] = (
     "inventory",
     "match-trivial",
     "match-reloc-wrappers",
-    "export-source",
-    "compile-source",
-    "derive-coverage",
     "queue",
     "index-examples",
     "profile-corpus",
     "synthesize-candidates",
+    "export-source",
+    "compile-source",
+    "derive-coverage",
 )
 
 DEFAULT_SWKOTOR_BINARY = Path(

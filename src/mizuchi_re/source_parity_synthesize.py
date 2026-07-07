@@ -3638,6 +3638,22 @@ X86_64_ARG_IMM32_BINARY64_OPS: dict[int, tuple[str, str]] = {
 
 def decode_x86_64_arg_imm32_binary_op64(data: bytes) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
+    if len(body) == 5 and body[:3] == b"\x48\x8d\x47" and body[4] == 0xC3:
+        raw_immediate = body[3]
+        signed_immediate = int.from_bytes(body[3:4], "little", signed=True)
+        if signed_immediate == 0:
+            return None
+        suffix = "add" if signed_immediate > 0 else "sub"
+        operator = "+" if signed_immediate > 0 else "-"
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": abs(signed_immediate),
+            "rawImmediate": raw_immediate,
+            "signedImmediate": signed_immediate,
+            "immediateBits": 8,
+            "pattern": "lea-rax-rdi-disp8-ret",
+        }
     if len(body) == 8 and body[:3] == b"\x48\x8d\x87" and body[7] == 0xC3:
         raw_immediate = int.from_bytes(body[3:7], "little", signed=False)
         signed_immediate = int.from_bytes(body[3:7], "little", signed=True)
@@ -3698,10 +3714,12 @@ def x86_64_arg_imm32_binary_op64(row: dict[str, Any], c_name: str, data: bytes) 
     suffix = str(decoded["suffix"])
     operator = str(decoded["operator"])
     immediate = int(decoded["immediate"])
+    immediate_bits = int(decoded["immediateBits"])
+    immediate_width = 2 if immediate_bits == 8 else 8
     source = header(f"x86-64-arg64-{suffix}-imm32-cdecl", row) + "\n".join(
         [
             f"unsigned long long {c_name}(unsigned long long value) {{",
-            f"    return value {operator} 0x{immediate:08x}ull;",
+            f"    return value {operator} 0x{immediate:0{immediate_width}x}ull;",
             "}",
             "",
         ]
@@ -3720,8 +3738,8 @@ def x86_64_arg_imm32_binary_op64(row: dict[str, Any], c_name: str, data: bytes) 
                 "pattern": decoded["pattern"],
                 "registerArg": "rdi",
                 "operator": operator,
-                "immediate": f"0x{immediate:08x}",
-                "immediateBits": int(decoded["immediateBits"]),
+                "immediate": f"0x{immediate:0{immediate_width}x}",
+                "immediateBits": immediate_bits,
                 "rawImmediate": int(decoded["rawImmediate"]),
                 "signedImmediate": int(decoded["signedImmediate"]),
                 "framePointer": False,
