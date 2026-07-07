@@ -25,6 +25,7 @@ from mizuchi_re.sourcegen import generated_candidate_from_target_bytes
 tmp = Path(sys.argv[1])
 base_patterns = [
     ("sub", "89f829f0c3", "x86-64-two-args-sub-cdecl", "unsigned int a, unsigned int b", "a - b"),
+    ("mul", "89f80fafc6c3", "x86-64-two-args-mul-cdecl", "unsigned int a, unsigned int b", "a * b"),
     ("and", "89f821f0c3", "x86-64-two-args-and-cdecl", "unsigned int a, unsigned int b", "a & b"),
     ("or", "89f809f0c3", "x86-64-two-args-or-cdecl", "unsigned int a, unsigned int b", "a | b"),
     ("xor", "89f831f0c3", "x86-64-two-args-xor-cdecl", "unsigned int a, unsigned int b", "a ^ b"),
@@ -82,15 +83,16 @@ PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_p
   --source-tasks-only \
   --out-dir "$TMP_DIR/out" \
   --compiler clang \
-  --limit 12 \
+  --limit 14 \
   --max-variants-per-function 1 \
   --timeout 30 >/dev/null
 
-jq -e '.compiler == "clang" and .generatedCandidates == 12 and .attemptedCandidates == 12 and .semanticCodeSliceMatchedCandidates == 12 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 12 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 12' "$TMP_DIR/out/summary.json" >/dev/null
+jq -e '.compiler == "clang" and .generatedCandidates == 14 and .attemptedCandidates == 14 and .semanticCodeSliceMatchedCandidates == 14 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 14 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 14' "$TMP_DIR/out/summary.json" >/dev/null
 jq -s -e '
-  length == 12 and
-  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 12 and
+  length == 14 and
+  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 14 and
   ([.[] | select(.rule == "x86-64-two-args-sub-cdecl")] | length) == 2 and
+  ([.[] | select(.rule == "x86-64-two-args-mul-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-and-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-or-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-xor-cdecl")] | length) == 2 and

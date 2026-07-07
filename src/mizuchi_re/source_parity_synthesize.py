@@ -1287,6 +1287,7 @@ def x86_64_add_two_args(row: dict[str, Any], c_name: str, data: bytes) -> list[G
 
 X86_64_TWO_ARG_BINARY_OPS: dict[bytes, tuple[str, str, str]] = {
     b"\x89\xf8\x29\xf0\xc3": ("sub", "-", "mov-eax-edi-sub-eax-esi-ret"),
+    b"\x89\xf8\x0f\xaf\xc6\xc3": ("mul", "*", "mov-eax-edi-imul-eax-esi-ret"),
     b"\x89\xf8\x21\xf0\xc3": ("and", "&", "mov-eax-edi-and-eax-esi-ret"),
     b"\x89\xf8\x09\xf0\xc3": ("or", "|", "mov-eax-edi-or-eax-esi-ret"),
     b"\x89\xf8\x31\xf0\xc3": ("xor", "^", "mov-eax-edi-xor-eax-esi-ret"),
@@ -2191,6 +2192,7 @@ def add_two_stack_args_stdcall(row: dict[str, Any], c_name: str, data: bytes) ->
 
 I386_TWO_STACK_ARG_BINARY_OPS: dict[bytes, tuple[str, str, str]] = {
     b"\x8b\x44\x24\x04\x2b\x44\x24\x08": ("sub", "-", "stack4-minus-stack8"),
+    b"\x8b\x44\x24\x08\x0f\xaf\x44\x24\x04": ("mul", "*", "stack8-times-stack4"),
     b"\x8b\x44\x24\x08\x23\x44\x24\x04": ("and", "&", "stack8-and-stack4"),
     b"\x8b\x44\x24\x08\x0b\x44\x24\x04": ("or", "|", "stack8-or-stack4"),
     b"\x8b\x44\x24\x08\x33\x44\x24\x04": ("xor", "^", "stack8-xor-stack4"),

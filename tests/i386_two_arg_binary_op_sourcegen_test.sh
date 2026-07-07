@@ -25,10 +25,12 @@ from mizuchi_re.sourcegen import generated_candidate_from_target_bytes
 tmp = Path(sys.argv[1])
 patterns = [
     ("sub_cdecl", "8b4424042b442408c3", "two-stack-args-sub-cdecl", "a - b"),
+    ("mul_cdecl", "8b4424080faf442404c3", "two-stack-args-mul-cdecl", "a * b"),
     ("and_cdecl", "8b44240823442404c3", "two-stack-args-and-cdecl", "a & b"),
     ("or_cdecl", "8b4424080b442404c3", "two-stack-args-or-cdecl", "a | b"),
     ("xor_cdecl", "8b44240833442404c3", "two-stack-args-xor-cdecl", "a ^ b"),
     ("sub_stdcall", "8b4424042b442408c20800", "two-stack-args-sub-stdcall", "a - b"),
+    ("mul_stdcall", "8b4424080faf442404c20800", "two-stack-args-mul-stdcall", "a * b"),
     ("and_stdcall", "8b44240823442404c20800", "two-stack-args-and-stdcall", "a & b"),
     ("or_stdcall", "8b4424080b442404c20800", "two-stack-args-or-stdcall", "a | b"),
     ("xor_stdcall", "8b44240833442404c20800", "two-stack-args-xor-stdcall", "a ^ b"),
@@ -74,21 +76,23 @@ PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_p
   --source-tasks-only \
   --out-dir "$TMP_DIR/out" \
   --compiler clang \
-  --limit 8 \
+  --limit 10 \
   --max-variants-per-function 1 \
   --timeout 30 >/dev/null
 
-jq -e '.compiler == "clang" and .generatedCandidates == 8 and .attemptedCandidates == 8 and .semanticCodeSliceMatchedCandidates == 8 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 8 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 8' "$TMP_DIR/out/summary.json" >/dev/null
+jq -e '.compiler == "clang" and .generatedCandidates == 10 and .attemptedCandidates == 10 and .semanticCodeSliceMatchedCandidates == 10 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 10 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 10' "$TMP_DIR/out/summary.json" >/dev/null
 jq -s -e '
-  length == 8 and
-  ([.[] | select((.rule | startswith("two-stack-args-")) and .status == "code-slice-matched" and .differences == 0)] | length) == 8 and
-  ([.[] | select(.rule | endswith("-cdecl"))] | length) == 4 and
-  ([.[] | select(.rule | endswith("-stdcall"))] | length) == 4 and
+  length == 10 and
+  ([.[] | select((.rule | startswith("two-stack-args-")) and .status == "code-slice-matched" and .differences == 0)] | length) == 10 and
+  ([.[] | select(.rule | endswith("-cdecl"))] | length) == 5 and
+  ([.[] | select(.rule | endswith("-stdcall"))] | length) == 5 and
   ([.[] | select(.rule == "two-stack-args-sub-cdecl")] | length) == 1 and
+  ([.[] | select(.rule == "two-stack-args-mul-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "two-stack-args-and-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "two-stack-args-or-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "two-stack-args-xor-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "two-stack-args-sub-stdcall")] | length) == 1 and
+  ([.[] | select(.rule == "two-stack-args-mul-stdcall")] | length) == 1 and
   ([.[] | select(.rule == "two-stack-args-and-stdcall")] | length) == 1 and
   ([.[] | select(.rule == "two-stack-args-or-stdcall")] | length) == 1 and
   ([.[] | select(.rule == "two-stack-args-xor-stdcall")] | length) == 1
