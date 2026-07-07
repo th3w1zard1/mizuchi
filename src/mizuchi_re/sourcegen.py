@@ -1814,6 +1814,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         stack_arg_signed_zero_compare_stdcall_candidate,
         stack_arg_neg_cmov_candidate,
         stack_arg_neg_cmov_stdcall_candidate,
+        stack_arg_nonzero_cmov_const_select_candidate,
+        stack_arg_nonzero_cmov_const_select_stdcall_candidate,
         stack_arg_const_min_max_candidate,
         stack_arg_const_min_max_stdcall_candidate,
         stack_arg_signed_imm8_compare_candidate,
@@ -9571,6 +9573,117 @@ def stack_arg_neg_cmov_stdcall_candidate(task: dict[str, Any], data: bytes) -> d
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             f"stdcall stack argument {decoded['suffix']} neg/cmov is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def decode_stack_arg_nonzero_cmov_const_select(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 14 or core[:6] != b"\x8b\x4c\x24\x04\x85\xc9" or core[6] != 0xB8 or core[11] != 0x0F or core[13] != 0xC1:
+        return None
+    immediate = int.from_bytes(core[7:11], "little", signed=False)
+    if immediate == 0:
+        return None
+    if core[12] == 0x45:
+        return {
+            "expression": f"value != 0 ? value : 0x{immediate:08x}u",
+            "trueValue": "value",
+            "falseValue": immediate,
+            "immediate": immediate,
+            "cmov": "cmovne",
+            "pattern": "mov-ecx-stack4-test-ecx-ecx-mov-eax-imm32-cmovne-eax-ecx",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    if core[12] == 0x44:
+        return {
+            "expression": f"value != 0 ? 0x{immediate:08x}u : value",
+            "trueValue": immediate,
+            "falseValue": "value",
+            "immediate": immediate,
+            "cmov": "cmove",
+            "pattern": "mov-ecx-stack4-test-ecx-ecx-mov-eax-imm32-cmove-eax-ecx",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    return None
+
+
+def stack_arg_nonzero_cmov_const_select_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_nonzero_cmov_const_select(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stack-argument nonzero cmov constant-select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-nonzero-cmov-const-select-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "trueValue": f"0x{decoded['trueValue']:08x}" if isinstance(decoded["trueValue"], int) else decoded["trueValue"],
+            "falseValue": f"0x{decoded['falseValue']:08x}" if isinstance(decoded["falseValue"], int) else decoded["falseValue"],
+            "immediate": f"0x{int(decoded['immediate']):08x}",
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stack argument nonzero cmov constant-select is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_nonzero_cmov_const_select_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_nonzero_cmov_const_select(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall stack-argument nonzero cmov constant-select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-nonzero-cmov-const-select-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "trueValue": f"0x{decoded['trueValue']:08x}" if isinstance(decoded["trueValue"], int) else decoded["trueValue"],
+            "falseValue": f"0x{decoded['falseValue']:08x}" if isinstance(decoded["falseValue"], int) else decoded["falseValue"],
+            "immediate": f"0x{int(decoded['immediate']):08x}",
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall stack argument nonzero cmov constant-select is a canonical clang i386 O2 leaf pattern"
         ),
     }
 
