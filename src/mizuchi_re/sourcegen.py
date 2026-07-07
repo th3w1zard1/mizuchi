@@ -1734,6 +1734,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_bitmask_bool_candidate,
         x86_64_arg_udiv_pow2_candidate,
         x86_64_arg_bswap32_candidate,
+        x86_64_arg_bswap64_candidate,
         x86_64_arg_rotate_candidate,
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
@@ -5139,6 +5140,52 @@ def x86_64_arg_bswap32_candidate(task: dict[str, Any], data: bytes) -> dict[str,
             "bodyBytes": len(strip_alignment_padding(data)),
             "registerArg": "edi",
             "operation": "bswap32",
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_bswap64(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x48\x89\xf8\x48\x0f\xc8\xc3":
+        return {"pattern": "mov-rax-rdi-bswap-rax-ret"}
+    return None
+
+
+def x86_64_arg_bswap64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_bswap64(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    expression = "((value & 0x00000000000000ffull) << 56) | ((value & 0x000000000000ff00ull) << 40) | ((value & 0x0000000000ff0000ull) << 24) | ((value & 0x00000000ff000000ull) << 8) | ((value >> 8) & 0x00000000ff000000ull) | ((value >> 24) & 0x0000000000ff0000ull) | ((value >> 40) & 0x000000000000ff00ull) | (value >> 56)"
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 argument byte-swap pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-arg-bswap64-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "rdi",
+            "operation": "bswap64",
             "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),

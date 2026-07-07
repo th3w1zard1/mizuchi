@@ -1959,6 +1959,49 @@ def x86_64_arg_bswap32(row: dict[str, Any], c_name: str, data: bytes) -> list[Ge
     ]
 
 
+def decode_x86_64_arg_bswap64(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x48\x89\xf8\x48\x0f\xc8\xc3":
+        return {"pattern": "mov-rax-rdi-bswap-rax-ret"}
+    return None
+
+
+def x86_64_arg_bswap64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_bswap64(data)
+    if decoded is None:
+        return []
+    expression = "((value & 0x00000000000000ffull) << 56) | ((value & 0x000000000000ff00ull) << 40) | ((value & 0x0000000000ff0000ull) << 24) | ((value & 0x00000000ff000000ull) << 8) | ((value >> 8) & 0x00000000ff000000ull) | ((value >> 24) & 0x0000000000ff0000ull) | ((value >> 40) & 0x000000000000ff00ull) | (value >> 56)"
+    source = header("x86-64-arg-bswap64-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-bswap64-cdecl",
+            variant="sysv-o2-register-arg-bswap64",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "rdi",
+                "operation": "bswap64",
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_rotate(data: bytes) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if len(body) == 5 and body[:2] == b"\x89\xf8" and body[2] == 0xD1 and body[4] == 0xC3:
@@ -15085,6 +15128,7 @@ GENERATORS = [
     x86_64_arg_bitmask_bool,
     x86_64_arg_udiv_pow2,
     x86_64_arg_bswap32,
+    x86_64_arg_bswap64,
     x86_64_arg_rotate,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
