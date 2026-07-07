@@ -1866,6 +1866,56 @@ def x86_64_arg_bitmask_bool(row: dict[str, Any], c_name: str, data: bytes) -> li
     ]
 
 
+def decode_x86_64_arg_udiv_pow2(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 5 and body == b"\x89\xf8\xd1\xe8\xc3":
+        return {"shift": 1, "divisor": 2, "pattern": "mov-eax-edi-shr-eax-one-ret"}
+    if len(body) == 6 and body[:3] == b"\x89\xf8\xc1" and body[3] == 0xE8 and body[5] == 0xC3:
+        shift = body[4]
+        if not 2 <= shift <= 31:
+            return None
+        return {"shift": shift, "divisor": 1 << shift, "pattern": "mov-eax-edi-shr-eax-imm8-ret"}
+    return None
+
+
+def x86_64_arg_udiv_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_udiv_pow2(data)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("x86-64-arg-udiv-pow2-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value / {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-udiv-pow2-cdecl",
+            variant=f"sysv-o2-register-arg-udiv-{divisor}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": "/",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
@@ -14929,6 +14979,7 @@ GENERATORS = [
     x86_64_arg_signbit_zero_compare,
     x86_64_arg_sign_mask,
     x86_64_arg_bitmask_bool,
+    x86_64_arg_udiv_pow2,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,

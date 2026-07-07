@@ -29,9 +29,9 @@ base_patterns = [
     ("and", "89f821f0c3", "x86-64-two-args-and-cdecl", "unsigned int a, unsigned int b", "a & b"),
     ("or", "89f809f0c3", "x86-64-two-args-or-cdecl", "unsigned int a, unsigned int b", "a | b"),
     ("xor", "89f831f0c3", "x86-64-two-args-xor-cdecl", "unsigned int a, unsigned int b", "a ^ b"),
-    ("shr1", "89f8d1e8c3", "x86-64-arg-shr-imm8-cdecl", "unsigned int value", "value >> 1"),
+    ("udiv2", "89f8d1e8c3", "x86-64-arg-udiv-pow2-cdecl", "unsigned int value", "value / 2u"),
     ("sar1", "89f8d1f8c3", "x86-64-arg-sar-imm8-cdecl", "int value", "value >> 1"),
-    ("shr", "89f8c1e803c3", "x86-64-arg-shr-imm8-cdecl", "unsigned int value", "value >> 3"),
+    ("udiv8", "89f8c1e803c3", "x86-64-arg-udiv-pow2-cdecl", "unsigned int value", "value / 8u"),
     ("sar", "89f8c1f803c3", "x86-64-arg-sar-imm8-cdecl", "int value", "value >> 3"),
 ]
 
@@ -98,10 +98,10 @@ jq -s -e '
   ([.[] | select(.rule == "x86-64-two-args-and-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-or-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-xor-cdecl")] | length) == 2 and
-  ([.[] | select(.rule == "x86-64-arg-shr-imm8-cdecl")] | length) == 4 and
+  ([.[] | select(.rule == "x86-64-arg-udiv-pow2-cdecl")] | length) == 4 and
   ([.[] | select(.rule == "x86-64-arg-sar-imm8-cdecl")] | length) == 4 and
   ([.[] | select(.generationEvidence.shift == 1)] | length) == 4 and
-  ([.[] | select(.generationEvidence.pattern == "mov-eax-edi-shift-one-ret")] | length) == 4 and
+  ([.[] | select(.generationEvidence.pattern == "mov-eax-edi-shift-one-ret")] | length) == 2 and
   ([.[] | select(.generationEvidence.shift == 3)] | length) == 4
 ' "$TMP_DIR/out/attempts.jsonl" >/dev/null
 
