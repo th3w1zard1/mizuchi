@@ -1728,6 +1728,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_two_args_min_max_candidate,
         x86_64_arg_lea_multiply_candidate,
         x86_64_const_minus_arg_candidate,
+        x86_64_arg_signbit_zero_compare_candidate,
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_unary_op_candidate,
@@ -4727,6 +4728,53 @@ def x86_64_const_minus_arg_candidate(task: dict[str, Any], data: bytes) -> dict[
             "operator": "-",
             "constant": f"0x{value:08x}",
             "pattern": "mov-eax-imm32-sub-eax-edi-ret",
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG_SIGNBIT_ZERO_COMPARE_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x89\xf8\xc1\xe8\x1f\xc3": ("lt", "<", "mov-eax-edi-shr-eax-31-ret"),
+    b"\x89\xf8\xf7\xd0\xc1\xe8\x1f\xc3": ("ge", ">=", "mov-eax-edi-not-eax-shr-eax-31-ret"),
+}
+
+
+def x86_64_arg_signbit_zero_compare_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_SIGNBIT_ZERO_COMPARE_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 signed sign-bit zero {suffix} comparison pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(int value) {{",
+            f"    return value {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-int-signbit-zero-{suffix}-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "edi",
+            "operator": operator,
+            "immediate": 0,
+            "pattern": pattern,
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
         },

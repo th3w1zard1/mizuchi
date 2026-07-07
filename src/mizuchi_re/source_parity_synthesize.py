@@ -1574,6 +1574,50 @@ def x86_64_const_minus_arg(row: dict[str, Any], c_name: str, data: bytes) -> lis
     ]
 
 
+X86_64_ARG_SIGNBIT_ZERO_COMPARE_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x89\xf8\xc1\xe8\x1f\xc3": ("lt", "<", "mov-eax-edi-shr-eax-31-ret"),
+    b"\x89\xf8\xf7\xd0\xc1\xe8\x1f\xc3": ("ge", ">=", "mov-eax-edi-not-eax-shr-eax-31-ret"),
+}
+
+
+def x86_64_arg_signbit_zero_compare(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_SIGNBIT_ZERO_COMPARE_OPS.get(body)
+    if decoded is None:
+        return []
+    suffix, operator, pattern = decoded
+    source = header(f"x86-64-int-signbit-zero-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return value {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-int-signbit-zero-{suffix}-cdecl",
+            variant=f"sysv-o2-register-arg-int-signbit-zero-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "edi",
+                "operator": operator,
+                "immediate": 0,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
@@ -14354,6 +14398,7 @@ GENERATORS = [
     x86_64_two_args_min_max,
     x86_64_arg_lea_multiply,
     x86_64_const_minus_arg,
+    x86_64_arg_signbit_zero_compare,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,
