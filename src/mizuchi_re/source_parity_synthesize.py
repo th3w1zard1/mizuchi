@@ -1535,6 +1535,91 @@ def x86_64_arg_lea_multiply(row: dict[str, Any], c_name: str, data: bytes) -> li
     ]
 
 
+X86_64_ARG_CONST_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str, bool]] = {
+    0x42: ("uint-min", "<", "unsigned int", "cmovb", False),
+    0x43: ("uint-max", ">", "unsigned int", "cmovae", True),
+    0x4C: ("int-min", "<", "int", "cmovl", False),
+    0x4D: ("int-max", ">", "int", "cmovge", True),
+}
+
+
+def decode_x86_64_arg_const_min_max(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 12 or body[:2] != b"\x83\xff" or body[3] != 0xB8 or body[8] != 0x0F or body[10:12] != b"\xc7\xc3":
+        return None
+    decoded = X86_64_ARG_CONST_MIN_MAX_CMOV.get(body[9])
+    if decoded is None:
+        return None
+    suffix, operator, value_type, cmov, compare_is_exclusive_upper = decoded
+    compare_immediate = body[2]
+    constant = int.from_bytes(body[4:8], "little", signed=False)
+    if compare_is_exclusive_upper:
+        if compare_immediate == 0:
+            return None
+        expected_constant = compare_immediate - 1
+    else:
+        expected_constant = compare_immediate
+    if constant != expected_constant:
+        return None
+    if value_type == "int" and constant > 0x7F:
+        return None
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "valueType": value_type,
+        "returnType": value_type,
+        "constant": constant,
+        "compareImmediate": compare_immediate,
+        "cmov": cmov,
+        "pattern": f"cmp-edi-imm8-mov-eax-imm32-{cmov}-eax-edi-ret",
+    }
+
+
+def x86_64_arg_const_min_max(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_const_min_max(data)
+    if decoded is None:
+        return []
+    constant = int(decoded["constant"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    literal = f"0x{constant:02x}u" if value_type == "unsigned int" else str(constant)
+    source = header(f"x86-64-arg-{decoded['suffix']}-imm8-cmov-cdecl", row) + "\n".join(
+        [
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return value {operator} {literal} ? value : {literal};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg-{decoded['suffix']}-imm8-cmov-cdecl",
+            variant=f"sysv-o2-register-arg-{decoded['suffix']}-imm8-{decoded['cmov']}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=return_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": operator,
+                "constant": f"0x{constant:02x}" if value_type == "unsigned int" else constant,
+                "compareImmediate": int(decoded["compareImmediate"]),
+                "valueType": value_type,
+                "returnType": return_type,
+                "cmov": decoded["cmov"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def x86_64_const_minus_arg(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
     if not is_x86_64_row(row):
         return []
@@ -14551,6 +14636,7 @@ GENERATORS = [
     x86_64_two_args_binary_op,
     x86_64_two_args_min_max,
     x86_64_arg_lea_multiply,
+    x86_64_arg_const_min_max,
     x86_64_const_minus_arg,
     x86_64_arg_signbit_zero_compare,
     x86_64_arg_shift_imm8,

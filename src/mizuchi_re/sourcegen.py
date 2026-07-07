@@ -1727,6 +1727,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_two_args_binary_op_candidate,
         x86_64_two_args_min_max_candidate,
         x86_64_arg_lea_multiply_candidate,
+        x86_64_arg_const_min_max_candidate,
         x86_64_const_minus_arg_candidate,
         x86_64_arg_signbit_zero_compare_candidate,
         x86_64_arg_shift_imm8_candidate,
@@ -4688,6 +4689,94 @@ def x86_64_arg_lea_multiply_candidate(task: dict[str, Any], data: bytes) -> dict
             "operator": "*",
             "multiplier": multiplier,
             "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG_CONST_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str, bool]] = {
+    0x42: ("uint-min", "<", "unsigned int", "cmovb", False),
+    0x43: ("uint-max", ">", "unsigned int", "cmovae", True),
+    0x4C: ("int-min", "<", "int", "cmovl", False),
+    0x4D: ("int-max", ">", "int", "cmovge", True),
+}
+
+
+def decode_x86_64_arg_const_min_max(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 12 or body[:2] != b"\x83\xff" or body[3] != 0xB8 or body[8] != 0x0F or body[10:12] != b"\xc7\xc3":
+        return None
+    decoded = X86_64_ARG_CONST_MIN_MAX_CMOV.get(body[9])
+    if decoded is None:
+        return None
+    suffix, operator, value_type, cmov, compare_is_exclusive_upper = decoded
+    compare_immediate = body[2]
+    constant = int.from_bytes(body[4:8], "little", signed=False)
+    if compare_is_exclusive_upper:
+        if compare_immediate == 0:
+            return None
+        expected_constant = compare_immediate - 1
+    else:
+        expected_constant = compare_immediate
+    if constant != expected_constant:
+        return None
+    if value_type == "int" and constant > 0x7F:
+        return None
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "valueType": value_type,
+        "returnType": value_type,
+        "constant": constant,
+        "compareImmediate": compare_immediate,
+        "cmov": cmov,
+        "pattern": f"cmp-edi-imm8-mov-eax-imm32-{cmov}-eax-edi-ret",
+    }
+
+
+def x86_64_arg_const_min_max_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_const_min_max(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    constant = int(decoded["constant"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    literal = f"0x{constant:02x}u" if value_type == "unsigned int" else str(constant)
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 argument {decoded['suffix']} constant cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return value {operator} {literal} ? value : {literal};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg-{decoded['suffix']}-imm8-cmov-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "operator": operator,
+            "constant": f"0x{constant:02x}" if value_type == "unsigned int" else constant,
+            "compareImmediate": int(decoded["compareImmediate"]),
+            "valueType": value_type,
+            "returnType": return_type,
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
         },
