@@ -5292,6 +5292,99 @@ def stack_arg_sdiv_magic_stdcall(row: dict[str, Any], c_name: str, data: bytes) 
     ]
 
 
+I386_STACK_ARG_SREM_MAGIC_OPS: dict[bytes, tuple[int, str, int, str]] = {
+    bytes.fromhex("8b4c2404ba5655555589c8f7ea89d0c1e81f01d08d044029c189c8"): (3, "0x55555556", 32, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-imul-edx-mov-eax-edx-shr-eax-31-add-eax-edx-lea-eax-eax-eax2-sub-ecx-eax-mov-eax-ecx"),
+    bytes.fromhex("8b4c2404ba6766666689c8f7ea89d0c1e81fd1fa01c28d049229c189c8"): (5, "0x66666667", 33, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-imul-edx-mov-eax-edx-shr-eax-31-sar-edx-one-add-edx-eax-lea-eax-edx-edx4-sub-ecx-eax-mov-eax-ecx"),
+    bytes.fromhex("8b4c2404ba6766666689c8f7ea89d0c1e81fc1fa0201c201d28d049229c189c8"): (10, "0x66666667", 34, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-imul-edx-mov-eax-edx-shr-eax-31-sar-edx-2-add-edx-eax-add-edx-edx-lea-eax-edx-edx4-sub-ecx-eax-mov-eax-ecx"),
+}
+
+
+def decode_stack_arg_srem_magic(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    decoded = I386_STACK_ARG_SREM_MAGIC_OPS.get(core)
+    if decoded is None:
+        return None
+    divisor, multiplier, shift, pattern = decoded
+    return {
+        "divisor": divisor,
+        "multiplier": multiplier,
+        "shift": shift,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_srem_magic(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_srem_magic(data, stdcall=False)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-srem-magic-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return value % {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-srem-magic-cdecl",
+            variant=f"cdecl-o2-stack-arg-srem-{divisor}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "%",
+                "divisor": divisor,
+                "multiplier": decoded["multiplier"],
+                "shift": int(decoded["shift"]),
+            },
+        )
+    ]
+
+
+def stack_arg_srem_magic_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_srem_magic(data, stdcall=True)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-srem-magic-stdcall", row) + "\n".join(
+        [
+            f"int __stdcall {c_name}(int value) {{",
+            f"    return value % {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-srem-magic-stdcall",
+            variant=f"stdcall4-o2-stack-arg-srem-{divisor}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "%",
+                "divisor": divisor,
+                "multiplier": decoded["multiplier"],
+                "shift": int(decoded["shift"]),
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 def decode_stack_arg_sdiv_pow2(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
@@ -17151,6 +17244,8 @@ GENERATORS = [
     two_stack_args_signed_compare_stdcall,
     stack_arg_sdiv_magic,
     stack_arg_sdiv_magic_stdcall,
+    stack_arg_srem_magic,
+    stack_arg_srem_magic_stdcall,
     stack_arg_sdiv_pow2,
     stack_arg_sdiv_pow2_stdcall,
     stack_arg_srem_pow2,

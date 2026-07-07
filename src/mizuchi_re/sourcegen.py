@@ -1796,6 +1796,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         two_stack_args_signed_compare_stdcall_candidate,
         stack_arg_sdiv_magic_candidate,
         stack_arg_sdiv_magic_stdcall_candidate,
+        stack_arg_srem_magic_candidate,
+        stack_arg_srem_magic_stdcall_candidate,
         stack_arg_sdiv_pow2_candidate,
         stack_arg_sdiv_pow2_stdcall_candidate,
         stack_arg_srem_pow2_candidate,
@@ -8598,6 +8600,111 @@ def stack_arg_sdiv_magic_stdcall_candidate(task: dict[str, Any], data: bytes) ->
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             "stdcall signed stack argument magic-multiply division is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+I386_STACK_ARG_SREM_MAGIC_OPS: dict[bytes, tuple[int, str, int, str]] = {
+    bytes.fromhex("8b4c2404ba5655555589c8f7ea89d0c1e81f01d08d044029c189c8"): (3, "0x55555556", 32, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-imul-edx-mov-eax-edx-shr-eax-31-add-eax-edx-lea-eax-eax-eax2-sub-ecx-eax-mov-eax-ecx"),
+    bytes.fromhex("8b4c2404ba6766666689c8f7ea89d0c1e81fd1fa01c28d049229c189c8"): (5, "0x66666667", 33, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-imul-edx-mov-eax-edx-shr-eax-31-sar-edx-one-add-edx-eax-lea-eax-edx-edx4-sub-ecx-eax-mov-eax-ecx"),
+    bytes.fromhex("8b4c2404ba6766666689c8f7ea89d0c1e81fc1fa0201c201d28d049229c189c8"): (10, "0x66666667", 34, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-imul-edx-mov-eax-edx-shr-eax-31-sar-edx-2-add-edx-eax-add-edx-edx-lea-eax-edx-edx4-sub-ecx-eax-mov-eax-ecx"),
+}
+
+
+def decode_stack_arg_srem_magic(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    decoded = I386_STACK_ARG_SREM_MAGIC_OPS.get(core)
+    if decoded is None:
+        return None
+    divisor, multiplier, shift, pattern = decoded
+    return {
+        "divisor": divisor,
+        "multiplier": multiplier,
+        "shift": shift,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_srem_magic_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_srem_magic(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stack-argument signed magic-multiply remainder pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(int value) {{",
+            f"    return value % {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-srem-magic-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "%",
+            "divisor": divisor,
+            "multiplier": decoded["multiplier"],
+            "shift": int(decoded["shift"]),
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "signed stack argument magic-multiply remainder is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_srem_magic_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_srem_magic(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall stack-argument signed magic-multiply remainder pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int __stdcall {c_name}(int value) {{",
+            f"    return value % {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-srem-magic-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "%",
+            "divisor": divisor,
+            "multiplier": decoded["multiplier"],
+            "shift": int(decoded["shift"]),
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall signed stack argument magic-multiply remainder is a canonical clang i386 O2 leaf pattern"
         ),
     }
 
