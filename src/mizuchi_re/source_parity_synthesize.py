@@ -5007,6 +5007,110 @@ def two_stack_args_binary_op_stdcall(row: dict[str, Any], c_name: str, data: byt
     ]
 
 
+I386_TWO_STACK_ARG_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str]] = {
+    0x42: ("uint-min", "<", "unsigned int", "cmovb"),
+    0x47: ("uint-max", ">", "unsigned int", "cmova"),
+    0x4C: ("int-min", "<", "int", "cmovl"),
+    0x4F: ("int-max", ">", "int", "cmovg"),
+}
+
+
+def decode_two_stack_args_min_max(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x08\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 13 or core[:10] != b"\x8b\x44\x24\x08\x8b\x4c\x24\x04\x39\xc1" or core[10] != 0x0F or core[12] != 0xC1:
+        return None
+    decoded = I386_TWO_STACK_ARG_MIN_MAX_CMOV.get(core[11])
+    if decoded is None:
+        return None
+    suffix, operator, value_type, cmov = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "valueType": value_type,
+        "returnType": value_type,
+        "cmov": cmov,
+        "pattern": f"mov-eax-stack8-mov-ecx-stack4-cmp-ecx-eax-{cmov}-eax-ecx",
+        "stackBytes": 8 if stdcall else 0,
+    }
+
+
+def two_stack_args_min_max(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_two_stack_args_min_max(data, stdcall=False)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    source = header(f"two-stack-args-{suffix}-cmov-cdecl", row) + "\n".join(
+        [
+            f"{return_type} {c_name}({value_type} a, {value_type} b) {{",
+            f"    return a {operator} b ? a : b;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"two-stack-args-{suffix}-cmov-cdecl",
+            variant=f"cdecl-o2-two-arg-{suffix}-cmov",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=return_type,
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "valueType": value_type,
+                "returnType": return_type,
+                "cmov": decoded["cmov"],
+            },
+        )
+    ]
+
+
+def two_stack_args_min_max_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_two_stack_args_min_max(data, stdcall=True)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    source = header(f"two-stack-args-{suffix}-cmov-stdcall", row) + "\n".join(
+        [
+            f"{return_type} __stdcall {c_name}({value_type} a, {value_type} b) {{",
+            f"    return a {operator} b ? a : b;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"two-stack-args-{suffix}-cmov-stdcall",
+            variant=f"stdcall8-o2-two-arg-{suffix}-cmov",
+            c_name=c_name,
+            symbol=f"_{c_name}@8",
+            source=source,
+            callconv="stdcall",
+            return_type=return_type,
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "valueType": value_type,
+                "returnType": return_type,
+                "cmov": decoded["cmov"],
+                "stackBytes": 8,
+            },
+        )
+    ]
+
+
 I386_UNSIGNED_COMPARE_SETCC: dict[int, tuple[str, str, str]] = {
     0x92: ("lt", "<", "setb"),
     0x93: ("ge", ">=", "setae"),
@@ -17788,6 +17892,8 @@ GENERATORS = [
     add_two_stack_args_stdcall,
     two_stack_args_binary_op,
     two_stack_args_binary_op_stdcall,
+    two_stack_args_min_max,
+    two_stack_args_min_max_stdcall,
     two_stack_args_unsigned_compare,
     two_stack_args_unsigned_compare_stdcall,
     two_stack_args_signed_compare,
