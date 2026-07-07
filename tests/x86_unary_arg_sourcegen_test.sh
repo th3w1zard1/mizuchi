@@ -32,6 +32,10 @@ patterns = [
     ("i386_not", "8b442404f7d0c3", "stack-arg-not-cdecl", "i386", None, "~value"),
     ("i386_neg_stdcall", "31c02b442404c20400", "stack-arg-neg-stdcall", "i386", None, "-value"),
     ("i386_not_stdcall", "8b442404f7d0c20400", "stack-arg-not-stdcall", "i386", None, "~value"),
+    ("i386_inc", "8b44240440c3", "stack-arg-inc-cdecl", "i386", None, "value + 1u"),
+    ("i386_dec", "8b44240448c3", "stack-arg-dec-cdecl", "i386", None, "value - 1u"),
+    ("i386_inc_stdcall", "8b44240440c20400", "stack-arg-inc-stdcall", "i386", None, "value + 1u"),
+    ("i386_dec_stdcall", "8b44240448c20400", "stack-arg-dec-stdcall", "i386", None, "value - 1u"),
 ]
 
 tasks = []
@@ -78,20 +82,24 @@ PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_p
   --source-tasks-only \
   --out-dir "$TMP_DIR/out" \
   --compiler clang \
-  --limit 8 \
+  --limit 12 \
   --max-variants-per-function 1 \
   --timeout 30 >/dev/null
 
-jq -e '.compiler == "clang" and .generatedCandidates == 8 and .attemptedCandidates == 8 and .semanticCodeSliceMatchedCandidates == 8 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 8 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 8' "$TMP_DIR/out/summary.json" >/dev/null
+jq -e '.compiler == "clang" and .generatedCandidates == 12 and .attemptedCandidates == 12 and .semanticCodeSliceMatchedCandidates == 12 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 12 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 12' "$TMP_DIR/out/summary.json" >/dev/null
 jq -s -e '
-  length == 8 and
-  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 8 and
+  length == 12 and
+  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 12 and
   ([.[] | select(.rule == "x86-64-arg-neg-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-arg-not-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "stack-arg-neg-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "stack-arg-not-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "stack-arg-neg-stdcall")] | length) == 1 and
-  ([.[] | select(.rule == "stack-arg-not-stdcall")] | length) == 1
+  ([.[] | select(.rule == "stack-arg-not-stdcall")] | length) == 1 and
+  ([.[] | select(.rule == "stack-arg-inc-cdecl")] | length) == 1 and
+  ([.[] | select(.rule == "stack-arg-dec-cdecl")] | length) == 1 and
+  ([.[] | select(.rule == "stack-arg-inc-stdcall")] | length) == 1 and
+  ([.[] | select(.rule == "stack-arg-dec-stdcall")] | length) == 1
 ' "$TMP_DIR/out/attempts.jsonl" >/dev/null
 
 echo "ok"

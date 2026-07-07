@@ -3089,6 +3089,97 @@ def stack_arg_unary_op_stdcall(row: dict[str, Any], c_name: str, data: bytes) ->
     ]
 
 
+I386_STACK_ARG_INC_DEC_OPS: dict[int, tuple[str, str, str]] = {
+    0x40: ("inc", "+", "mov-eax-stack4-inc-eax"),
+    0x48: ("dec", "-", "mov-eax-stack4-dec-eax"),
+}
+
+
+def decode_stack_arg_inc_dec(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 5 or core[:4] != b"\x8b\x44\x24\x04":
+        return None
+    decoded = I386_STACK_ARG_INC_DEC_OPS.get(core[4])
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_inc_dec(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_inc_dec(data, stdcall=False)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"stack-arg-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value {operator} 1u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{suffix}-cdecl",
+            variant=f"cdecl-o2-stack-arg-{suffix}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "delta": 1,
+            },
+        )
+    ]
+
+
+def stack_arg_inc_dec_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_inc_dec(data, stdcall=True)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"stack-arg-{suffix}-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value {operator} 1u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{suffix}-stdcall",
+            variant=f"stdcall4-o2-stack-arg-{suffix}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "delta": 1,
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 I386_STACK_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
@@ -13672,6 +13763,8 @@ GENERATORS = [
     stack_arg_imm8_binary_op_stdcall,
     stack_arg_unary_op,
     stack_arg_unary_op_stdcall,
+    stack_arg_inc_dec,
+    stack_arg_inc_dec_stdcall,
     stack_arg_shift_imm8,
     stack_arg_shift_imm8_stdcall,
     stack_arg_nonzero_bool,

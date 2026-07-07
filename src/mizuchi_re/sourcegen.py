@@ -1764,6 +1764,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         stack_arg_imm8_binary_op_stdcall_candidate,
         stack_arg_unary_op_candidate,
         stack_arg_unary_op_stdcall_candidate,
+        stack_arg_inc_dec_candidate,
+        stack_arg_inc_dec_stdcall_candidate,
         stack_arg_shift_imm8_candidate,
         stack_arg_shift_imm8_stdcall_candidate,
         stack_arg_nonzero_bool_candidate,
@@ -6296,6 +6298,109 @@ def stack_arg_unary_op_stdcall_candidate(task: dict[str, Any], data: bytes) -> d
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             f"stdcall stack argument {suffix} unary is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+I386_STACK_ARG_INC_DEC_OPS: dict[int, tuple[str, str, str]] = {
+    0x40: ("inc", "+", "mov-eax-stack4-inc-eax"),
+    0x48: ("dec", "-", "mov-eax-stack4-dec-eax"),
+}
+
+
+def decode_stack_arg_inc_dec(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 5 or core[:4] != b"\x8b\x44\x24\x04":
+        return None
+    decoded = I386_STACK_ARG_INC_DEC_OPS.get(core[4])
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_inc_dec_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_inc_dec(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stack-argument {suffix} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value {operator} 1u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{suffix}-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "pattern": decoded["pattern"],
+            "delta": 1,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stack argument {suffix} is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_inc_dec_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_inc_dec(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stdcall stack-argument {suffix} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value {operator} 1u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{suffix}-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "pattern": decoded["pattern"],
+            "delta": 1,
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stdcall stack argument {suffix} is a canonical clang i386 O2 leaf pattern"
         ),
     }
 
