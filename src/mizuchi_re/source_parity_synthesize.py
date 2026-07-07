@@ -5199,6 +5199,99 @@ def two_stack_args_signed_compare_stdcall(row: dict[str, Any], c_name: str, data
     ]
 
 
+I386_STACK_ARG_SDIV_MAGIC_OPS: dict[bytes, tuple[int, str, int, str]] = {
+    bytes.fromhex("b856555555f76c240489d0c1e81f01d0"): (3, "0x55555556", 32, "mov-eax-magic-imul-stack4-mov-eax-edx-shr-eax-31-add-eax-edx"),
+    bytes.fromhex("b867666666f76c240489d0c1e81fd1fa01d0"): (5, "0x66666667", 33, "mov-eax-magic-imul-stack4-mov-eax-edx-shr-eax-31-sar-edx-one-add-eax-edx"),
+    bytes.fromhex("b867666666f76c240489d0c1e81fc1fa0201d0"): (10, "0x66666667", 34, "mov-eax-magic-imul-stack4-mov-eax-edx-shr-eax-31-sar-edx-2-add-eax-edx"),
+}
+
+
+def decode_stack_arg_sdiv_magic(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    decoded = I386_STACK_ARG_SDIV_MAGIC_OPS.get(core)
+    if decoded is None:
+        return None
+    divisor, multiplier, shift, pattern = decoded
+    return {
+        "divisor": divisor,
+        "multiplier": multiplier,
+        "shift": shift,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_sdiv_magic(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_sdiv_magic(data, stdcall=False)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-sdiv-magic-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return value / {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-sdiv-magic-cdecl",
+            variant=f"cdecl-o2-stack-arg-sdiv-{divisor}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "/",
+                "divisor": divisor,
+                "multiplier": decoded["multiplier"],
+                "shift": int(decoded["shift"]),
+            },
+        )
+    ]
+
+
+def stack_arg_sdiv_magic_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_sdiv_magic(data, stdcall=True)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-sdiv-magic-stdcall", row) + "\n".join(
+        [
+            f"int __stdcall {c_name}(int value) {{",
+            f"    return value / {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-sdiv-magic-stdcall",
+            variant=f"stdcall4-o2-stack-arg-sdiv-{divisor}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "/",
+                "divisor": divisor,
+                "multiplier": decoded["multiplier"],
+                "shift": int(decoded["shift"]),
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 def decode_stack_arg_sdiv_pow2(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
@@ -17056,6 +17149,8 @@ GENERATORS = [
     two_stack_args_unsigned_compare_stdcall,
     two_stack_args_signed_compare,
     two_stack_args_signed_compare_stdcall,
+    stack_arg_sdiv_magic,
+    stack_arg_sdiv_magic_stdcall,
     stack_arg_sdiv_pow2,
     stack_arg_sdiv_pow2_stdcall,
     stack_arg_srem_pow2,
