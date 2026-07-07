@@ -5399,6 +5399,189 @@ def stack_arg_srem_pow2_stdcall(row: dict[str, Any], c_name: str, data: bytes) -
     ]
 
 
+def decode_stack_arg_udiv_pow2(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if core == b"\x8b\x44\x24\x04\xd1\xe8":
+        return {
+            "shift": 1,
+            "divisor": 2,
+            "pattern": "mov-eax-stack4-shr-eax-one",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    if len(core) == 7 and core[:4] == b"\x8b\x44\x24\x04" and core[4:6] == b"\xc1\xe8":
+        shift = core[6]
+        if not 2 <= shift <= 31:
+            return None
+        return {
+            "shift": shift,
+            "divisor": 1 << shift,
+            "pattern": "mov-eax-stack4-shr-eax-imm8",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    return None
+
+
+def stack_arg_udiv_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_udiv_pow2(data, stdcall=False)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-udiv-pow2-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value / {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-udiv-pow2-cdecl",
+            variant=f"cdecl-o2-stack-arg-udiv-{divisor}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "/",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+            },
+        )
+    ]
+
+
+def stack_arg_udiv_pow2_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_udiv_pow2(data, stdcall=True)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-udiv-pow2-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value / {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-udiv-pow2-stdcall",
+            variant=f"stdcall4-o2-stack-arg-udiv-{divisor}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "/",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
+def decode_stack_arg_urem_pow2(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 7 or core[:4] != b"\x8b\x44\x24\x04" or core[4:6] != b"\x83\xe0":
+        return None
+    mask = core[6]
+    if mask < 1:
+        return None
+    divisor = mask + 1
+    if divisor & (divisor - 1):
+        return None
+    return {
+        "shift": divisor.bit_length() - 1,
+        "divisor": divisor,
+        "mask": mask,
+        "pattern": "mov-eax-stack4-and-eax-pow2-minus-one",
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_urem_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_urem_pow2(data, stdcall=False)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    mask = int(decoded["mask"])
+    source = header("stack-arg-urem-pow2-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value % {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-urem-pow2-cdecl",
+            variant=f"cdecl-o2-stack-arg-urem-{divisor}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "%",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "mask": f"0x{mask:08x}",
+            },
+        )
+    ]
+
+
+def stack_arg_urem_pow2_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_urem_pow2(data, stdcall=True)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    mask = int(decoded["mask"])
+    source = header("stack-arg-urem-pow2-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value % {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-urem-pow2-stdcall",
+            variant=f"stdcall4-o2-stack-arg-urem-{divisor}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "%",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "mask": f"0x{mask:08x}",
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 I386_SIGNED_ZERO_COMPARE_RULES: dict[str, tuple[str, str, str]] = {
     "lt": ("<", "mov-eax-stack4-shr-eax-31"),
     "ge": (">=", "mov-eax-stack4-not-eax-shr-eax-31"),
@@ -16680,6 +16863,10 @@ GENERATORS = [
     stack_arg_sdiv_pow2_stdcall,
     stack_arg_srem_pow2,
     stack_arg_srem_pow2_stdcall,
+    stack_arg_udiv_pow2,
+    stack_arg_udiv_pow2_stdcall,
+    stack_arg_urem_pow2,
+    stack_arg_urem_pow2_stdcall,
     stack_arg_signed_zero_compare,
     stack_arg_signed_zero_compare_stdcall,
     stack_arg_signed_imm8_compare,

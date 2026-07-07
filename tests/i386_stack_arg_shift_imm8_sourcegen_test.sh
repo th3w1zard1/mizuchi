@@ -25,10 +25,10 @@ from mizuchi_re.sourcegen import generated_candidate_from_target_bytes
 tmp = Path(sys.argv[1])
 patterns = [
     ("shl_cdecl", "8b442404c1e003c3", "stack-arg-shl-imm8-cdecl", "unsigned int value", "value << 3"),
-    ("shr_cdecl", "8b442404c1e803c3", "stack-arg-shr-imm8-cdecl", "unsigned int value", "value >> 3"),
+    ("shr_cdecl", "8b442404c1e803c3", "stack-arg-udiv-pow2-cdecl", "unsigned int value", "value / 8u"),
     ("sar_cdecl", "8b442404c1f803c3", "stack-arg-sar-imm8-cdecl", "int value", "value >> 3"),
     ("shl_stdcall", "8b442404c1e003c20400", "stack-arg-shl-imm8-stdcall", "unsigned int value", "value << 3"),
-    ("shr_stdcall", "8b442404c1e803c20400", "stack-arg-shr-imm8-stdcall", "unsigned int value", "value >> 3"),
+    ("shr_stdcall", "8b442404c1e803c20400", "stack-arg-udiv-pow2-stdcall", "unsigned int value", "value / 8u"),
     ("sar_stdcall", "8b442404c1f803c20400", "stack-arg-sar-imm8-stdcall", "int value", "value >> 3"),
 ]
 
@@ -79,14 +79,14 @@ PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_p
 jq -e '.compiler == "clang" and .generatedCandidates == 6 and .attemptedCandidates == 6 and .semanticCodeSliceMatchedCandidates == 6 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 6 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 6' "$TMP_DIR/out/summary.json" >/dev/null
 jq -s -e '
   length == 6 and
-  ([.[] | select((.rule | startswith("stack-arg-")) and (.rule | contains("-imm8-")) and .status == "code-slice-matched" and .differences == 0)] | length) == 6 and
+  ([.[] | select((.rule | startswith("stack-arg-")) and .status == "code-slice-matched" and .differences == 0)] | length) == 6 and
   ([.[] | select(.rule | endswith("-cdecl"))] | length) == 3 and
   ([.[] | select(.rule | endswith("-stdcall"))] | length) == 3 and
   ([.[] | select(.rule == "stack-arg-shl-imm8-cdecl")] | length) == 1 and
-  ([.[] | select(.rule == "stack-arg-shr-imm8-cdecl")] | length) == 1 and
+  ([.[] | select(.rule == "stack-arg-udiv-pow2-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "stack-arg-sar-imm8-cdecl")] | length) == 1 and
   ([.[] | select(.rule == "stack-arg-shl-imm8-stdcall")] | length) == 1 and
-  ([.[] | select(.rule == "stack-arg-shr-imm8-stdcall")] | length) == 1 and
+  ([.[] | select(.rule == "stack-arg-udiv-pow2-stdcall")] | length) == 1 and
   ([.[] | select(.rule == "stack-arg-sar-imm8-stdcall")] | length) == 1
 ' "$TMP_DIR/out/attempts.jsonl" >/dev/null
 

@@ -151,3 +151,60 @@ with tempfile.TemporaryDirectory() as td:
 
 print("source_parity_target_hardening_test: ok")
 PY
+
+python3 - <<'PY'
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path("src").resolve()))
+from mizuchi_re.source_parity_one_shot import ProfileConfig, stage_derive_coverage
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    inv = root / "facts" / "function-inventory.jsonl"
+    inv.parent.mkdir(parents=True)
+    inv.write_text("".join(f'{{"name":"fn_{index}"}}\n' for index in range(10)), encoding="utf-8")
+    recovered = root / "recovered"
+    recovered.mkdir(parents=True)
+    (recovered / "compile-summary.json").write_text(
+        json.dumps({"attempted": 3, "verifiedMatchedFunctionCount": 3}),
+        encoding="utf-8",
+    )
+    (recovered / "simple_matches.manifest.json").write_text(
+        json.dumps({"functionCount": 10}),
+        encoding="utf-8",
+    )
+    profile = ProfileConfig(
+        slug="swkotor",
+        default_binary=root / "game.exe",
+        unpack_dir=root,
+        inventory_jsonl=inv,
+        inventory_summary=root / "facts" / "inventory-summary.json",
+        trivial_matches_dir=root / "trivial",
+        trivial_out_jsonl=root / "trivial" / "summary.jsonl",
+        trivial_summary=root / "trivial" / "summary.json",
+        reloc_matches_dir=root / "reloc",
+        reloc_out_jsonl=root / "reloc" / "summary.jsonl",
+        reloc_summary=root / "reloc" / "summary.json",
+        recovered_dir=recovered,
+        compile_summary=recovered / "compile-summary.json",
+        coverage_json=recovered / "coverage.json",
+        queue_jsonl=root / "queue" / "queue.jsonl",
+        index_out_dir=root / "index",
+        synthesis_out_dir=root / "synth",
+        state_dir=root / "state",
+        text_section=".text",
+        match_root=root / "match",
+    )
+    state = {"stages": {}}
+    stage_derive_coverage(profile, state)
+    coverage = json.loads(profile.coverage_json.read_text(encoding="utf-8"))
+    assert coverage["functionCount"] == 10, coverage
+    assert coverage["verifiedMatchedFunctionCount"] == 3, coverage
+    assert coverage["remainingFunctions"] == 7, coverage
+    assert state["stages"]["derive-coverage"]["verifiedMatchedFunctionCount"] == 3, state
+
+print("source_parity_partial_compile_coverage_test: ok")
+PY

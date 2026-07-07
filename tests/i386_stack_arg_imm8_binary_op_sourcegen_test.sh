@@ -26,12 +26,12 @@ tmp = Path(sys.argv[1])
 patterns = [
     ("add_cdecl", "8b44240483c005c3", "stack-arg-add-imm8-cdecl", "value + 0x05u"),
     ("sub_cdecl", "8b44240483c0fbc3", "stack-arg-sub-imm8-cdecl", "value - 0x05u"),
-    ("and_cdecl", "8b44240483e00fc3", "stack-arg-and-imm8-cdecl", "value & 0x0fu"),
+    ("and_cdecl", "8b44240483e012c3", "stack-arg-and-imm8-cdecl", "value & 0x12u"),
     ("or_cdecl", "8b44240483c805c3", "stack-arg-or-imm8-cdecl", "value | 0x05u"),
     ("xor_cdecl", "8b44240483f005c3", "stack-arg-xor-imm8-cdecl", "value ^ 0x05u"),
     ("add_stdcall", "8b44240483c005c20400", "stack-arg-add-imm8-stdcall", "value + 0x05u"),
     ("sub_stdcall", "8b44240483c0fbc20400", "stack-arg-sub-imm8-stdcall", "value - 0x05u"),
-    ("and_stdcall", "8b44240483e00fc20400", "stack-arg-and-imm8-stdcall", "value & 0x0fu"),
+    ("and_stdcall", "8b44240483e012c20400", "stack-arg-and-imm8-stdcall", "value & 0x12u"),
     ("or_stdcall", "8b44240483c805c20400", "stack-arg-or-imm8-stdcall", "value | 0x05u"),
     ("xor_stdcall", "8b44240483f005c20400", "stack-arg-xor-imm8-stdcall", "value ^ 0x05u"),
 ]

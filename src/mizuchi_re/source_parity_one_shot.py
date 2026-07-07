@@ -637,8 +637,10 @@ def _synthesis_exportable_count(profile: ProfileConfig) -> int:
 def stage_derive_coverage(profile: ProfileConfig, state: dict[str, Any]) -> None:
     function_count = _count_jsonl(profile.inventory_jsonl)
     verified = 0
+    compile_attempted = 0
     if profile.compile_summary.exists():
         summary = json.loads(profile.compile_summary.read_text(encoding="utf-8"))
+        compile_attempted = int(summary.get("attempted") or 0)
         verified = int(
             summary.get("verifiedMatchedFunctionCount")
             or summary.get("compiled")
@@ -647,8 +649,11 @@ def stage_derive_coverage(profile: ProfileConfig, state: dict[str, Any]) -> None
         )
     manifest_path = profile.recovered_dir / "simple_matches.manifest.json"
     if manifest_path.exists():
-        manifest_count = int(json.loads(manifest_path.read_text(encoding="utf-8")).get("functionCount") or 0)
-        verified = max(verified, manifest_count)
+        manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_count = int(manifest_data.get("functionCount") or len(manifest_data.get("functions") or []))
+        # Do not treat the full export manifest as verified while compile is still partial.
+        if compile_attempted == 0 or compile_attempted >= manifest_count:
+            verified = max(verified, manifest_count)
     if verified == 0 and profile.trivial_summary.exists():
         trivial = json.loads(profile.trivial_summary.read_text(encoding="utf-8"))
         verified = int(trivial.get("matchedCount") or trivial.get("matched") or 0)

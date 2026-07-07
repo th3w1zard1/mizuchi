@@ -24,7 +24,7 @@ from mizuchi_re.sourcegen import generated_candidate_from_target_bytes
 
 tmp = Path(sys.argv[1])
 patterns = [
-    ("has1_cdecl", "8b44240483e001c3", "stack-arg-bitmask-nonzero-cdecl"),
+    ("has1_cdecl", "8b44240483e001c3", "stack-arg-urem-pow2-cdecl"),
     ("no1_cdecl", "8b442404f7d083e001c3", "stack-arg-bitmask-zero-cdecl"),
     ("has4_cdecl", "8b442404c1e80283e001c3", "stack-arg-bitmask-nonzero-cdecl"),
     ("no4_cdecl", "31c0f6442404040f94c0c3", "stack-arg-bitmask-zero-cdecl"),
@@ -32,7 +32,7 @@ patterns = [
     ("no128_cdecl", "31c0f6442404800f94c0c3", "stack-arg-bitmask-zero-cdecl"),
     ("has256_cdecl", "8b442404c1e80883e001c3", "stack-arg-bitmask-nonzero-cdecl"),
     ("no256_cdecl", "31c0f6442405010f94c0c3", "stack-arg-bitmask-zero-cdecl"),
-    ("has1_stdcall", "8b44240483e001c20400", "stack-arg-bitmask-nonzero-stdcall"),
+    ("has1_stdcall", "8b44240483e001c20400", "stack-arg-urem-pow2-stdcall"),
     ("no1_stdcall", "8b442404f7d083e001c20400", "stack-arg-bitmask-zero-stdcall"),
     ("has4_stdcall", "8b442404c1e80283e001c20400", "stack-arg-bitmask-nonzero-stdcall"),
     ("no4_stdcall", "31c0f6442404040f94c0c20400", "stack-arg-bitmask-zero-stdcall"),
@@ -52,7 +52,10 @@ for index, (name, hex_bytes, rule) in enumerate(patterns):
     assert sourcegen_candidate["generator"]["rule"] == rule, sourcegen_candidate
     assert sourcegen_candidate["language"] == "c", sourcegen_candidate
     assert "unsigned int value" in sourcegen_candidate["source"], sourcegen_candidate["source"]
-    assert "value &" in sourcegen_candidate["source"], sourcegen_candidate["source"]
+    if "urem-pow2" in rule:
+        assert "value % 2u" in sourcegen_candidate["source"], sourcegen_candidate["source"]
+    else:
+        assert "value &" in sourcegen_candidate["source"], sourcegen_candidate["source"]
 
     synthesis_candidates = generate({**task, "entry": hex(address), "bytes": hex_bytes}, 16)
     assert any(candidate.rule == rule for candidate in synthesis_candidates), (rule, synthesis_candidates)
@@ -89,10 +92,12 @@ PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_p
 jq -e '.compiler == "clang" and .generatedCandidates == 16 and .attemptedCandidates == 16 and .semanticCodeSliceMatchedCandidates == 16 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 16 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 16' "$TMP_DIR/out/summary.json" >/dev/null
 jq -s -e '
   length == 16 and
-  ([.[] | select(.rule == "stack-arg-bitmask-nonzero-cdecl" and .status == "code-slice-matched" and .differences == 0)] | length) == 4 and
+  ([.[] | select(.rule == "stack-arg-bitmask-nonzero-cdecl" and .status == "code-slice-matched" and .differences == 0)] | length) == 3 and
   ([.[] | select(.rule == "stack-arg-bitmask-zero-cdecl" and .status == "code-slice-matched" and .differences == 0)] | length) == 4 and
-  ([.[] | select(.rule == "stack-arg-bitmask-nonzero-stdcall" and .status == "code-slice-matched" and .differences == 0)] | length) == 4 and
-  ([.[] | select(.rule == "stack-arg-bitmask-zero-stdcall" and .status == "code-slice-matched" and .differences == 0)] | length) == 4
+  ([.[] | select(.rule == "stack-arg-bitmask-nonzero-stdcall" and .status == "code-slice-matched" and .differences == 0)] | length) == 3 and
+  ([.[] | select(.rule == "stack-arg-bitmask-zero-stdcall" and .status == "code-slice-matched" and .differences == 0)] | length) == 4 and
+  ([.[] | select(.rule == "stack-arg-urem-pow2-cdecl" and .status == "code-slice-matched" and .differences == 0)] | length) == 1 and
+  ([.[] | select(.rule == "stack-arg-urem-pow2-stdcall" and .status == "code-slice-matched" and .differences == 0)] | length) == 1
 ' "$TMP_DIR/out/attempts.jsonl" >/dev/null
 
 echo "ok"
