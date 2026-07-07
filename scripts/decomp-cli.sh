@@ -37,11 +37,11 @@ Commands:
   pe-code-roundtrip --package <one-shot-source-dir> --out-dir <dir> [--prompts-dir prompts]
   pe-code-source-roundtrip --binary <game-exe> --out-dir <dir>
   pe-segmented-code-source-roundtrip --binary <game-exe> --package <one-shot-source-dir> --prompts-dir prompts --out-dir <dir>
-  source-parity-one-shot <folder-or-binary> [--resume] [--stop-after <stage>] [--synthesis-limit N] [--synthesis-max-attempts-per-function N]
+  source-parity-one-shot <folder-or-binary> [--resume] [--stop-after <stage>] [--synthesis-limit N] [--synthesis-max-attempts-per-function N] [--synthesis-max-attempts-per-function-policy uniform|adaptive]
   recover <folder-or-binary> [--resume] [--stop-after <stage>] [--function-analysis auto|none|objdump] [--function-facts-jsonl <facts.jsonl>] [--source-synthesis clang|clang-cl|dry-run|msvc|none] [--source-synthesis-semantic-only] [--source-synthesis-skip-boundary-suspect] [--snapshot-existing-recovery <label>]
   source-parity-feature-index [--out-dir <dir>]
   source-parity-profile-corpus [--max-cases N]
-  source-parity-synthesize [--source-tasks source-generation/tasks.jsonl] [--limit N] [--offset N] [--max-attempts-per-function N] [--semantic-only] [--verify-packaged-source] [--upgrade-packaged-source] [--skip-boundary-suspect] [--source-shape-search] [--dry-run]
+  source-parity-synthesize [--source-tasks source-generation/tasks.jsonl] [--limit N] [--offset N] [--max-attempts-per-function N] [--max-attempts-per-function-policy uniform|adaptive] [--semantic-only] [--verify-packaged-source] [--upgrade-packaged-source] [--skip-boundary-suspect] [--source-shape-search] [--dry-run]
   steam-roundtrip-run --out <dir> [--app <substring>]
   steam-roundtrip-verify-manifest --manifest <app/source-roundtrip-manifest.json> --out <dir>
   source-authority-report --input <source-roundtrip-manifest.json|binary-source-roundtrip.json>

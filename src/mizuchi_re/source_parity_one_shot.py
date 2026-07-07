@@ -676,7 +676,11 @@ def stage_profile_corpus(profile: ProfileConfig, state: dict[str, Any]) -> None:
 
 
 def stage_synthesize(
-    profile: ProfileConfig, state: dict[str, Any], limit: int, max_attempts_per_function: int
+    profile: ProfileConfig,
+    state: dict[str, Any],
+    limit: int,
+    max_attempts_per_function: int,
+    max_attempts_per_function_policy: str,
 ) -> None:
     args = [
         "--queue",
@@ -693,6 +697,7 @@ def stage_synthesize(
         str(limit),
     ]
     args.extend(["--max-attempts-per-function", str(max_attempts_per_function)])
+    args.extend(["--max-attempts-per-function-policy", max_attempts_per_function_policy])
     if profile.trivial_out_jsonl.exists():
         args.extend(["--matched-summary", str(profile.trivial_out_jsonl)])
     if profile.reloc_out_jsonl.exists():
@@ -708,6 +713,7 @@ def stage_synthesize(
         returncode=result.returncode,
         synthesisLimit=limit,
         synthesisMaxAttemptsPerFunction=max_attempts_per_function,
+        synthesisMaxAttemptsPerFunctionPolicy=max_attempts_per_function_policy,
         synthesisMatchCount=_synthesis_exportable_count(profile),
     )
     if result.returncode != 0:
@@ -735,6 +741,7 @@ def _register_runners() -> None:
                 ctx["state"],
                 ctx["synthesis_limit"],
                 ctx["synthesis_max_attempts_per_function"],
+                ctx["synthesis_max_attempts_per_function_policy"],
             ),
         }
     )
@@ -768,6 +775,7 @@ def run_pipeline(
     refresh_prepare: bool = False,
     synthesis_limit: int = 25,
     synthesis_max_attempts_per_function: int = 0,
+    synthesis_max_attempts_per_function_policy: str = "uniform",
 ) -> dict[str, Any]:
     _register_runners()
     slug = profile_slug or detect_profile(input_path)
@@ -784,6 +792,7 @@ def run_pipeline(
         "refresh_prepare": refresh_prepare,
         "synthesis_limit": synthesis_limit,
         "synthesis_max_attempts_per_function": synthesis_max_attempts_per_function,
+        "synthesis_max_attempts_per_function_policy": synthesis_max_attempts_per_function_policy,
         "force_export_downstream": False,
     }
     stop_idx = stage_index(stop_after) if stop_after else len(STAGES) - 1
@@ -834,6 +843,12 @@ def run_pipeline(
             name == "synthesize-candidates"
             and int(synth_stage.get("synthesisMaxAttemptsPerFunction") or 0)
             < int(synthesis_max_attempts_per_function)
+        ):
+            force_stage = True
+        if (
+            name == "synthesize-candidates"
+            and (synth_stage.get("synthesisMaxAttemptsPerFunctionPolicy") or "uniform")
+            != synthesis_max_attempts_per_function_policy
         ):
             force_stage = True
         if ctx.get("force_export_downstream") and name in {"compile-source", "derive-coverage"}:
@@ -909,6 +924,12 @@ def main(argv: list[str] | None = None) -> int:
             "0 uses source-parity-synthesize's --max-variants-per-function fallback."
         ),
     )
+    parser.add_argument(
+        "--synthesis-max-attempts-per-function-policy",
+        choices=["uniform", "adaptive"],
+        default="uniform",
+        help="uniform keeps a fixed per-function cap; adaptive reduces caps for partial/source-slice rows.",
+    )
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args(argv)
     if args.self_check:
@@ -927,6 +948,7 @@ def main(argv: list[str] | None = None) -> int:
             refresh_prepare=args.refresh_prepare,
             synthesis_limit=args.synthesis_limit,
             synthesis_max_attempts_per_function=args.synthesis_max_attempts_per_function,
+            synthesis_max_attempts_per_function_policy=args.synthesis_max_attempts_per_function_policy,
         )
     except Exception as exc:
         print(f"source-parity-one-shot failed: {exc}", file=sys.stderr)

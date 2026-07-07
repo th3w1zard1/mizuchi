@@ -165,6 +165,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Maximum candidate attempts per source-parity function. 0 uses --source-parity-max-variants-per-function.",
     )
+    windows.add_argument(
+        "--source-parity-max-attempts-per-function-policy",
+        choices=["uniform", "adaptive"],
+        default="uniform",
+        help="uniform keeps a fixed per-function cap; adaptive reduces caps for partial/source-slice rows.",
+    )
     windows.add_argument("--source-parity-strategies", help="Comma-separated strategy/tag filter for source-parity synthesis.")
     windows.add_argument(
         "--source-parity-compiler-profile",
@@ -221,6 +227,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         help="Maximum candidate attempts per function. 0 means --max-variants-per-function is used as the limit.",
+    )
+    synth.add_argument(
+        "--max-attempts-per-function-policy",
+        choices=["uniform", "adaptive"],
+        default="uniform",
+        help="uniform keeps a fixed per-function cap; adaptive reduces caps for partial/source-slice rows.",
     )
     synth.add_argument("--strategies")
     synth.add_argument("--source-quality", action="append", default=[], help="Only verify generated candidates with this source quality. Repeat or comma-separate.")
@@ -399,6 +411,7 @@ def run_recover_windows(args: argparse.Namespace) -> int:
         source_parity_offset=args.source_parity_offset,
         source_parity_max_variants_per_function=args.source_parity_max_variants_per_function,
         source_parity_max_attempts_per_function=args.source_parity_max_attempts_per_function,
+        source_parity_max_attempts_per_function_policy=args.source_parity_max_attempts_per_function_policy,
         source_parity_strategies=args.source_parity_strategies,
         source_parity_dry_run=args.source_parity_dry_run,
         source_parity_clean=args.source_parity_clean,
@@ -560,6 +573,8 @@ def run_source_parity_synthesize(args: argparse.Namespace) -> int:
         str(args.max_variants_per_function),
         "--max-attempts-per-function",
         str(args.max_attempts_per_function),
+        "--max-attempts-per-function-policy",
+        args.max_attempts_per_function_policy,
         "--compiler",
         args.compiler,
         "--clang",

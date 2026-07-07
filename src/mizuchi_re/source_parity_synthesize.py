@@ -13780,6 +13780,37 @@ def prioritize_candidates(candidates: list[GeneratedCandidate]) -> list[Generate
     ]
 
 
+def resolve_attempt_limit(
+    *,
+    row: dict[str, Any],
+    candidates: list[GeneratedCandidate],
+    base_limit: int,
+    policy: str,
+) -> tuple[int, str]:
+    """Compute per-function attempt cap from row recovery shape and policy."""
+    if base_limit <= 0:
+        return base_limit, "disabled"
+    if policy == "uniform":
+        return base_limit, "uniform"
+    limit = base_limit
+    reason = "uniform-policy"
+    if is_boundary_suspect(row):
+        limit = max(1, min(limit, 1))
+        reason = "boundary-suspect"
+    else:
+        scope = source_recovery_scope(row)
+        if scope == "partial-source-slice":
+            limit = 1
+            reason = "partial-source-slice"
+        elif scope == "context-dependent-fragment":
+            limit = max(1, min(limit, 2))
+            reason = "context-dependent-fragment"
+    if candidates and all(generated_candidate_source_quality(candidate) == "nonsemantic-bootstrap" for candidate in candidates):
+        limit = max(1, min(limit, 1))
+        reason = "nonsemantic-only"
+    return limit, reason
+
+
 def append_packaged_fallback(
     candidates: list[GeneratedCandidate],
     packaged_candidate: GeneratedCandidate | None,
@@ -16693,6 +16724,15 @@ def main(argv: list[str] | None = None) -> int:
         default=0,
         help="Maximum candidate attempts per function. 0 means use --max-variants-per-function as the limit.",
     )
+    parser.add_argument(
+        "--max-attempts-per-function-policy",
+        choices=["uniform", "adaptive"],
+        default="uniform",
+        help=(
+            "uniform keeps a fixed per-function cap; adaptive reduces caps for partial/source-slice "
+            "recovery rows that are less likely to match semantic C quickly."
+        ),
+    )
     parser.add_argument("--strategies", help="Comma-separated strategy/tag filter, for example virtual-call-or-thiscall-model,compiler-profile-probe.")
     parser.add_argument("--compiler", choices=["msvc", "clang", "clang-cl"], default="msvc", help="Compiler backend for candidate verification. clang/clang-cl can objdiff against synthetic target objects built from source-task bytes.")
     parser.add_argument("--clang", default="clang")
@@ -16754,6 +16794,7 @@ def main(argv: list[str] | None = None) -> int:
     skipped_nonsemantic = 0
     skipped_boundary_suspect = 0
     skipped_by_attempt_limit = 0
+    attempted_limit_distribution: dict[int, int] = {}
     compile_failed = 0
     slice_failed = 0
     unsupported = 0
@@ -16869,6 +16910,13 @@ def main(argv: list[str] | None = None) -> int:
         attempt_limit = args.max_attempts_per_function
         if attempt_limit <= 0:
             attempt_limit = args.max_variants_per_function
+        attempt_limit, _ = resolve_attempt_limit(
+            row=row,
+            candidates=candidates,
+            base_limit=attempt_limit,
+            policy=args.max_attempts_per_function_policy,
+        )
+        attempted_limit_distribution[attempt_limit] = attempted_limit_distribution.get(attempt_limit, 0) + 1
         if attempt_limit > 0 and len(candidates) > attempt_limit:
             skipped_by_attempt_limit += len(candidates) - attempt_limit
             candidates = candidates[:attempt_limit]
@@ -16987,6 +17035,8 @@ def main(argv: list[str] | None = None) -> int:
         "maxAttemptsPerFunction": args.max_attempts_per_function,
         "attemptLimitFallbackToMaxVariants": args.max_attempts_per_function <= 0,
         "skippedByAttemptLimit": skipped_by_attempt_limit,
+        "attemptLimitPolicy": args.max_attempts_per_function_policy,
+        "attemptLimitDistribution": dict(sorted(attempted_limit_distribution.items())),
         "acceptedCandidates": matched_count,
         "codeSliceMatchedCandidates": code_slice_matched,
         "semanticCodeSliceMatchedCandidates": semantic_code_slice_matched,
