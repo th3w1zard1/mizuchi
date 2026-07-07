@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
 EXECUTABLE_SUFFIXES = {".exe", ".dll", ".xbe", ".elf", ".so", ""}
+# Host utilities that must never be selected as game analysis targets.
+EXECUTABLE_NAME_BLOCKLIST = frozenset(
+    {"true", "false", "test", "sh", "bash", "echo", "cat", "ls", "cp", "mv", "rm"}
+)
+MIN_GAME_PE_BYTES = 50_000
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,8 @@ def resolve_target(input_path: Path, preferred_name: str | None = None) -> Path:
     for item in path.rglob("*"):
         if not item.is_file():
             continue
+        if item.name.lower() in EXECUTABLE_NAME_BLOCKLIST:
+            continue
         if item.suffix.lower() in EXECUTABLE_SUFFIXES and looks_executable(item):
             candidates.append(item)
     if not candidates:
@@ -58,13 +64,31 @@ def resolve_target(input_path: Path, preferred_name: str | None = None) -> Path:
 
 
 def looks_executable(path: Path) -> bool:
+    """True when the file looks like a real binary image, not a host shell utility."""
     try:
-        mode = path.stat().st_mode
-        if os.access(path, os.X_OK):
-            return True
         with path.open("rb") as fh:
             magic = fh.read(4)
-        return magic.startswith((b"MZ", b"\x7fELF")) or magic in {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}
+        has_magic = magic.startswith((b"MZ", b"\x7fELF")) or magic in {
+            b"\xfe\xed\xfa\xce",
+            b"\xce\xfa\xed\xfe",
+            b"\xfe\xed\xfa\xcf",
+            b"\xcf\xfa\xed\xfe",
+        }
+        if has_magic:
+            return True
+        if path.suffix.lower() in {".exe", ".dll", ".xbe"}:
+            return path.stat().st_size >= 4096
+        return False
+    except OSError:
+        return False
+
+
+def is_pe_binary(path: Path, *, min_bytes: int = MIN_GAME_PE_BYTES) -> bool:
+    try:
+        if path.stat().st_size < min_bytes:
+            return False
+        with path.open("rb") as fh:
+            return fh.read(2) == b"MZ"
     except OSError:
         return False
 

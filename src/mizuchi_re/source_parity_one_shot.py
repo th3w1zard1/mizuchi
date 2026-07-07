@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from .source_export import collect_vacuum_prompt_matches, count_vacuum_matched_prompts
 from .state import atomic_write_json
-from .targets import resolve_target, sha256_file
+from .targets import is_pe_binary, resolve_target, sha256_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -215,13 +215,26 @@ def reconcile_binary_identity(state: dict[str, Any], binary: Path, profile: Prof
         state.pop("binaryPath", None)
         state.pop("binarySha256", None)
         for path in (
-            profile.inventory_jsonl,
             profile.trivial_summary,
             profile.reloc_summary,
             profile.coverage_json,
         ):
             if path.exists():
                 path.unlink()
+        # Keep inventory when it still matches the on-disk summary (identity repair).
+        inv = profile.inventory_jsonl
+        summary = profile.inventory_summary
+        if inv.exists() and summary.exists():
+            try:
+                summary_data = json.loads(summary.read_text(encoding="utf-8"))
+                expected = int(summary_data.get("functionCount") or 0)
+                actual = _count_jsonl(inv)
+                if expected <= 0 or abs(expected - actual) > max(10, expected // 100):
+                    inv.unlink()
+            except (json.JSONDecodeError, OSError):
+                inv.unlink()
+        elif inv.exists():
+            inv.unlink()
     return target
 
 
@@ -240,6 +253,10 @@ def detect_profile(input_path: Path) -> str:
 
 def stage_discover(binary: Path, profile: ProfileConfig, state: dict[str, Any]) -> None:
     target = resolve_profile_binary(binary, profile.slug)
+    if profile.slug in {"swkotor", "kotor", "jedi-academy", "jedi_academy"} and not is_pe_binary(target):
+        raise ValueError(
+            f"{profile.slug} requires a Windows PE game binary (>=50KB, MZ header); got: {target}"
+        )
     digest = sha256_file(target)
     state["profile"] = profile.slug
     state["binaryPath"] = str(target)
@@ -368,6 +385,34 @@ def stage_inventory(profile: ProfileConfig, state: dict[str, Any], refresh: bool
     analysis_binary = inventory_binary(profile, state)
     analysis_digest = sha256_file(analysis_binary)
     inv_stage = (state.get("stages") or {}).get("inventory") or {}
+    line_count = _count_jsonl(jsonl) if jsonl.exists() else 0
+    if jsonl.exists() and not refresh and line_count > 0:
+        summary_count = 0
+        if profile.inventory_summary.exists():
+            try:
+                summary_count = int(
+                    json.loads(profile.inventory_summary.read_text(encoding="utf-8")).get("functionCount") or 0
+                )
+            except (json.JSONDecodeError, OSError):
+                summary_count = 0
+        inventory_consistent = summary_count <= 0 or abs(summary_count - line_count) <= max(10, summary_count // 100)
+        receipt_ok = (
+            inv_stage.get("binarySha256") == digest
+            and inv_stage.get("analysisBinarySha256") == analysis_digest
+        )
+        if inventory_consistent and (receipt_ok or inv_stage.get("status") != "complete"):
+            mark_stage(
+                state,
+                "inventory",
+                "complete",
+                inventory=str(jsonl),
+                reused=True,
+                binarySha256=digest,
+                analysisBinarySha256=analysis_digest,
+                analysisBinary=str(analysis_binary),
+                functionCount=line_count,
+            )
+            return
     if (
         jsonl.exists()
         and not refresh

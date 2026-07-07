@@ -70,3 +70,84 @@ with tempfile.TemporaryDirectory() as td:
     assert report_path.parent == Path(td)
 print("source_parity_one_shot_report_fields_test: ok")
 PY
+
+python3 - <<'PY'
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path("src").resolve()))
+from mizuchi_re.source_parity_one_shot import ProfileConfig, stage_discover, stage_inventory
+from mizuchi_re.targets import is_pe_binary, resolve_target, sha256_file
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    host_true = root / "true"
+    host_true.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    host_true.chmod(0o755)
+    game = root / "game.exe"
+    game.write_bytes(b"MZ" + b"\0" * 50000)
+
+    assert resolve_target(root) == game
+    assert is_pe_binary(game)
+    assert not is_pe_binary(root / "tiny.exe")
+
+    tiny = root / "tiny.exe"
+    tiny.write_bytes(b"MZ" + b"\0" * 100)
+    state = {"stages": {}}
+    try:
+        stage_discover(tiny, ProfileConfig.for_slug("swkotor"), state)
+    except ValueError as exc:
+        assert "requires a Windows PE game binary" in str(exc)
+    else:
+        raise AssertionError("small PE-like file should not satisfy game profile discovery")
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    binary = root / "analysis.exe"
+    binary.write_bytes(b"MZ" + b"\0" * 50000)
+    inv = root / "facts" / "function-inventory.jsonl"
+    summary = root / "facts" / "inventory-summary.json"
+    inv.parent.mkdir(parents=True)
+    inv.write_text('{"name":"a"}\n{"name":"b"}\n', encoding="utf-8")
+    summary.write_text(json.dumps({"functionCount": 2}), encoding="utf-8")
+    profile = ProfileConfig(
+        slug="swkotor",
+        default_binary=binary,
+        unpack_dir=root,
+        inventory_jsonl=inv,
+        inventory_summary=summary,
+        trivial_matches_dir=root / "trivial",
+        trivial_out_jsonl=root / "trivial" / "summary.jsonl",
+        trivial_summary=root / "trivial" / "summary.json",
+        reloc_matches_dir=root / "reloc",
+        reloc_out_jsonl=root / "reloc" / "summary.jsonl",
+        reloc_summary=root / "reloc" / "summary.json",
+        recovered_dir=root / "recovered",
+        compile_summary=root / "recovered" / "compile-summary.json",
+        coverage_json=root / "recovered" / "coverage.json",
+        queue_jsonl=root / "queue" / "queue.jsonl",
+        index_out_dir=root / "index",
+        synthesis_out_dir=root / "synth",
+        state_dir=root / "state",
+        text_section=".text",
+        match_root=root / "match",
+    )
+    digest = sha256_file(binary)
+    state = {
+        "binarySha256": digest,
+        "stages": {
+            "prepare": {"copiedTo": str(binary)},
+            "inventory": {"status": "pending"},
+        },
+    }
+    stage_inventory(profile, state, refresh=False)
+    inventory_stage = state["stages"]["inventory"]
+    assert inventory_stage["status"] == "complete", inventory_stage
+    assert inventory_stage["reused"] is True, inventory_stage
+    assert inventory_stage["functionCount"] == 2, inventory_stage
+
+print("source_parity_target_hardening_test: ok")
+PY
