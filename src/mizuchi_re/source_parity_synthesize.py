@@ -1438,6 +1438,13 @@ X86_64_ARG_IMM8_BINARY_OPS: dict[int, tuple[str, str]] = {
 }
 
 
+X86_64_ARG_ACCUM_IMM32_BINARY_OPS: dict[int, tuple[str, str]] = {
+    0x25: ("and", "&"),
+    0x0D: ("or", "|"),
+    0x35: ("xor", "^"),
+}
+
+
 def decode_x86_64_arg_imm8_binary_op(data: bytes) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if len(body) == 4 and body[:2] == b"\x8d\x47" and body[3] == 0xC3:
@@ -1488,6 +1495,23 @@ def decode_x86_64_arg_imm8_binary_op(data: bytes) -> dict[str, Any] | None:
             "signedImmediate": raw_immediate,
             "immediateBits": 8,
             "pattern": "mov-eax-edi-op-eax-imm8-ret",
+        }
+    if len(body) == 8 and body[:2] == b"\x89\xf8" and body[7] == 0xC3:
+        decoded = X86_64_ARG_ACCUM_IMM32_BINARY_OPS.get(body[2])
+        if decoded is None:
+            return None
+        raw_immediate = int.from_bytes(body[3:7], "little", signed=False)
+        if raw_immediate == 0 and decoded[0] in {"or", "xor"}:
+            return None
+        suffix, operator = decoded
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": raw_immediate,
+            "rawImmediate": raw_immediate,
+            "signedImmediate": int.from_bytes(body[3:7], "little", signed=True),
+            "immediateBits": 32,
+            "pattern": "mov-eax-edi-accum-op-eax-imm32-ret",
         }
     return None
 
