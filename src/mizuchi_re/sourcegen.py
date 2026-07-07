@@ -1748,6 +1748,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_imm32_binary_op64_candidate,
         x86_64_arg_unary_op_candidate,
+        x86_64_arg64_unary_op_candidate,
         x86_64_arg_neg_cmov_candidate,
         x86_64_arg64_sign_extend_candidate,
         x86_64_arg_cast_candidate,
@@ -6115,6 +6116,52 @@ def x86_64_arg_unary_op_candidate(task: dict[str, Any], data: bytes) -> dict[str
             "rule": f"x86-64-arg-{suffix}-cdecl",
             "bodyBytes": len(body),
             "registerArg": "edi",
+            "operator": operator,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG_UNARY_OPS64: dict[bytes, tuple[str, str, str]] = {
+    b"\x48\x89\xf8\x48\xf7\xd8\xc3": ("neg", "-", "mov-rax-rdi-neg-rax-ret"),
+    b"\x48\x89\xf8\x48\xf7\xd0\xc3": ("not", "~", "mov-rax-rdi-not-rax-ret"),
+}
+
+
+def x86_64_arg64_unary_op_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_UNARY_OPS64.get(body)
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit argument {suffix} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg64-{suffix}-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "rdi",
             "operator": operator,
             "pattern": pattern,
             "framePointer": False,

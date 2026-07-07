@@ -2880,6 +2880,49 @@ def x86_64_arg_unary_op(row: dict[str, Any], c_name: str, data: bytes) -> list[G
     ]
 
 
+X86_64_ARG_UNARY_OPS64: dict[bytes, tuple[str, str, str]] = {
+    b"\x48\x89\xf8\x48\xf7\xd8\xc3": ("neg", "-", "mov-rax-rdi-neg-rax-ret"),
+    b"\x48\x89\xf8\x48\xf7\xd0\xc3": ("not", "~", "mov-rax-rdi-not-rax-ret"),
+}
+
+
+def x86_64_arg64_unary_op(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_UNARY_OPS64.get(body)
+    if decoded is None:
+        return []
+    suffix, operator, pattern = decoded
+    source = header(f"x86-64-arg64-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg64-{suffix}-cdecl",
+            variant=f"sysv-o2-register-arg64-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "rdi",
+                "operator": operator,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_NEG_CMOV_OPS: dict[bytes, tuple[str, str, str, str]] = {
     b"\x89\xf8\xf7\xd8\x0f\x48\xc7\xc3": ("abs", "value < 0 ? -value : value", "cmovs", "mov-eax-edi-neg-eax-cmovs-eax-edi-ret"),
     b"\x89\xf8\xf7\xd8\x0f\x49\xc7\xc3": ("neg-if-pos", "value > 0 ? -value : value", "cmovns", "mov-eax-edi-neg-eax-cmovns-eax-edi-ret"),
@@ -15853,6 +15896,7 @@ GENERATORS = [
     x86_64_arg64_shift_imm8,
     x86_64_arg64_zero_nonzero,
     x86_64_arg64_bitmask_bool,
+    x86_64_arg64_unary_op,
     x86_64_return_first_arg64,
     x86_64_return_second_arg,
     x86_64_two_args_binary_op64,
