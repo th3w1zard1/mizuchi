@@ -1747,6 +1747,98 @@ def x86_64_arg_cast(row: dict[str, Any], c_name: str, data: bytes) -> list[Gener
     ]
 
 
+def decode_x86_64_arg_narrow_imm8_compare(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 10 and body[:3] == b"\x31\xc0\x40" and body[3] == 0x80 and body[4] == 0xFF and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
+        width = 8
+        immediate = body[5]
+        setcc_opcode = body[7]
+    elif len(body) == 10 and body[:3] == b"\x31\xc0\x66" and body[3] == 0x83 and body[4] == 0xFF and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
+        width = 16
+        immediate = body[5]
+        setcc_opcode = body[7]
+    else:
+        return None
+    if setcc_opcode in X86_64_UNSIGNED_COMPARE_SETCC:
+        suffix, operator, setcc = X86_64_UNSIGNED_COMPARE_SETCC[setcc_opcode]
+        signed = False
+    elif setcc_opcode in X86_64_SIGNED_COMPARE_SETCC:
+        suffix, operator, setcc = X86_64_SIGNED_COMPARE_SETCC[setcc_opcode]
+        signed = True
+    else:
+        return None
+    cast_type = {
+        (8, False): "unsigned char",
+        (8, True): "signed char",
+        (16, False): "unsigned short",
+        (16, True): "short",
+    }[(width, signed)]
+    value_type = "int" if signed else "unsigned int"
+    expression_immediate = immediate if not signed or immediate < 0x80 else immediate - 0x100
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+        "width": width,
+        "signed": signed,
+        "castType": cast_type,
+        "valueType": value_type,
+        "immediate": expression_immediate,
+        "rawImmediate": immediate,
+        "pattern": f"xor-eax-cmp-{'dil' if width == 8 else 'di'}-imm8-setcc-al-ret",
+    }
+
+
+def x86_64_arg_narrow_imm8_compare(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_narrow_imm8_compare(data)
+    if decoded is None:
+        return []
+    width = int(decoded["width"])
+    signed = bool(decoded["signed"])
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    value_type = str(decoded["valueType"])
+    cast_type = str(decoded["castType"])
+    immediate = int(decoded["immediate"])
+    family = "int" if signed else "uint"
+    immediate_expr = f"({immediate})" if signed else f"0x{int(decoded['rawImmediate']):02x}u"
+    source = header(f"x86-64-{family}{width}-{suffix}-imm8-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}({value_type} value) {{",
+            f"    return ({cast_type})value {operator} {immediate_expr};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-{family}{width}-{suffix}-imm8-cdecl",
+            variant=f"sysv-o2-register-arg-{family}{width}-{suffix}-imm8",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": operator,
+                "width": width,
+                "castType": cast_type,
+                "valueType": value_type,
+                "immediate": immediate_expr,
+                "rawImmediate": int(decoded["rawImmediate"]),
+                "setcc": decoded["setcc"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_imm8_compare(data: bytes, *, signed: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     immediate_bits = 0
@@ -13978,6 +14070,7 @@ GENERATORS = [
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,
     x86_64_arg_cast,
+    x86_64_arg_narrow_imm8_compare,
     x86_64_arg_unsigned_imm8_compare,
     x86_64_arg_signed_imm8_compare,
     x86_64_two_args_unsigned_compare,

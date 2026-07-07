@@ -1731,6 +1731,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_unary_op_candidate,
         x86_64_arg_cast_candidate,
+        x86_64_arg_narrow_imm8_compare_candidate,
         x86_64_arg_unsigned_imm8_compare_candidate,
         x86_64_arg_signed_imm8_compare_candidate,
         x86_64_two_args_unsigned_compare_candidate,
@@ -4903,6 +4904,101 @@ def x86_64_arg_cast_candidate(task: dict[str, Any], data: bytes) -> dict[str, An
             "returnType": return_type,
             "expression": expression,
             "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_narrow_imm8_compare(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 10 and body[:3] == b"\x31\xc0\x40" and body[3] == 0x80 and body[4] == 0xFF and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
+        width = 8
+        immediate = body[5]
+        setcc_opcode = body[7]
+    elif len(body) == 10 and body[:3] == b"\x31\xc0\x66" and body[3] == 0x83 and body[4] == 0xFF and body[6] == 0x0F and body[8:] == b"\xc0\xc3":
+        width = 16
+        immediate = body[5]
+        setcc_opcode = body[7]
+    else:
+        return None
+    if setcc_opcode in X86_64_UNSIGNED_COMPARE_SETCC:
+        suffix, operator, setcc = X86_64_UNSIGNED_COMPARE_SETCC[setcc_opcode]
+        signed = False
+    elif setcc_opcode in X86_64_SIGNED_COMPARE_SETCC:
+        suffix, operator, setcc = X86_64_SIGNED_COMPARE_SETCC[setcc_opcode]
+        signed = True
+    else:
+        return None
+    cast_type = {
+        (8, False): "unsigned char",
+        (8, True): "signed char",
+        (16, False): "unsigned short",
+        (16, True): "short",
+    }[(width, signed)]
+    value_type = "int" if signed else "unsigned int"
+    expression_immediate = immediate if not signed or immediate < 0x80 else immediate - 0x100
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+        "width": width,
+        "signed": signed,
+        "castType": cast_type,
+        "valueType": value_type,
+        "immediate": expression_immediate,
+        "rawImmediate": immediate,
+        "pattern": f"xor-eax-cmp-{'dil' if width == 8 else 'di'}-imm8-setcc-al-ret",
+    }
+
+
+def x86_64_arg_narrow_imm8_compare_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_narrow_imm8_compare(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    width = int(decoded["width"])
+    signed = bool(decoded["signed"])
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    value_type = str(decoded["valueType"])
+    cast_type = str(decoded["castType"])
+    immediate = int(decoded["immediate"])
+    family = "int" if signed else "uint"
+    immediate_expr = f"({immediate})" if signed else f"0x{int(decoded['rawImmediate']):02x}u"
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 {cast_type} immediate comparison pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}({value_type} value) {{",
+            f"    return ({cast_type})value {operator} {immediate_expr};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-{family}{width}-{suffix}-imm8-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "operator": operator,
+            "width": width,
+            "castType": cast_type,
+            "valueType": value_type,
+            "immediate": immediate_expr,
+            "rawImmediate": int(decoded["rawImmediate"]),
+            "setcc": decoded["setcc"],
+            "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
         },
