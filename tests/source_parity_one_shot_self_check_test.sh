@@ -81,7 +81,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path("src").resolve()))
-from mizuchi_re.source_parity_one_shot import ProfileConfig, stage_discover, stage_inventory
+from mizuchi_re.source_parity_one_shot import ProfileConfig, detect_profile, stage_discover, stage_inventory
 from mizuchi_re.targets import is_pe_binary, resolve_target, sha256_file
 
 with tempfile.TemporaryDirectory() as td:
@@ -105,6 +105,10 @@ with tempfile.TemporaryDirectory() as td:
         assert "requires a Windows PE game binary" in str(exc)
     else:
         raise AssertionError("small PE-like file should not satisfy game profile discovery")
+
+assert detect_profile(Path("jamp.exe")) == "jedi-academy"
+assert detect_profile(Path("jasp.exe")) == "jedi-academy"
+assert detect_profile(Path("JediAcademy.exe")) == "jedi-academy"
 
 with tempfile.TemporaryDirectory() as td:
     root = Path(td)

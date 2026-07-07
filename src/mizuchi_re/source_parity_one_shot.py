@@ -240,7 +240,7 @@ def reconcile_binary_identity(state: dict[str, Any], binary: Path, profile: Prof
 
 def detect_profile(input_path: Path) -> str:
     name = input_path.name.lower()
-    if "jedi" in name or "academy" in name:
+    if name in {"jamp.exe", "jasp.exe", "jediacademy.exe"} or "jedi" in name or "academy" in name:
         return "jedi-academy"
     if "swkotor" in name or "kotor" in name:
         return "swkotor"
