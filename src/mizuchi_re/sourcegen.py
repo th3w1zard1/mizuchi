@@ -1725,6 +1725,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_add_two_args_candidate,
         x86_64_two_args_binary_op_candidate,
         x86_64_arg_lea_multiply_candidate,
+        x86_64_const_minus_arg_candidate,
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_unary_op_candidate,
@@ -4527,6 +4528,48 @@ def x86_64_arg_lea_multiply_candidate(task: dict[str, Any], data: bytes) -> dict
             "operator": "*",
             "multiplier": multiplier,
             "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def x86_64_const_minus_arg_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    if len(body) != 8 or body[0] != 0xB8 or body[5:] != b"\x29\xf8\xc3":
+        return None
+    value = int.from_bytes(body[1:5], "little", signed=False)
+    if value == 0:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 constant-minus-argument pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return 0x{value:08x}u - value;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-const-minus-arg-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "edi",
+            "operator": "-",
+            "constant": f"0x{value:08x}",
+            "pattern": "mov-eax-imm32-sub-eax-edi-ret",
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
         },

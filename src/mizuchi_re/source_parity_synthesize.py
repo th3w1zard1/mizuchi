@@ -1390,6 +1390,45 @@ def x86_64_arg_lea_multiply(row: dict[str, Any], c_name: str, data: bytes) -> li
     ]
 
 
+def x86_64_const_minus_arg(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    if len(body) != 8 or body[0] != 0xB8 or body[5:] != b"\x29\xf8\xc3":
+        return []
+    value = int.from_bytes(body[1:5], "little", signed=False)
+    if value == 0:
+        return []
+    source = header("x86-64-const-minus-arg-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return 0x{value:08x}u - value;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-const-minus-arg-cdecl",
+            variant="sysv-o2-const-minus-register-arg",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": "mov-eax-imm32-sub-eax-edi-ret",
+                "registerArg": "edi",
+                "operator": "-",
+                "constant": f"0x{value:08x}",
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
@@ -13886,6 +13925,7 @@ GENERATORS = [
     x86_64_add_two_args,
     x86_64_two_args_binary_op,
     x86_64_arg_lea_multiply,
+    x86_64_const_minus_arg,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,
