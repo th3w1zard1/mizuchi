@@ -31,8 +31,19 @@ base_patterns = [
     ("mul_3", "8d047fc3", "x86-64-arg-mul-lea-cdecl", "value * 3u"),
     ("mul_4", "8d04bd00000000c3", "x86-64-arg-mul-lea-cdecl", "value * 4u"),
     ("mul_5", "8d04bfc3", "x86-64-arg-mul-lea-cdecl", "value * 5u"),
+    ("mul_6", "01ff8d047fc3", "x86-64-arg-mul-lea-cdecl", "value * 6u"),
+    ("mul_7", "8d04fd0000000029f8c3", "x86-64-arg-mul-lea-cdecl", "value * 7u"),
     ("mul_8", "8d04fd00000000c3", "x86-64-arg-mul-lea-cdecl", "value * 8u"),
     ("mul_9", "8d04ffc3", "x86-64-arg-mul-lea-cdecl", "value * 9u"),
+    ("mul_10", "01ff8d04bfc3", "x86-64-arg-mul-lea-cdecl", "value * 10u"),
+    ("mul_11", "8d04bf8d0447c3", "x86-64-arg-mul-lea-cdecl", "value * 11u"),
+    ("mul_12", "c1e7028d047fc3", "x86-64-arg-mul-lea-cdecl", "value * 12u"),
+    ("mul_13", "8d047f8d0487c3", "x86-64-arg-mul-lea-cdecl", "value * 13u"),
+    ("mul_14", "89f88d0c00c1e00429c8c3", "x86-64-arg-mul-lea-cdecl", "value * 14u"),
+    ("mul_15", "8d04bf8d0440c3", "x86-64-arg-mul-lea-cdecl", "value * 15u"),
+    ("mul_24", "c1e7038d047fc3", "x86-64-arg-mul-lea-cdecl", "value * 24u"),
+    ("mul_31", "89f8c1e00529f8c3", "x86-64-arg-mul-lea-cdecl", "value * 31u"),
+    ("mul_33", "89f8c1e00501f8c3", "x86-64-arg-mul-lea-cdecl", "value * 33u"),
     ("shl_4", "89f8c1e004c3", "x86-64-arg-shl-imm8-cdecl", "value << 4"),
 ]
 
@@ -87,17 +98,17 @@ PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_p
   --source-tasks-only \
   --out-dir "$TMP_DIR/out" \
   --compiler clang \
-  --limit 20 \
+  --limit 42 \
   --max-variants-per-function 1 \
   --timeout 30 >/dev/null
 
-jq -e '.compiler == "clang" and .generatedCandidates == 20 and .attemptedCandidates == 20 and .semanticCodeSliceMatchedCandidates == 20 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 20 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 20' "$TMP_DIR/out/summary.json" >/dev/null
+jq -e '.compiler == "clang" and .generatedCandidates == 42 and .attemptedCandidates == 42 and .semanticCodeSliceMatchedCandidates == 42 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 42 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 42' "$TMP_DIR/out/summary.json" >/dev/null
 jq -s -e '
-  length == 20 and
-  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 20 and
+  length == 42 and
+  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 42 and
   ([.[] | select(.rule == "x86-64-arg-add-imm32-cdecl")] | length) == 4 and
   ([.[] | select(.rule == "x86-64-arg-sub-imm32-cdecl")] | length) == 2 and
-  ([.[] | select(.rule == "x86-64-arg-mul-lea-cdecl")] | length) == 12 and
+  ([.[] | select(.rule == "x86-64-arg-mul-lea-cdecl")] | length) == 34 and
   ([.[] | select(.rule == "x86-64-arg-shl-imm8-cdecl")] | length) == 2
 ' "$TMP_DIR/out/attempts.jsonl" >/dev/null
 

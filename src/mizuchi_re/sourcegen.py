@@ -4477,8 +4477,19 @@ X86_64_ARG_LEA_MULTIPLY_OPS: dict[bytes, tuple[int, str]] = {
     b"\x8d\x04\x7f\xc3": (3, "lea-eax-rdi-rdi2-ret"),
     b"\x8d\x04\xbd\x00\x00\x00\x00\xc3": (4, "lea-eax-rdi4-ret"),
     b"\x8d\x04\xbf\xc3": (5, "lea-eax-rdi-rdi4-ret"),
+    b"\x01\xff\x8d\x04\x7f\xc3": (6, "add-edi-edi-lea-eax-rdi-rdi2-ret"),
+    b"\x8d\x04\xfd\x00\x00\x00\x00\x29\xf8\xc3": (7, "lea-eax-rdi8-sub-eax-edi-ret"),
     b"\x8d\x04\xfd\x00\x00\x00\x00\xc3": (8, "lea-eax-rdi8-ret"),
     b"\x8d\x04\xff\xc3": (9, "lea-eax-rdi-rdi8-ret"),
+    b"\x01\xff\x8d\x04\xbf\xc3": (10, "add-edi-edi-lea-eax-rdi-rdi4-ret"),
+    b"\x8d\x04\xbf\x8d\x04\x47\xc3": (11, "lea-eax-rdi-rdi4-lea-eax-rdi-rax2-ret"),
+    b"\xc1\xe7\x02\x8d\x04\x7f\xc3": (12, "shl-edi-2-lea-eax-rdi-rdi2-ret"),
+    b"\x8d\x04\x7f\x8d\x04\x87\xc3": (13, "lea-eax-rdi-rdi2-lea-eax-rdi-rax4-ret"),
+    b"\x89\xf8\x8d\x0c\x00\xc1\xe0\x04\x29\xc8\xc3": (14, "mov-eax-edi-lea-ecx-rax-rax-shl-eax-4-sub-eax-ecx-ret"),
+    b"\x8d\x04\xbf\x8d\x04\x40\xc3": (15, "lea-eax-rdi-rdi4-lea-eax-rax-rax2-ret"),
+    b"\xc1\xe7\x03\x8d\x04\x7f\xc3": (24, "shl-edi-3-lea-eax-rdi-rdi2-ret"),
+    b"\x89\xf8\xc1\xe0\x05\x29\xf8\xc3": (31, "mov-eax-edi-shl-eax-5-sub-eax-edi-ret"),
+    b"\x89\xf8\xc1\xe0\x05\x01\xf8\xc3": (33, "mov-eax-edi-shl-eax-5-add-eax-edi-ret"),
 }
 
 
