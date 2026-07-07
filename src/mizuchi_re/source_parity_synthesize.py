@@ -2111,6 +2111,67 @@ def x86_64_arg_rotate(row: dict[str, Any], c_name: str, data: bytes) -> list[Gen
     ]
 
 
+def decode_x86_64_arg64_rotate(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 7 and body[:3] == b"\x48\x89\xf8" and body[3:5] == b"\x48\xd1" and body[6] == 0xC3:
+        if body[5] == 0xC0:
+            return {"direction": "left", "count": 1, "encoding": "rol", "pattern": "mov-rax-rdi-rol-rax-one-ret"}
+        if body[5] == 0xC8:
+            return {"direction": "right", "count": 1, "encoding": "ror", "pattern": "mov-rax-rdi-ror-rax-one-ret"}
+    if len(body) == 8 and body[:3] == b"\x48\x89\xf8" and body[3:6] == b"\x48\xc1\xc0" and body[7] == 0xC3:
+        count = body[6]
+        if not 1 <= count <= 63:
+            return None
+        if count > 32:
+            return {"direction": "right", "count": 64 - count, "encoding": "rol", "encodedCount": count, "pattern": "mov-rax-rdi-rol-rax-imm8-ret"}
+        return {"direction": "left", "count": count, "encoding": "rol", "encodedCount": count, "pattern": "mov-rax-rdi-rol-rax-imm8-ret"}
+    return None
+
+
+def x86_64_arg64_rotate(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg64_rotate(data)
+    if decoded is None:
+        return []
+    direction = str(decoded["direction"])
+    count = int(decoded["count"])
+    if direction == "left":
+        expression = f"(value << {count}) | (value >> {64 - count})"
+    else:
+        expression = f"(value >> {count}) | (value << {64 - count})"
+    source = header(f"x86-64-arg64-rot{direction[0]}-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg64-rot{direction[0]}-cdecl",
+            variant=f"sysv-o2-register-arg64-rot{direction[0]}-{count}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "rdi",
+                "direction": direction,
+                "count": count,
+                "encodedCount": decoded.get("encodedCount", count),
+                "encoding": decoded["encoding"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
@@ -15348,6 +15409,7 @@ GENERATORS = [
     x86_64_arg64_lea_multiply,
     x86_64_arg_imm32_binary_op64,
     x86_64_arg64_sign_extend,
+    x86_64_arg64_rotate,
     x86_64_arg64_shift_imm8,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
