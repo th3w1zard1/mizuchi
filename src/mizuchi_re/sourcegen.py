@@ -1738,6 +1738,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_bswap64_candidate,
         x86_64_arg_rotate_candidate,
         x86_64_arg_shift_imm8_candidate,
+        x86_64_arg64_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_imm32_binary_op64_candidate,
         x86_64_arg_unary_op_candidate,
@@ -5368,6 +5369,74 @@ def x86_64_arg_shift_imm8_candidate(task: dict[str, Any], data: bytes) -> dict[s
             "rule": f"x86-64-arg-{suffix}-imm8-cdecl",
             "bodyBytes": len(body),
             "registerArg": "edi",
+            "operator": operator,
+            "shift": shift,
+            "pattern": pattern,
+            "valueType": value_type,
+            "returnType": return_type,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG64_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
+    0xE0: ("shl", "<<", "unsigned long long", "unsigned long long"),
+    0xE8: ("shr", ">>", "unsigned long long", "unsigned long long"),
+    0xF8: ("sar", ">>", "long long", "long long"),
+}
+
+X86_64_ARG64_SHIFT_ONE_OPS: dict[int, tuple[str, str, str, str]] = {
+    0xE8: ("shr", ">>", "unsigned long long", "unsigned long long"),
+    0xF8: ("sar", ">>", "long long", "long long"),
+}
+
+
+def x86_64_arg64_shift_imm8_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    pattern = "mov-rax-rdi-shift-imm8-ret"
+    if len(body) == 8 and body[:3] == b"\x48\x89\xf8" and body[3:5] == b"\x48\xc1" and body[-1] == 0xC3:
+        decoded = X86_64_ARG64_SHIFT_IMM8_OPS.get(body[5])
+        if decoded is None:
+            return None
+        shift = body[6]
+        if not 2 <= shift <= 63:
+            return None
+    elif len(body) == 7 and body[:3] == b"\x48\x89\xf8" and body[3:5] == b"\x48\xd1" and body[-1] == 0xC3:
+        decoded = X86_64_ARG64_SHIFT_ONE_OPS.get(body[5])
+        if decoded is None:
+            return None
+        shift = 1
+        pattern = "mov-rax-rdi-shift-one-ret"
+    else:
+        return None
+    suffix, operator, value_type, return_type = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit argument {suffix} immediate-shift pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return value {operator} {shift};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg64-{suffix}-imm8-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "rdi",
             "operator": operator,
             "shift": shift,
             "pattern": pattern,

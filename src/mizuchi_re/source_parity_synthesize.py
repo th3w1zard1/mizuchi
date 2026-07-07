@@ -2176,6 +2176,71 @@ def x86_64_arg_shift_imm8(row: dict[str, Any], c_name: str, data: bytes) -> list
     ]
 
 
+X86_64_ARG64_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
+    0xE0: ("shl", "<<", "unsigned long long", "unsigned long long"),
+    0xE8: ("shr", ">>", "unsigned long long", "unsigned long long"),
+    0xF8: ("sar", ">>", "long long", "long long"),
+}
+
+X86_64_ARG64_SHIFT_ONE_OPS: dict[int, tuple[str, str, str, str]] = {
+    0xE8: ("shr", ">>", "unsigned long long", "unsigned long long"),
+    0xF8: ("sar", ">>", "long long", "long long"),
+}
+
+
+def x86_64_arg64_shift_imm8(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    pattern = "mov-rax-rdi-shift-imm8-ret"
+    if len(body) == 8 and body[:3] == b"\x48\x89\xf8" and body[3:5] == b"\x48\xc1" and body[-1] == 0xC3:
+        decoded = X86_64_ARG64_SHIFT_IMM8_OPS.get(body[5])
+        if decoded is None:
+            return []
+        shift = body[6]
+        if not 2 <= shift <= 63:
+            return []
+    elif len(body) == 7 and body[:3] == b"\x48\x89\xf8" and body[3:5] == b"\x48\xd1" and body[-1] == 0xC3:
+        decoded = X86_64_ARG64_SHIFT_ONE_OPS.get(body[5])
+        if decoded is None:
+            return []
+        shift = 1
+        pattern = "mov-rax-rdi-shift-one-ret"
+    else:
+        return []
+    suffix, operator, value_type, return_type = decoded
+    source = header(f"x86-64-arg64-{suffix}-imm8-cdecl", row) + "\n".join(
+        [
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return value {operator} {shift};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg64-{suffix}-imm8-cdecl",
+            variant=f"sysv-o2-register-arg64-{suffix}-imm8",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=return_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "rdi",
+                "operator": operator,
+                "shift": shift,
+                "valueType": value_type,
+                "returnType": return_type,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_IMM8_BINARY_OPS: dict[int, tuple[str, str]] = {
     0xE0: ("and", "&"),
     0xC8: ("or", "|"),
@@ -15283,6 +15348,7 @@ GENERATORS = [
     x86_64_arg64_lea_multiply,
     x86_64_arg_imm32_binary_op64,
     x86_64_arg64_sign_extend,
+    x86_64_arg64_shift_imm8,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
     byte_field_and_stack_byte,
