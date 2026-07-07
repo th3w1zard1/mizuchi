@@ -1740,6 +1740,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_bitmask_bool_candidate,
         x86_64_arg_udiv_pow2_candidate,
         x86_64_arg_udiv_magic_candidate,
+        x86_64_arg_urem_magic_candidate,
         x86_64_arg_bswap32_candidate,
         x86_64_arg_bswap64_candidate,
         x86_64_arg_rotate_candidate,
@@ -5541,6 +5542,69 @@ def x86_64_arg_udiv_magic_candidate(task: dict[str, Any], data: bytes) -> dict[s
             "operator": "/",
             "divisor": divisor,
             "multiplier": f"0x{int(decoded['multiplier']):08x}",
+            "shift": int(decoded["shift"]),
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG_UREM_MAGIC_OPS: dict[bytes, tuple[int, str, int, str]] = {
+    bytes.fromhex("89f889f9baabaaaaaa480fafd148c1ea218d0c5229c8c3"): (3, "0xaaaaaaab", 33, "mov-eax-edi-mov-ecx-edi-mov-edx-magic-imul-rdx-rcx-shr-rdx-33-lea-ecx-rdx-rdx2-sub-eax-ecx-ret"),
+    bytes.fromhex("89f889f9bacdcccccc480fafd148c1ea228d0c9229c8c3"): (5, "0xcccccccd", 34, "mov-eax-edi-mov-ecx-edi-mov-edx-magic-imul-rdx-rcx-shr-rdx-34-lea-ecx-rdx-rdx4-sub-eax-ecx-ret"),
+    bytes.fromhex("89f889f9bacdcccccc480fafd148c1ea2301d28d0c9229c8c3"): (10, "0xcccccccd", 35, "mov-eax-edi-mov-ecx-edi-mov-edx-magic-imul-rdx-rcx-shr-rdx-35-add-edx-edx-lea-ecx-rdx-rdx4-sub-eax-ecx-ret"),
+}
+
+
+def decode_x86_64_arg_urem_magic(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_UREM_MAGIC_OPS.get(body)
+    if decoded is None:
+        return None
+    divisor, multiplier, shift, pattern = decoded
+    return {
+        "divisor": divisor,
+        "multiplier": multiplier,
+        "shift": shift,
+        "pattern": pattern,
+    }
+
+
+def x86_64_arg_urem_magic_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_urem_magic(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 unsigned magic-multiply remainder pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value % {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-arg-urem-magic-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "operator": "%",
+            "divisor": divisor,
+            "multiplier": decoded["multiplier"],
             "shift": int(decoded["shift"]),
             "pattern": decoded["pattern"],
             "framePointer": False,
