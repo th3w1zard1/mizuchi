@@ -2,10 +2,10 @@
 
 Imported from a one-shot-source function reconstruction task.
 
-- Package: `/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source`
+- Package: `/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source`
 - Task: `function-reconstruction-tasks/0031_fcn_00586ace`
-- Target bytes: `/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0031_fcn_00586ace/target.bin`
-- Verifier: `/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0031_fcn_00586ace/VERIFY_CANDIDATE.sh`
+- Target bytes: `/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source/function-reconstruction-tasks/0031_fcn_00586ace/target.bin`
+- Verifier: `/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source/function-reconstruction-tasks/0031_fcn_00586ace/VERIFY_CANDIDATE.sh`
 - Target SHA256: `f11c9db4d93416739faf24b5eeca7e5189bbaa68dcdf7fcd9c7d01a0bce53432`
 
 Success requires `build-and-verify.sh` to run the task verifier and produce byte-identical target/candidate bytes.

@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mizuchi_re.source_export import export_recovered_source  # noqa: E402
+from reconkit_re.source_export import export_recovered_source  # noqa: E402
 
 
 def main() -> int:

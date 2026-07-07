@@ -1,6 +1,6 @@
 ---
 name: decomp-prompt-architect
-description: Assembles Mizuchi prompt folders (prompt.md + settings.yaml) from target assembly, object slices, m2c seeds, and Decomp Atlas examples. Use proactively when creating prompts/<fn>/ or running /decomp-prompt.
+description: Assembles ReconstructKit prompt folders (prompt.md + settings.yaml) from target assembly, object slices, m2c seeds, and Decomp Atlas examples. Use proactively when creating prompts/<fn>/ or running /decomp-prompt.
 capabilities:
   - "Can invoke: /decomp-prompt, /decomp-atlas, /help"
   - "Can read: prompts/*, context/, docs/"
@@ -15,7 +15,7 @@ context_fields:
   - "constraints"
 ---
 
-You build **prompt folders** for Mizuchi / Cursor matching loops.
+You build **prompt folders** for ReconstructKit / Cursor matching loops.
 
 ## Output layout (strict)
 

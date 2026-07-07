@@ -164,14 +164,14 @@ caseId: integrated_fn
 functionName: integrated_fn
 targetObjectPath: prompt:/build/target.o
 status: integrated
-integratedSourcePath: /tmp/mizuchi-integrated/integrated_fn.c
-integrationReceiptPath: /tmp/mizuchi-prompts/integrated_fn/build/integration-receipt.json
+integratedSourcePath: /tmp/reconkit-integrated/integrated_fn.c
+integrationReceiptPath: /tmp/reconkit-prompts/integrated_fn/build/integration-receipt.json
 integratedAt: 2026-06-28T00:00:00Z
 YAML
   touch "$prompt/prompt.md"
 
   local output
-  output="$(MIZUCHI_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
+  output="$(RECONKIT_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
   echo "$output" | jq -e '
     .workspace_metrics.total_prompts == 1 and
     .workspace_metrics.integrated == 1 and
@@ -180,8 +180,8 @@ YAML
       | select(.name == "integrated_fn")
       | .status == "integrated"
         and .function_name == "integrated_fn"
-        and .integrated_source_path == "/tmp/mizuchi-integrated/integrated_fn.c"
-        and .integration_receipt_path == "/tmp/mizuchi-prompts/integrated_fn/build/integration-receipt.json"
+        and .integrated_source_path == "/tmp/reconkit-integrated/integrated_fn.c"
+        and .integration_receipt_path == "/tmp/reconkit-prompts/integrated_fn/build/integration-receipt.json"
         and .integrated_at == "2026-06-28T00:00:00Z")
   ' >/dev/null
 }
@@ -208,14 +208,14 @@ status: matched
 YAML
   cat >"$prompt/build/programmatic-phase.json" <<'JSON'
 {
-  "schema": "mizuchi.programmatic-phase.v1",
+  "schema": "reconkit.programmatic-phase.v1",
   "status": "matched",
   "matchedStage": "candidate"
 }
 JSON
 
   local output
-  output="$(MIZUCHI_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
+  output="$(RECONKIT_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
   echo "$output" | jq -e '
     .build_artifacts[]
     | select(.prompt == "report_fn")
@@ -245,14 +245,14 @@ status: pending
 YAML
   cat >"$prompt/build/ai-phase.json" <<'JSON'
 {
-  "schema": "mizuchi.ai-phase.v1",
+  "schema": "reconkit.ai-phase.v1",
   "status": "manual-required",
   "runner": "cursor-native"
 }
 JSON
 
   local output
-  output="$(MIZUCHI_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
+  output="$(RECONKIT_PROMPTS_DIR="$tmpdir" "$script_path" 2>&1)"
   echo "$output" | jq -e '
     .build_artifacts[]
     | select(.prompt == "ai_fn")

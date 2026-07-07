@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compile a candidate C file for a Mizuchi prompt folder and verify the proof target.
+# Compile a candidate C file for a ReconstructKit prompt folder and verify the proof target.
 #
 # Usage:
 #   compile-trial.sh <prompts/<name>/> [candidate.c]

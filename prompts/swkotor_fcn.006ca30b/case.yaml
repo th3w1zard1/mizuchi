@@ -1,13 +1,13 @@
 caseId: swkotor_fcn.006ca30b
 functionName: 'fcn.006ca30b'
-targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0033_fcn_006ca30b/target.bin'
+targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source/function-reconstruction-tasks/0033_fcn_006ca30b/target.bin'
 candidateSourcePath: prompt:/candidate.c
 targetFamily: byte-slice
 proof: task-byte-identical
 status: pending
-oneShotPackagePath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source'
+oneShotPackagePath: '/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source'
 oneShotTaskPath: 'function-reconstruction-tasks/0033_fcn_006ca30b'
-oneShotTaskJson: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0033_fcn_006ca30b/task.json'
+oneShotTaskJson: '/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source/function-reconstruction-tasks/0033_fcn_006ca30b/task.json'
 targetBytesSha256: 'afe6a740cfd48a2565e5615f44233eb8f651d7b7075bc324571ad1f13e5a3d2f'
 verifierCommand: |
-  bash ./scripts/verify-reconstruction-task.sh --task-dir '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0033_fcn_006ca30b' --verifier 'VERIFY_CANDIDATE.sh' --candidate "{{candidateSourcePath}}" --candidate-output "{{candidateOutputPath}}"
+  bash ./scripts/verify-reconstruction-task.sh --task-dir '/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source/function-reconstruction-tasks/0033_fcn_006ca30b' --verifier 'VERIFY_CANDIDATE.sh' --candidate "{{candidateSourcePath}}" --candidate-output "{{candidateOutputPath}}"

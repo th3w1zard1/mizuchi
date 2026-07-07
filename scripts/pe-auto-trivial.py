@@ -693,9 +693,9 @@ def build_rebuilt_pe_roundtrip(
         return None
     rebuilt_path = roundtrip_dir / "exports.dll"
     if arch == "x86_64":
-        dll_meta = write_minimal_pe64_export_dll(rebuilt_path, "mizuchi_exports.dll", matches)
+        dll_meta = write_minimal_pe64_export_dll(rebuilt_path, "recovery_exports.dll", matches)
     else:
-        dll_meta = write_minimal_pe32_export_dll(rebuilt_path, "mizuchi_exports.dll", matches)
+        dll_meta = write_minimal_pe32_export_dll(rebuilt_path, "recovery_exports.dll", matches)
     rebuilt_exports = {str(export["name"]): export for export in parse_exports(rebuilt_path)}
     verified: list[dict[str, object]] = []
     failures: list[dict[str, object]] = []
@@ -723,7 +723,7 @@ def build_rebuilt_pe_roundtrip(
             failures.append(row)
 
     report = {
-        "schema": "mizuchi.pe-rebuilt-dll-export-roundtrip.v1",
+        "schema": "reconkit.pe-rebuilt-dll-export-roundtrip.v1",
         "binary": str(binary),
         "status": "matched" if len(verified) == len(matches) else "failed",
         "rebuiltDll": str(rebuilt_path),
@@ -788,7 +788,7 @@ def build_aggregate_roundtrip(
                 failures.append(row)
 
     report = {
-        "schema": "mizuchi.pe-aggregate-source-roundtrip.v1",
+        "schema": "reconkit.pe-aggregate-source-roundtrip.v1",
         "binary": str(binary),
         "status": "matched" if compile_proc.returncode == 0 and len(verified) == len(coff_matches) else "failed",
         "source": str(source_path),
@@ -843,7 +843,7 @@ def verify_candidate(
         return None
     matched = target_bytes == candidate_bytes
     report = {
-        "schema": "mizuchi.pe-export-slice-verify.v1",
+        "schema": "reconkit.pe-export-slice-verify.v1",
         "status": "matched" if matched else "mismatched",
         "byteIdentical": matched,
         "binary": str(binary),
@@ -880,7 +880,7 @@ def auto_match(args: argparse.Namespace) -> int:
     candidates_considered = 0
     skipped = 0
 
-    with tempfile.TemporaryDirectory(prefix="mizuchi-pe-auto-trivial-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-pe-auto-trivial-") as tmp:
         tmp_dir = Path(tmp)
         for export in exports:
             if args.limit and attempts >= args.limit:
@@ -951,7 +951,7 @@ def auto_match(args: argparse.Namespace) -> int:
     aggregate_roundtrip = build_aggregate_roundtrip(binary, out_root, matches, target, args.pe_rebuild_mode)
 
     report = {
-        "schema": "mizuchi.pe-auto-trivial.v1",
+        "schema": "reconkit.pe-auto-trivial.v1",
         "binary": str(binary),
         "status": "completed",
         "architecture": pe_arch(binary),

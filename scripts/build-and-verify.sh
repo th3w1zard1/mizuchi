@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/prompt-settings.sh
 . "$ROOT/scripts/lib/prompt-settings.sh"
-# shellcheck source=scripts/lib/mizuchi-config.sh
-. "$ROOT/scripts/lib/mizuchi-config.sh"
+# shellcheck source=scripts/lib/reconkit-config.sh
+. "$ROOT/scripts/lib/reconkit-config.sh"
 # shellcheck source=scripts/lib/case-metadata.sh
 . "$ROOT/scripts/lib/case-metadata.sh"
 
@@ -95,8 +95,8 @@ size_file() {
 compiler_command="$(case_metadata_get_default "$prompt_dir" compilerCommand "")"
 verifier_command="$(case_metadata_get_default "$prompt_dir" verifierCommand "")"
 if [[ -z "$compiler_command" ]]; then
-  if mizuchi_config_resolve >/dev/null 2>&1; then
-    compiler_command="$(mizuchi_config_get "global.compilerScript" optional || true)"
+  if recovery_config_resolve >/dev/null 2>&1; then
+    compiler_command="$(recovery_config_get "global.compilerScript" optional || true)"
   fi
 fi
 if [[ -z "$compiler_command" ]]; then
@@ -224,7 +224,7 @@ else
 fi
 
 jq -n \
-  --arg schema "mizuchi.build-and-verify.v1" \
+  --arg schema "reconkit.build-and-verify.v1" \
   --arg status "$status" \
   --arg method "$method" \
   --arg prompt "$prompt_name" \

@@ -15,7 +15,7 @@ cp "$ROOT/prompts/roundtrip_identity/build/target.o" "$candidate"
 
 out="$("$ROOT/scripts/lib/verify-objdiff.sh" "$target" "$candidate" --out "$TMP_DIR/report.json" --raw-out "$TMP_DIR/raw.txt")"
 printf '%s\n' "$out" | jq -e '
-  .schema == "mizuchi.verify-objdiff.v1" and
+  .schema == "reconkit.verify-objdiff.v1" and
   .status == "matched" and
   .differences == 0
 ' >/dev/null

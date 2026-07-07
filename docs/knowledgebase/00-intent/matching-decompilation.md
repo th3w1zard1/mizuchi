@@ -12,7 +12,7 @@ Use a **phased pipeline**: gather target assembly/object-slice context → progr
 
 - Decomp project contributors matching functions in C
 - AI agents assisting matching under sandbox + verification rules
-- Odyssey/KOTOR-style workflows using Mizuchi-style prompt, compile, and objdiff loops
+- Odyssey/KOTOR-style workflows using ReconstructKit-style prompt, compile, and objdiff loops
 
 ## Success signals
 
@@ -20,7 +20,7 @@ Use a **phased pipeline**: gather target assembly/object-slice context → progr
 |--------|---------|
 | objdiff 0 on target `.o` | Function matched |
 | Build green after integrate | Landed safely |
-| `mizuchi-db.json` growth | Decomp Atlas improving future prompts |
+| `reconkit-db.json` growth | Decomp Atlas improving future prompts |
 
 ## Non-goals
 
@@ -36,5 +36,5 @@ Commands: `/decomp-function`, `/decomp-prompt`
 
 ## Evidence
 
-- [OFFICIAL] Macabeus article + Mizuchi README — see `matching-decompilation-re/docs/research-brief.md`
-- [SYNTH] This workspace uses prompt folders plus local compile/objdiff wrappers to mirror the upstream Mizuchi loop
+- [OFFICIAL] Macabeus article + ReconstructKit README — see `matching-decompilation-re/docs/research-brief.md`
+- [SYNTH] This workspace uses prompt folders plus local compile/objdiff wrappers to mirror the upstream ReconstructKit loop

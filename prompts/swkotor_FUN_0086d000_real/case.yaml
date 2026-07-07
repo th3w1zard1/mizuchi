@@ -7,7 +7,7 @@ binaryPath: /run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/sw
 binaryFunctionAddress: '0x0086d000'
 binarySection: .bind
 targetBytes: '558bec5dc3'
-compilerCommand: WINEPREFIX=/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/wine-swkotor-runtime-dump CL_OPT=/Od bash ./scripts/cl-compile.sh "{{cFilePath}}" "{{objFilePath}}" /Oy- /GS-
+compilerCommand: WINEPREFIX=/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/wine-swkotor-runtime-dump CL_OPT=/Od bash ./scripts/cl-compile.sh "{{cFilePath}}" "{{objFilePath}}" /Oy- /GS-
 proof: objdiff-0-code-only
 status: matched
 claimBoundary: first real high-level C function match only; does not imply whole-exe source recovery

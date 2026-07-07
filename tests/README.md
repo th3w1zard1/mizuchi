@@ -1,4 +1,4 @@
-# Mizuchi tests
+# ReconstructKit tests
 
 Shell-based integration and unit tests for the matching-decompilation workspace.
 Run from the repository root unless noted.
@@ -39,7 +39,7 @@ when assets are missing. See each script header for env vars.
 
 | Test | What it checks |
 |------|----------------|
-| `mizuchi_cli_frontdoor_test.sh` | `mizuchi` CLI entrypoints |
+| `reconkit_cli_frontdoor_test.sh` | `reconkit` CLI entrypoints |
 | `decomp_cli_validate_test.sh` | Prompt folder validation |
 | `verify_workspace_surface_test.sh` | Required scripts and docs exist |
 

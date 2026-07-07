@@ -64,7 +64,7 @@ init_report="$("$CLI" vacuum init \
   --session "$SESSION")"
 
 printf '%s\n' "$init_report" | jq -e '
-  .schema == "mizuchi.vacuum-init.v1" and
+  .schema == "reconkit.vacuum-init.v1" and
   .status == "initialized" and
   .summary.pending >= 1
 ' >/dev/null
@@ -87,7 +87,7 @@ vacuum_report="$("$CLI" vacuum start \
   --runner-command 'test "{{name}}" = "roundtrip_identity"')"
 
 printf '%s\n' "$vacuum_report" | jq -e '
-  .schema == "mizuchi.vacuum.v1" and
+  .schema == "reconkit.vacuum.v1" and
   .processed == 1 and
   .summary.matched == 1 and
   .summary.pending == 0

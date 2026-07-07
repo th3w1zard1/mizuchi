@@ -2,7 +2,7 @@
 
 Copy this directory to `prompts/<your-function-name>/` and fill in real values from Ghidra + your build tree.
 
-**Do not run Mizuchi on `_template` as-is** — it is documentation only.
+**Do not run ReconstructKit on `_template` as-is** — it is documentation only.
 
 ## Checklist
 

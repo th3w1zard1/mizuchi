@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run global.getContextScript from mizuchi.yaml (m2ctx / type headers).
+# Run global.getContextScript from reconkit.yaml (m2ctx / type headers).
 #
 # Usage:
 #   get-context.sh --prompt prompts/<name>/ [--output context/ctx.h]
@@ -8,8 +8,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/prompt-settings.sh
 . "$ROOT/scripts/lib/prompt-settings.sh"
-# shellcheck source=scripts/lib/mizuchi-config.sh
-. "$ROOT/scripts/lib/mizuchi-config.sh"
+# shellcheck source=scripts/lib/reconkit-config.sh
+. "$ROOT/scripts/lib/reconkit-config.sh"
 
 prompt_dir=""
 output=""
@@ -37,8 +37,8 @@ functionName="$(prompt_settings_get "$prompt_dir" functionName)"
 targetObjectPath="$(prompt_settings_get "$prompt_dir" targetObjectPath)"
 targetObjectPath="${targetObjectPath//\{\{functionName\}\}/$functionName}"
 
-script="$(mizuchi_config_get global.getContextScript)" || {
-  echo "get-context: global.getContextScript not set in mizuchi config" >&2
+script="$(recovery_config_get global.getContextScript)" || {
+  echo "get-context: global.getContextScript not set in reconkit config" >&2
   exit 1
 }
 
@@ -51,7 +51,7 @@ fi
 mkdir -p "$(dirname "$output")"
 
 echo "get-context: running getContextScript -> $output"
-if ! bash -c "$(printf '%s' "$script" | mizuchi_expand_templates)" >"$output" 2>"$log"; then
+if ! bash -c "$(printf '%s' "$script" | recovery_expand_templates)" >"$output" 2>"$log"; then
   echo "get-context: script failed (see $log)" >&2
   tail -n 30 "$log" >&2 || true
   exit 1

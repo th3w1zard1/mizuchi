@@ -8,7 +8,7 @@ origin: none
 
 ## Summary
 
-Implement 3 MCP primitives, 1 discovery command, and 1 documentation artifact to move Mizuchi from 43% agent-native to 75%+ agent-native. Agents can query workspace state, discover capabilities, and understand what they can do without being told.
+Implement 3 MCP primitives, 1 discovery command, and 1 documentation artifact to move ReconstructKit from 43% agent-native to 75%+ agent-native. Agents can query workspace state, discover capabilities, and understand what they can do without being told.
 
 ## Problem Frame
 

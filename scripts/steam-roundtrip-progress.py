@@ -125,7 +125,7 @@ def main() -> int:
         )
 
     report = {
-        "schema": "mizuchi.steam-roundtrip-progress.v1",
+        "schema": "reconkit.steam-roundtrip-progress.v1",
         "steamapps": str(args.steamapps),
         "searchRoots": [str(path) for path in args.search_root],
         "inventoryAppCount": len(inventory_apps),

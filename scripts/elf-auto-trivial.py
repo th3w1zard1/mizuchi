@@ -58,7 +58,7 @@ def c_prelude(symbol: str) -> str:
     return "\n".join(
         [
             "typedef unsigned long ulong;",
-            f"__attribute__((used)) static const char *mizuchi_target_symbol = {c_string(symbol)};",
+            f"__attribute__((used)) static const char *recovery_target_symbol = {c_string(symbol)};",
             "",
         ]
     )
@@ -394,7 +394,7 @@ def build_aggregate_roundtrip(
                 failures.append(row)
 
     report = {
-        "schema": "mizuchi.elf-aggregate-source-roundtrip.v1",
+        "schema": "reconkit.elf-aggregate-source-roundtrip.v1",
         "binary": str(binary),
         "status": "matched" if compile_proc.returncode == 0 and len(verified) == len(matches) else "failed",
         "source": str(source_path),
@@ -457,7 +457,7 @@ def auto_match(args: argparse.Namespace) -> int:
             symbols.append(sym)
     symbols.sort(key=lambda sym: (int(sym["address"]), str(sym["name"])))
 
-    with tempfile.TemporaryDirectory(prefix="mizuchi-auto-trivial-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-auto-trivial-") as tmp:
         tmp_dir = Path(tmp)
         for sym in symbols:
             if args.limit and attempts >= args.limit:
@@ -504,7 +504,7 @@ def auto_match(args: argparse.Namespace) -> int:
     aggregate_roundtrip = build_aggregate_roundtrip(binary, out_root, matches, arch_flags)
 
     report = {
-        "schema": "mizuchi.elf-auto-trivial.v1",
+        "schema": "reconkit.elf-auto-trivial.v1",
         "binary": str(binary),
         "status": "completed",
         "symbolCount": len(symbols),

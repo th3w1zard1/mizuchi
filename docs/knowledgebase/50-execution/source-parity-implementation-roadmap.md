@@ -4,7 +4,7 @@ Updated: 2026-06-29
 
 This is the practical implementation roadmap for turning a compiled C/C++
 binary such as `swkotor.exe` into a source tree that can be defended as source
-parity. It separates what existing tools are good at, what Mizuchi already has,
+parity. It separates what existing tools are good at, what ReconstructKit already has,
 and what still has to be built.
 
 ## The Reference Methodology
@@ -21,7 +21,7 @@ project:
 6. Diff against the target object.
 7. Keep only verified matches and move hard functions aside.
 
-The Macabeus/Mizuchi model is the same in principle. Programmatic tools,
+The Macabeus/ReconstructKit model is the same in principle. Programmatic tools,
 permuters, and LLMs all feed a compile-and-diff loop. None of them are the
 acceptance gate.
 
@@ -67,18 +67,18 @@ Use one-shot generation only after the target function is well formed:
 If those are missing, one-shot is premature. The real work is still acquisition,
 compiler forensics, or type/global recovery.
 
-## What Mizuchi Already Has
+## What ReconstructKit Already Has
 
-Mizuchi already has the skeleton of the right architecture:
+ReconstructKit already has the skeleton of the right architecture (compatibility namespace in `src/reconkit_re`; neutral `src/recovery_runtime` façade):
 
-- `src/mizuchi_re/cli.py` provides a real recovery orchestrator.
-- `src/mizuchi_re/agentdecompile.py` treats AgentDecompile as an acquisition
+- `cli.py` provides a real recovery orchestrator.
+- `agentdecompile.py` treats AgentDecompile as an acquisition
   layer rather than a proof surface.
-- `src/mizuchi_re/windows.py` can process large binaries in deterministic
+- `windows.py` can process large binaries in deterministic
   function windows and assemble a recovered-source package.
-- `src/mizuchi_re/package_sweep.py` can synthesize source-shape variants and
+- `package_sweep.py` can synthesize source-shape variants and
   sweep compiler profiles.
-- `src/mizuchi_re/package_verify.py` can compile generated sources and compare
+- `package_verify.py` can compile generated sources and compare
   candidate `.text` against packaged target slices.
 
 That is real progress, but it is still below source parity.
@@ -123,7 +123,7 @@ parity for the full application.
 
 ### Phase 1. Make the verifier honest and strong
 
-Implemented in `src/mizuchi_re/package_verify.py`: each package and per-function
+Implemented in `package_verify.py` (under the compatibility implementation at `src/reconkit_re`, mirrored in `src/recovery_runtime`): each package and per-function
 result carries `verificationTier` (`generated` → `object-compilable` →
 `code-slice` → `relocation-aware-code-slice` → `target-object-objdiff`) and
 `acceptanceGate` (`objdiff-zero` only at the top tier). Weaker tiers are labeled
@@ -192,7 +192,7 @@ Only after function and object coverage are mature:
 
 ## Agent-Native Implications
 
-Mizuchi should stay agent-native, but only in the right places:
+ReconstructKit should stay agent-native, but only in the right places:
 
 - The agent should be able to run every recovery lane the user can run.
 - Tools should stay primitive: inspect target, analyze functions, generate

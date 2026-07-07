@@ -131,7 +131,7 @@ def scaffold(args: argparse.Namespace) -> int:
     (out_dir / "target.bin").write_bytes(target_bytes)
     (out_dir / "target.asm").write_text(disassemble(args.binary, target_meta))
     manifest = {
-        "schema": "mizuchi.elf-function-slice.v1",
+        "schema": "reconkit.elf-function-slice.v1",
         "binary": str(args.binary),
         "symbol": args.symbol,
         "target": target_meta,
@@ -170,7 +170,7 @@ def verify(args: argparse.Namespace) -> int:
     )
     matched = target_bytes == candidate_bytes
     report = {
-        "schema": "mizuchi.elf-function-slice-verify.v1",
+        "schema": "reconkit.elf-function-slice-verify.v1",
         "status": "matched" if matched else "mismatched",
         "byteIdentical": matched,
         "binary": str(args.binary),

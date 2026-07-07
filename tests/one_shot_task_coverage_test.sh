@@ -24,7 +24,7 @@ cp "$TASK_A/verifiers/run.sh" "$TASK_B/verifiers/run.sh"
 
 cat >"$TASK_A/task.json" <<'JSON'
 {
-  "schema": "mizuchi.one-shot-source-function-reconstruction-task.v1",
+  "schema": "reconkit.one-shot-source-function-reconstruction-task.v1",
   "name": "matched_fn",
   "target": {"path": "function-reconstruction-tasks/0000_matched_fn/target.bin"},
   "acceptance": {"candidateVerifier": "function-reconstruction-tasks/0000_matched_fn/verifiers/run.sh"}
@@ -32,7 +32,7 @@ cat >"$TASK_A/task.json" <<'JSON'
 JSON
 cat >"$TASK_B/task.json" <<'JSON'
 {
-  "schema": "mizuchi.one-shot-source-function-reconstruction-task.v1",
+  "schema": "reconkit.one-shot-source-function-reconstruction-task.v1",
   "name": "missing_fn",
   "target": {"path": "function-reconstruction-tasks/0001_missing_fn/target.bin"},
   "acceptance": {"candidateVerifier": "function-reconstruction-tasks/0001_missing_fn/verifiers/run.sh"}
@@ -43,7 +43,7 @@ void matched_fn(void) {}
 C
 cat >"$PACKAGE/FUNCTION_RECONSTRUCTION_TASKS.json" <<'JSON'
 {
-  "schema": "mizuchi.one-shot-source-function-reconstruction-tasks.v1",
+  "schema": "reconkit.one-shot-source-function-reconstruction-tasks.v1",
   "status": "tasks-present",
   "taskCount": 2,
   "tasks": [
@@ -66,7 +66,7 @@ cat >"$PACKAGE/FUNCTION_RECONSTRUCTION_TASKS.json" <<'JSON'
 JSON
 cat >"$PACKAGE/SEMANTIC_READINESS.json" <<'JSON'
 {
-  "schema": "mizuchi.semantic-readiness.v1",
+  "schema": "reconkit.semantic-readiness.v1",
   "status": "not-ready",
   "missingEvidence": ["function-boundary map", "compiler profile"]
 }
@@ -78,7 +78,7 @@ rm -rf "$PROMPTS/oss_missing_fn"
 
 coverage="$("$CLI" one-shot-task-coverage --package "$PACKAGE" --prompts-dir "$PROMPTS")"
 printf '%s\n' "$coverage" | jq -e '
-  .schema == "mizuchi.one-shot-task-coverage.v1" and
+  .schema == "reconkit.one-shot-task-coverage.v1" and
   .status == "incomplete" and
   .semanticReady == false and
   .allTasksVerified == false and

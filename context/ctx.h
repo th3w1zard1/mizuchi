@@ -1,1 +1,1 @@
-/* Shared context stub for local Mizuchi proof fixtures. */
+/* Shared context stub for local ReconstructKit proof fixtures. */

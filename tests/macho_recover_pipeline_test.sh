@@ -39,7 +39,7 @@ if ! clang \
   exit 0
 fi
 
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.mizuchi_cli "$TMP_DIR/macho_tiny.o" \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m reconkit_re.reconkit_cli "$TMP_DIR/macho_tiny.o" \
   --work-dir "$TMP_DIR/recover" \
   --no-resume \
   --no-byte-authority \

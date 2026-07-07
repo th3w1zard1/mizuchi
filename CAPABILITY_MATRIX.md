@@ -1,14 +1,14 @@
 ---
 title: "Agent Capability Matrix"
-description: "Centralized reference for all agent-accessible operations in the Mizuchi workspace"
+description: "Centralized reference for all agent-accessible operations in the ReconstructKit workspace"
 updated: 2026-05-29
 ---
 
-# Mizuchi Agent Capability Matrix
+# ReconstructKit Agent Capability Matrix
 
 ## Overview
 
-This matrix documents all operations available to agents in the Mizuchi matching-decompilation workspace. Each agent has distinct permissions and tool access defined below.
+This matrix documents all operations available to agents in the ReconstructKit matching-decompilation workspace. Each agent has distinct permissions and tool access defined below.
 
 ## Capability Legend
 
@@ -82,7 +82,7 @@ All agents have access to:
 Agent-specific tools:
 - **ghidra-binary-scout:** AgentDecompile MCP (search-everything, get-function, get-call-graph, match-function)
 - **decomp-prompt-architect:** Decomp Atlas MCP (index, search, export-similar)
-- **decomp-function-agent:** All above, plus Mizuchi `compile_and_view_assembly`
+- **decomp-function-agent:** All above, plus ReconstructKit `compile_and_view_assembly`
 
 ## Slash Commands by Agent
 

@@ -8,7 +8,7 @@ Success = **0 objdiff differences**. Functional equivalence is not enough.
 
 # Context
 
-<!-- Wire getContextScript in mizuchi.yaml after extracting ctx from the Xbox decomp tree -->
+<!-- Wire getContextScript in reconkit.yaml after extracting ctx from the Xbox decomp tree -->
 <!-- Pointer at ECX+0 is likely a vtable or member pointer; fallback global at 0x0040e180 -->
 
 # Similar matched functions

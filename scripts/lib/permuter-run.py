@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run decomp-permuter for a Mizuchi prompt folder (Cursor-native bridge)."""
+"""Run decomp-permuter for a ReconstructKit prompt folder (Cursor-native bridge)."""
 
 from __future__ import annotations
 
@@ -246,9 +246,9 @@ def main() -> int:
         return 4
 
     project_root = prompt_dir.parent.parent
-    config_path = Path(args.config) if args.config else project_root / "mizuchi.yaml"
+    config_path = Path(args.config) if args.config else project_root / "reconkit.yaml"
     if not config_path.is_file():
-        config_path = project_root / "mizuchi.example.yaml"
+        config_path = project_root / "reconkit.example.yaml"
 
     target = "x86"
     compiler_script = 'bash ./scripts/compile-placeholder.sh "{{cFilePath}}" "{{objFilePath}}"'
@@ -289,7 +289,7 @@ def main() -> int:
     context_path = project_root / "context" / "ctx.h"
     context_content = context_path.read_text(encoding="utf-8") if context_path.is_file() else ""
 
-    work_dir = Path(tempfile.mkdtemp(prefix="mizuchi-permuter-"))
+    work_dir = Path(tempfile.mkdtemp(prefix="reconkit-permuter-"))
     try:
         (work_dir / "context.h").write_text(context_content, encoding="utf-8")
         c_code = base_c.read_text(encoding="utf-8")

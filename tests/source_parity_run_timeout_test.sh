@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY'
-from mizuchi_re.source_parity_synthesize import run
+from reconkit_re.source_parity_synthesize import run
 
 proc = run(["bash", "-lc", "bash -c 'sleep 20' & wait"], timeout=1)
 assert proc.returncode == 124, proc

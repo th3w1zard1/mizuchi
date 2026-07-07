@@ -1,5 +1,5 @@
 functionName: 'int.004bc84e'
-targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0007_int_004bc84e/target.bin'
+targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source/function-reconstruction-tasks/0007_int_004bc84e/target.bin'
 asm: |
   int.004bc84e:
       .byte 0x3b, 0x63, 0xb6, 0xbe, 0xc2, 0x67, 0xe1, 0xac, 0xc0, 0xf4, 0x82, 0x6b

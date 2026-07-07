@@ -7,7 +7,7 @@
         "timeout": 5
       },
       {
-        "command": "/run/media/brunner56/MyBook/Workspaces/Mizuchi/scripts/ralph-loop-stop-hook.sh",
+        "command": "/run/media/brunner56/MyBook/Workspaces/ReconstructKit/scripts/ralph-loop-stop-hook.sh",
         "timeout": 15
       }
     ]

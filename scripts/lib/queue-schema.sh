@@ -2,7 +2,7 @@
 # Queue schema constants for the autonomous matching loop.
 set -euo pipefail
 
-QUEUE_SCHEMA_VERSION="mizuchi.vacuum-queue.v1"
+QUEUE_SCHEMA_VERSION="reconkit.vacuum-queue.v1"
 QUEUE_DEFAULT_PATH="state/queue.json"
 SCORES_DEFAULT_PATH="state/scores.json"
 VACUUM_SESSION_DEFAULT_PATH="state/vacuum-session.json"

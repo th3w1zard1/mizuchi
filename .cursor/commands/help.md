@@ -8,7 +8,7 @@ Get a complete guide to what you can do in this workspace.
 
 The `/help` command returns:
 
-1. **Available Agents** — Mizuchi-specialized agents for matching-decompilation tasks
+1. **Available Agents** — ReconstructKit-specialized agents for matching-decompilation tasks
 2. **Available Commands** — Slash commands for running agents and operations
 3. **Available MCP Tools** — Workspace MCP primitives (get_workspace_context, list_prompts, run_objdiff)
 4. **Quick Reference** — Common operations and workflows

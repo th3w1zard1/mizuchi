@@ -11,7 +11,7 @@ printf 'preverified-object-bytes' >"$TMP_DIR/build/copied_fn.obj"
 
 cat >"$TMP_DIR/build_manifest.json" <<JSON
 {
-  "schema": "mizuchi.recovered-source-build-manifest.v1",
+  "schema": "reconkit.recovered-source-build-manifest.v1",
   "status": "complete",
   "units": [
     {
@@ -26,7 +26,7 @@ JSON
 
 cat >"$TMP_DIR/simple_matches.manifest.json" <<JSON
 {
-  "schema": "mizuchi.swkotor-recovered-source-shard.v1",
+  "schema": "reconkit.swkotor-recovered-source-shard.v1",
   "status": "complete",
   "buildManifest": "$TMP_DIR/build_manifest.json",
   "functionCount": 1,

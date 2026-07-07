@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_VC_ROOT = Path("/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main")
+DEFAULT_VC_ROOT = Path("/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main")
 DEFAULT_WINEPREFIX = ROOT / "target/toolchain-acquire/vctoolkit2003/wineprefix"
 
 
@@ -172,7 +172,7 @@ def main() -> int:
         args.summary.write_text(
             json.dumps(
                 {
-                    "schema": "mizuchi.swkotor-recovered-shard-compile.v1",
+                    "schema": "reconkit.swkotor-recovered-shard-compile.v1",
                     "manifest": str(args.manifest),
                     "attempted": len(rows),
                     "compiled": compiled_count,

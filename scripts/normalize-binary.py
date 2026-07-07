@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-normalize-binary.py — anomaly-detect → unpack/normalize front-end for mizuchi.
+normalize-binary.py — anomaly-detect → unpack/normalize front-end for reconkit.
 
 The matching-decompilation pipeline can only work on *readable* machine code.
 Real-world executables are frequently packed/encrypted/protected, so their

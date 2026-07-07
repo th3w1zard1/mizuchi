@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Activate Mizuchi source-parity Ralph loop state for Cursor stop hook.
+# Activate ReconstructKit source-parity Ralph loop state for Cursor stop hook.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-PROMPT="${PROMPT_PARTS[*]:-Continue source-parity loop: SWKOTOR >=90% one-shot, JKA fully one-shottable, upstream Mizuchi core without gaps.}"
+PROMPT="${PROMPT_PARTS[*]:-Continue source-parity loop: SWKOTOR >=90% one-shot, JKA fully one-shottable, upstream ReconstructKit core without gaps.}"
 
 cat > "$STATE_FILE" <<EOF
 ---

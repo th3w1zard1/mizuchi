@@ -104,7 +104,7 @@ def manifest_report(path: Path, data: dict[str, Any]) -> dict[str, Any]:
     ]
 
     return {
-        "schema": "mizuchi.source-authority-report.v1",
+        "schema": "reconkit.source-authority-report.v1",
         "input": str(path),
         "inputSchema": data.get("schema"),
         "app": data.get("app"),
@@ -132,7 +132,7 @@ def manifest_report(path: Path, data: dict[str, Any]) -> dict[str, Any]:
 def binary_roundtrip_report(path: Path, data: dict[str, Any]) -> dict[str, Any]:
     row = artifact_row(data)
     return {
-        "schema": "mizuchi.source-authority-report.v1",
+        "schema": "reconkit.source-authority-report.v1",
         "input": str(path),
         "inputSchema": data.get("schema"),
         "status": "authoritative" if row["byteIdentical"] and row["authority"] == "byte-source" else "incomplete",
@@ -174,7 +174,7 @@ def recovered_source_shard_report(path: Path, data: dict[str, Any]) -> dict[str,
     verified = sum(1 for item in rows if item["byteIdentical"])
     ambiguous = [item for item in rows if not item["byteIdentical"] or not str(item.get("authority") or "").startswith("semantic-")]
     return {
-        "schema": "mizuchi.source-authority-report.v1",
+        "schema": "reconkit.source-authority-report.v1",
         "input": str(path),
         "inputSchema": data.get("schema"),
         "status": "authoritative" if rows and not ambiguous else "incomplete",
@@ -198,11 +198,11 @@ def recovered_source_shard_report(path: Path, data: dict[str, Any]) -> dict[str,
 def build_report(path: Path) -> dict[str, Any]:
     data = read_json(path)
     schema = str(data.get("schema") or "")
-    if schema == "mizuchi.app-source-roundtrip-manifest.v1":
+    if schema == "reconkit.app-source-roundtrip-manifest.v1":
         return manifest_report(path, data)
-    if schema == "mizuchi.binary-source-roundtrip.v1":
+    if schema == "reconkit.binary-source-roundtrip.v1":
         return binary_roundtrip_report(path, data)
-    if schema == "mizuchi.swkotor-recovered-source-shard.v1":
+    if schema == "reconkit.swkotor-recovered-source-shard.v1":
         return recovered_source_shard_report(path, data)
     raise SystemExit(f"unsupported source artifact schema: {schema or '<missing>'}")
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_VC_ROOT = Path("/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main")
+DEFAULT_VC_ROOT = Path("/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main")
 DEFAULT_WINEPREFIX = ROOT / "target/toolchain-acquire/vctoolkit2003/wineprefix"
 
 
@@ -310,11 +310,11 @@ def vtable_tailcall_source(name: str, field_offset: int, method_offset: int) -> 
     slot = method_offset // 4
     return "\n".join(
         [
-            "typedef void (__fastcall *MizuchiVMethod)(void *);",
+            "typedef void (__fastcall *ReconstructKitVMethod)(void *);",
             "",
             f"void __fastcall {name}(void *self) {{",
             f"    void *target = *(void **)({self_offset_expr(field_offset)});",
-            f"    (*(MizuchiVMethod **)target)[0][{slot}](target);",
+            f"    (*(ReconstructKitVMethod **)target)[0][{slot}](target);",
             "}",
             "",
         ]
@@ -325,10 +325,10 @@ def vtable_call_push_imm_source(name: str, method_offset: int, value: int) -> st
     slot = method_offset // 4
     return "\n".join(
         [
-            "typedef void (__fastcall *MizuchiVMethodArg)(void *, int, int);",
+            "typedef void (__fastcall *ReconstructKitVMethodArg)(void *, int, int);",
             "",
             f"void __fastcall {name}(void *self) {{",
-            f"    (*(MizuchiVMethodArg **)self)[0][{slot}](self, 0, {value});",
+            f"    (*(ReconstructKitVMethodArg **)self)[0][{slot}](self, 0, {value});",
             "}",
             "",
         ]
@@ -511,10 +511,10 @@ def global_param_store_source(name: str, address: int, stack_offset: int) -> str
 def import_call_ecx_source(name: str, address: int) -> str:
     return "\n".join(
         [
-            "typedef void (__cdecl *MizuchiImportOneArg)(void *);",
+            "typedef void (__cdecl *ReconstructKitImportOneArg)(void *);",
             "",
             f"void __fastcall {name}(void *self) {{",
-            f"    (*(MizuchiImportOneArg volatile *)0x{address:08x})(self);",
+            f"    (*(ReconstructKitImportOneArg volatile *)0x{address:08x})(self);",
             "}",
             "",
         ]
@@ -524,10 +524,10 @@ def import_call_ecx_source(name: str, address: int) -> str:
 def import_call_imm_source(name: str, address: int, value: int) -> str:
     return "\n".join(
         [
-            "typedef void (__cdecl *MizuchiImportIntArg)(int);",
+            "typedef void (__cdecl *ReconstructKitImportIntArg)(int);",
             "",
             f"void {name}(void) {{",
-            f"    (*(MizuchiImportIntArg volatile *)0x{address:08x})({value});",
+            f"    (*(ReconstructKitImportIntArg volatile *)0x{address:08x})({value});",
             "}",
             "",
         ]
@@ -537,10 +537,10 @@ def import_call_imm_source(name: str, address: int, value: int) -> str:
 def import_call_global_source(name: str, call_address: int, arg_address: int) -> str:
     return "\n".join(
         [
-            "typedef void (__cdecl *MizuchiImportPtrArg)(void *);",
+            "typedef void (__cdecl *ReconstructKitImportPtrArg)(void *);",
             "",
             f"void {name}(void) {{",
-            f"    (*(MizuchiImportPtrArg volatile *)0x{call_address:08x})(*(void * volatile *)0x{arg_address:08x});",
+            f"    (*(ReconstructKitImportPtrArg volatile *)0x{call_address:08x})(*(void * volatile *)0x{arg_address:08x});",
             "}",
             "",
         ]
@@ -1211,7 +1211,7 @@ def main() -> int:
             )
             if slice_proc.returncode != 0:
                 record = {
-                    "schema": "mizuchi.swkotor-trivial-match.v1",
+                    "schema": "reconkit.swkotor-trivial-match.v1",
                     "name": name,
                     "entry": row.get("entry"),
                     "section": row.get("section"),
@@ -1255,7 +1255,7 @@ def main() -> int:
             (out_dir / "compile.stderr").write_text(compile_proc.stderr, encoding="utf-8")
             if compile_proc.returncode != 0:
                 record = {
-                    "schema": "mizuchi.swkotor-trivial-match.v1",
+                    "schema": "reconkit.swkotor-trivial-match.v1",
                     "name": name,
                     "entry": row.get("entry"),
                     "section": row.get("section"),
@@ -1299,7 +1299,7 @@ def main() -> int:
                 matched += 1
             attempted += 1
             record = {
-                "schema": "mizuchi.swkotor-trivial-match.v1",
+                "schema": "reconkit.swkotor-trivial-match.v1",
                 "name": name,
                 "entry": row.get("entry"),
                 "section": row.get("section"),
@@ -1329,7 +1329,7 @@ def main() -> int:
             }
         )
     rollup = {
-        "schema": "mizuchi.swkotor-simple-matches-summary.v1",
+        "schema": "reconkit.swkotor-simple-matches-summary.v1",
         "inventory": str(args.inventory),
         "summaryJsonl": str(args.out),
         "attempted": len(rows),

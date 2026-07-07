@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────────────┐
-│ Mizuchi-style loop    │
+│ ReconstructKit-style loop    │
 ├──────────────────────┤
 │ prompt/context input  │
 │ m2c → compile         │
@@ -19,7 +19,7 @@
 | Component | Location | Role |
 |-----------|----------|------|
 | Cursor plugin | `~/.cursor/plugins/local/matching-decompilation-re/` | Skills, agents, rules, hooks |
-| Mizuchi (optional) | Separate install / `mizuchi run` | Full plugin orchestration |
+| ReconstructKit (optional) | Separate install / `reconkit run` | Full plugin orchestration |
 | objdiff | Project PATH | Match verification |
 | m2c / permuter | Project tools | Programmatic phase |
 
@@ -37,7 +37,7 @@ Project `.cursor/hooks.json` may reference plugin `decomp-match-claim-guard.sh` 
 
 ## Cursor-native bridge
 
-Without `mizuchi run`, workspace scripts mirror compile + objdiff + assembly view:
+Without `reconkit run`, workspace scripts mirror compile + objdiff + assembly view:
 
 - `scripts/compile-and-view-assembly.sh` — AI sandbox (`compile_and_view_assembly` parity)
 - `scripts/compile-trial.sh` — programmatic compile + gate
@@ -47,4 +47,4 @@ Details: `docs/knowledgebase/50-execution/cursor-native-bridge.md`
 
 ## [OPEN]
 
-Mizuchi daemon is not required for the local loop; full upstream-style orchestration (m2c/permuter/integrator/reporting) still needs a tighter implementation here. Golden `.o` files are not yet wired for example prompt `fun_00148020`.
+ReconstructKit daemon is not required for the local loop; full upstream-style orchestration (m2c/permuter/integrator/reporting) still needs a tighter implementation here. Golden `.o` files are not yet wired for example prompt `fun_00148020`.

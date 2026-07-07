@@ -88,7 +88,7 @@ compile the split source tree:
 ```bash
 ./scripts/swkotor-export-matched-source.py
 
-VC_ROOT=/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main \
+VC_ROOT=/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main \
 WINEPREFIX=$PWD/target/toolchain-acquire/vctoolkit2003/wineprefix \
 CL_OPT=/O2 \
   ./scripts/swkotor-compile-recovered-shard.py
@@ -139,12 +139,12 @@ matched verifier report, updates `case.yaml` to `integrated`, and writes
 jq . prompts/<fn>/build/decomp-function.json
 ```
 
-The receipt schema is `mizuchi.decomp-function.v1`. It records the terminal
+The receipt schema is `reconkit.decomp-function.v1`. It records the terminal
 phase (`programmatic` or `ai`), exit code, top-level status, and links to the
 programmatic and AI phase reports when those phases ran. A blocked prompt must
 stop before AI and record `status: "blocked"`.
 
-## Cursor-native loop (no Mizuchi daemon)
+## Cursor-native loop (no ReconstructKit daemon)
 
 See `cursor-native-bridge.md`. Quick path:
 
@@ -164,11 +164,11 @@ After 3 attempts without diff improvement:
 5. Swap model / extend timeout
 6. Mark `blocked` + human review
 
-## Mizuchi CLI (when installed)
+## ReconstructKit CLI (when installed)
 
 ```bash
-mizuchi index-codebase
-mizuchi run --config mizuchi.yaml
+reconkit index-codebase
+reconkit run --config reconkit.yaml
 # or target a single prompt folder under promptsDir
 ```
 

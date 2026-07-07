@@ -34,9 +34,9 @@ clang \
   --context-max-depth 1 \
   --context-strings-limit 20 >/dev/null
 
-jq -e '.schema == "mizuchi.source-generation.v1" and .targetSlices >= 1' "$TMP_DIR/recover/source-generation/summary.json" >/dev/null
-jq -e '.schema == "mizuchi.source-parity-synthesis-summary.v1" and .compiler == "clang" and .codeSliceMatchedCandidates >= 1 and .semanticCodeSliceMatchedCandidates >= 1 and .acceptedCandidates == 0' "$TMP_DIR/recover/source-synthesis/summary.json" >/dev/null
-jq -e '.schema == "mizuchi.recovery-strategy.v1" and (.lanes[] | select(.name == "matching-decompilation" and .status == "semantic-code-slice-evidence"))' "$TMP_DIR/recover/strategy.json" >/dev/null
+jq -e '.schema == "reconkit.source-generation.v1" and .targetSlices >= 1' "$TMP_DIR/recover/source-generation/summary.json" >/dev/null
+jq -e '.schema == "reconkit.source-parity-synthesis-summary.v1" and .compiler == "clang" and .codeSliceMatchedCandidates >= 1 and .semanticCodeSliceMatchedCandidates >= 1 and .acceptedCandidates == 0' "$TMP_DIR/recover/source-synthesis/summary.json" >/dev/null
+jq -e '.schema == "reconkit.recovery-strategy.v1" and (.lanes[] | select(.name == "matching-decompilation" and .status == "semantic-code-slice-evidence"))' "$TMP_DIR/recover/strategy.json" >/dev/null
 jq -e 'select(.status == "code-slice-matched" and .differences == 0 and .verificationTier == "synthetic-target-object-objdiff")' "$TMP_DIR/recover/source-synthesis/attempts.jsonl" >/dev/null
 
 echo "ok"

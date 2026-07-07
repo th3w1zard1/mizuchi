@@ -9,8 +9,8 @@ how far it goes on real DAW binaries.
 `scripts/binary-source-roundtrip.py` / `one-shot-source.py` produce a file like:
 
 ```c
-static const uint8_t mizuchi_image[773736] = { 0x7f,0x45,0x4c,0x46, ... };
-int main(void){ return fwrite(mizuchi_image,1,sizeof(mizuchi_image),stdout)...; }
+static const uint8_t reconkit_image[773736] = { 0x7f,0x45,0x4c,0x46, ... };
+int main(void){ return fwrite(reconkit_image,1,sizeof(reconkit_image),stdout)...; }
 ```
 
 That recompiles to *byte-identical* output but is the original binary pasted into an

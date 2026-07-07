@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 ###############################################################################
-# Mizuchi — self-contained matching-decompilation pipeline image
+# ReconstructKit — self-contained matching-decompilation pipeline image
 #
 # Bundles, per https://macabeus.medium.com/can-llms-really-do-matching-
 # decompilation-i-tested-60-functions-to-find-out-4e39b0ae4288 :
-#   - mizuchi CLI (macabeus/mizuchi)            built dist + Decomp Atlas / Report UIs
+#   - reconkit CLI (macabeus/reconkit)            built dist + Decomp Atlas / Report UIs
 #   - m2c (matt-kempster/m2c)                   programmatic asm->C  (vendor/.venv)
 #   - decomp-permuter (simonlindholm)           brute-force matcher  (vendor/.venv)
 #   - objdiff-wasm                              byte-exact verifier  (npm dep)
@@ -19,7 +19,7 @@
 FROM node:22-bookworm
 
 # Pin upstream for reproducibility.
-ARG MIZUCHI_REF=676241f5a49b3763b08d0826c0922020f2a591bb
+ARG RECONKIT_REF=676241f5a49b3763b08d0826c0922020f2a591bb
 ARG M2C_REF=master
 ARG PERMUTER_REF=main
 
@@ -43,9 +43,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# --- mizuchi source (pinned) ------------------------------------------------
-RUN git clone https://github.com/macabeus/mizuchi.git . \
-    && git checkout "${MIZUCHI_REF}"
+# --- reconkit source (pinned) ------------------------------------------------
+RUN git clone https://github.com/macabeus/reconkit.git . \
+    && git checkout "${RECONKIT_REF}"
 
 # --- vendored python tools (https, not the SSH submodule URLs) --------------
 RUN rm -rf vendor/m2c vendor/decomp-permuter \
@@ -82,9 +82,9 @@ RUN npm test
 RUN mkdir -p /work
 VOLUME ["/work"]
 
-LABEL org.opencontainers.image.title="mizuchi" \
-      org.opencontainers.image.description="Self-contained matching-decompilation pipeline (mizuchi + m2c + decomp-permuter + objdiff + Claude Agent SDK)" \
-      org.opencontainers.image.source="https://github.com/macabeus/mizuchi"
+LABEL org.opencontainers.image.title="reconkit" \
+      org.opencontainers.image.description="Self-contained matching-decompilation pipeline (reconkit + m2c + decomp-permuter + objdiff + Claude Agent SDK)" \
+      org.opencontainers.image.source="https://github.com/macabeus/reconkit"
 
 ENTRYPOINT ["node", "/app/dist/cli.js"]
 CMD ["--help"]

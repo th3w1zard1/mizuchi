@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PYTHONPATH="$ROOT/src" python3 - <<'PY'
-from mizuchi_re.functions import dedupe_same_address_candidates
-from mizuchi_re.sourcegen import address_alias_key, build_address_alias_metadata
+from reconkit_re.functions import dedupe_same_address_candidates
+from reconkit_re.sourcegen import address_alias_key, build_address_alias_metadata
 
 rows = [
     {

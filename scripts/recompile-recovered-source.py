@@ -15,8 +15,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mizuchi_re.package_verify import compile_with_msvc  # noqa: E402
-from mizuchi_re.source_parity_synthesize import compile_with_clang, compile_with_clangcl, object_text_bytes  # noqa: E402
+from recovery_runtime.package_verify import compile_with_msvc  # noqa: E402
+from recovery_runtime.source_parity_synthesize import compile_with_clang, compile_with_clangcl, object_text_bytes  # noqa: E402
 
 
 def sha256(path: Path) -> str | None:
@@ -186,7 +186,7 @@ def main() -> int:
     failed = [row for row in results if row.get("compileStatus") != "ok"]
     text_mismatches = [row for row in results if row.get("textBytesMatchVerifiedObject") is not True]
     report = {
-        "schema": "mizuchi.recovered-source-recompile-report.v1",
+        "schema": "reconkit.recovered-source-recompile-report.v1",
         "status": "ok" if not failed and not text_mismatches else "failed",
         "manifest": str(args.manifest),
         "outDir": str(args.out_dir),

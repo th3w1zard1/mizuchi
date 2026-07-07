@@ -31,7 +31,7 @@ matching-decomp project:
 5. Commit only when the match gate passes; otherwise mark the function hard.
 
 It does not bypass compiler identification, function slicing, types, or objdiff.
-The Macabeus/Mizuchi framing is the same: programmatic tooling and LLMs both
+The Macabeus/ReconstructKit framing is the same: programmatic tooling and LLMs both
 feed a compile-and-diff loop, and the benchmark is whether candidate C reaches a
 byte-for-byte assembly match. Academic LLM decompiler work such as
 LLM4Decompile is useful for semantic hypotheses and readability, but its
@@ -260,7 +260,7 @@ int __stdcall FUN_00401590(int a, int b, int c, int d) {
 Verifier:
 
 ```bash
-VC_ROOT=/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main \
+VC_ROOT=/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main \
 WINEPREFIX=$PWD/target/toolchain-acquire/vctoolkit2003/wineprefix \
 CL_OPT=/O2 \
   bash scripts/cl-compile.sh \
@@ -364,7 +364,7 @@ reconciled yet:
 ```bash
 ./scripts/swkotor-export-matched-source.py
 
-VC_ROOT=/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main \
+VC_ROOT=/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main \
 WINEPREFIX=$PWD/target/toolchain-acquire/vctoolkit2003/wineprefix \
 CL_OPT=/O2 \
   ./scripts/swkotor-compile-recovered-shard.py

@@ -280,22 +280,22 @@ caseId: integrated_fn
 functionName: integrated_fn
 targetObjectPath: prompt:/build/target.o
 status: integrated
-integratedSourcePath: /tmp/mizuchi-integrated/integrated_fn.c
-integrationReceiptPath: /tmp/mizuchi-prompts/integrated_fn/build/integration-receipt.json
+integratedSourcePath: /tmp/reconkit-integrated/integrated_fn.c
+integrationReceiptPath: /tmp/reconkit-prompts/integrated_fn/build/integration-receipt.json
 integratedAt: 2026-06-28T00:00:00Z
 YAML
   touch "$prompt/prompt.md"
 
   local output
-  output="$(MIZUCHI_PROMPTS_DIR="$tmpdir" "$script_path" status=integrated 2>&1)"
+  output="$(RECONKIT_PROMPTS_DIR="$tmpdir" "$script_path" status=integrated 2>&1)"
   echo "$output" | jq -e '
     .prompts as $prompts |
     ($prompts | length) == 1 and
     $prompts[0].name == "integrated_fn" and
     $prompts[0].status == "integrated" and
     $prompts[0].function_name == "integrated_fn" and
-    $prompts[0].integrated_source_path == "/tmp/mizuchi-integrated/integrated_fn.c" and
-    $prompts[0].integration_receipt_path == "/tmp/mizuchi-prompts/integrated_fn/build/integration-receipt.json" and
+    $prompts[0].integrated_source_path == "/tmp/reconkit-integrated/integrated_fn.c" and
+    $prompts[0].integration_receipt_path == "/tmp/reconkit-prompts/integrated_fn/build/integration-receipt.json" and
     $prompts[0].integrated_at == "2026-06-28T00:00:00Z"
   ' >/dev/null
 }

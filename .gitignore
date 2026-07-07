@@ -38,6 +38,6 @@ artifacts/
 build/
 logs/
 state/
-src/mizuchi_re.egg-info/
+src/reconkit_re.egg-info/
 **/__pycache__/
 *.pyc

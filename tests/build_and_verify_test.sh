@@ -5,12 +5,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT/scripts/build-and-verify.sh"
 PROMPT="$ROOT/prompts/roundtrip_identity"
 TMP_DIR="$(mktemp -d)"
-TEMP_MIZUCHI_CONFIG="$ROOT/mizuchi.yaml"
-if [[ -e "$TEMP_MIZUCHI_CONFIG" ]]; then
-  echo "tests/build_and_verify_test.sh refuses to overwrite existing mizuchi.yaml" >&2
+TEMP_RECONKIT_CONFIG="$ROOT/reconkit.yaml"
+if [[ -e "$TEMP_RECONKIT_CONFIG" ]]; then
+  echo "tests/build_and_verify_test.sh refuses to overwrite existing reconkit.yaml" >&2
   exit 1
 fi
-trap 'rm -rf "$TMP_DIR"; rm -f "$TEMP_MIZUCHI_CONFIG"' EXIT
+trap 'rm -rf "$TMP_DIR"; rm -f "$TEMP_RECONKIT_CONFIG"' EXIT
 BLOCKED_ROOT="$TMP_DIR/prompts"
 BLOCKED_PROMPT="$BLOCKED_ROOT/blocked_fn"
 
@@ -61,7 +61,7 @@ out="$("$SCRIPT" --prompt "$PROMPT" --refresh-target)"
 printf '%s\n' "$out" | jq -e '.status == "matched"' >/dev/null
 printf '%s\n' "$out" | jq -e '(.method == "objdiff") or (.method == "cmp")' >/dev/null
 printf '%s\n' "$out" | jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .byte_identical == true and
   .target_sha256 == .candidate_sha256 and
   .target_size == .candidate_size and
@@ -78,7 +78,7 @@ cmp -s "$PROMPT/build/target.o" "$PROMPT/build/candidate.o"
 
 GLOBAL_PROMPT="$TMP_DIR/global_config"
 mkdir -p "$GLOBAL_PROMPT/build"
-cat >"$TEMP_MIZUCHI_CONFIG" <<'YAML'
+cat >"$TEMP_RECONKIT_CONFIG" <<'YAML'
 global:
   compilerScript: bash ./scripts/compile-local-fixture.sh "{{cFilePath}}" "{{objFilePath}}"
 YAML
@@ -108,7 +108,7 @@ C
 cp "$GLOBAL_PROMPT/target.c" "$GLOBAL_PROMPT/candidate.c"
 global_out="$("$SCRIPT" --prompt "$GLOBAL_PROMPT" --refresh-target)"
 printf '%s\n' "$global_out" | jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .status == "matched" and
   .byte_identical == true
 ' >/dev/null
@@ -151,7 +151,7 @@ void custom_task(void) {}
 C
 custom_out="$("$SCRIPT" --prompt "$CUSTOM_PROMPT")"
 printf '%s\n' "$custom_out" | jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .status == "matched" and
   .method == "custom" and
   .byte_identical == true and
@@ -244,7 +244,7 @@ expect_blocked \
   "run-programmatic-phase: prompt is blocked: fixture is intentionally blocked" \
   "$TMP_DIR/blocked-cli.out" \
   "$TMP_DIR/blocked-cli.err" \
-  env MIZUCHI_PROMPTS_DIR="$BLOCKED_ROOT" "$ROOT/scripts/decomp-cli.sh" decomp-function blocked_fn
+  env RECONKIT_PROMPTS_DIR="$BLOCKED_ROOT" "$ROOT/scripts/decomp-cli.sh" decomp-function blocked_fn
 if grep -q "entering AI phase" "$TMP_DIR/blocked-cli.err"; then
   echo "blocked decomp-cli run fell through to AI phase" >&2
   exit 1

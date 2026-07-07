@@ -124,7 +124,7 @@ get_mcp_tools() {
       run-objdiff)
         tools+=("$(jq -n --arg n 'run_objdiff' --arg d 'Verify match by comparing target and candidate object files' '{name: $n, description: $d}')")
         ;;
-      mizuchi)
+      reconkit)
         tools+=("$(jq -n --arg n 'compile_and_view_assembly' --arg d 'Compile C code and view resulting assembly for matching comparison' '{name: $n, description: $d}')")
         tools+=("$(jq -n --arg n 'integrate_verified_match' --arg d 'Re-run match verification, land candidate source, and record integration receipt' '{name: $n, description: $d}')")
         ;;
@@ -194,11 +194,11 @@ main() {
     --argjson mcp_tools "$mcp_tools" \
     --argjson quick_ref "$quick_ref" \
     '{
-      title: "Mizuchi Workspace Help",
+      title: "ReconstructKit Workspace Help",
       timestamp: (now | todate),
       agents: {
         title: "Available Agents",
-        description: "Mizuchi-specialized agents for matching-decompilation tasks",
+        description: "ReconstructKit-specialized agents for matching-decompilation tasks",
         items: $agents
       },
       commands: {

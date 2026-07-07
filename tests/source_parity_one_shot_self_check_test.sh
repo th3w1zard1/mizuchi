@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path("src").resolve()))
-from mizuchi_re.source_parity_one_shot import load_state, should_run_stage
+from reconkit_re.source_parity_one_shot import load_state, should_run_stage
 
 with tempfile.TemporaryDirectory() as td:
     state_path = Path(td) / "state.json"
@@ -38,7 +38,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path("src").resolve()))
-from mizuchi_re.source_parity_one_shot import write_report, ProfileConfig, ROOT
+from reconkit_re.source_parity_one_shot import write_report, ProfileConfig, ROOT
 
 with tempfile.TemporaryDirectory() as td:
     report_path = Path(td) / "report.json"
@@ -81,8 +81,8 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path("src").resolve()))
-from mizuchi_re.source_parity_one_shot import ProfileConfig, detect_profile, stage_discover, stage_inventory
-from mizuchi_re.targets import is_pe_binary, resolve_target, sha256_file
+from reconkit_re.source_parity_one_shot import ProfileConfig, detect_profile, stage_discover, stage_inventory
+from reconkit_re.targets import is_pe_binary, resolve_target, sha256_file
 
 with tempfile.TemporaryDirectory() as td:
     root = Path(td)
@@ -165,7 +165,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path("src").resolve()))
-from mizuchi_re.source_parity_one_shot import ProfileConfig, stage_derive_coverage
+from reconkit_re.source_parity_one_shot import ProfileConfig, stage_derive_coverage
 
 with tempfile.TemporaryDirectory() as td:
     root = Path(td)

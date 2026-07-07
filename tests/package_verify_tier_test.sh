@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY'
-from mizuchi_re.package_verify import (
+from reconkit_re.package_verify import (
     acceptance_gate_for_tier,
     verification_tier_for_package_status,
     verification_tier_for_result,

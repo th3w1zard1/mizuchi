@@ -127,7 +127,7 @@ def package_function_segments(package: Path, prompts_dir: Path) -> list[dict[str
             continue
         prompt_name = f"swkotor_{c_ident(task.get('name'), task_path)}"
         # Prefer imported prompt candidate source when present because this is
-        # the current Mizuchi working surface; fall back to package candidate.
+        # the current ReconstructKit working surface; fall back to package candidate.
         prompt_candidate = prompts_dir / prompt_name / "candidate.c"
         package_candidate = package / task_path / "candidate.c"
         candidate_source = prompt_candidate if prompt_candidate.exists() else package_candidate
@@ -295,7 +295,7 @@ def main() -> int:
     rebuilt_path.write_bytes(rebuilt)
     executable_bytes = sum(int(section["size"]) for section in sections)
     report = {
-        "schema": "mizuchi.pe-segmented-code-source-roundtrip.v1",
+        "schema": "reconkit.pe-segmented-code-source-roundtrip.v1",
         "status": "matched",
         "binary": str(binary),
         "package": str(package),
@@ -317,7 +317,7 @@ def main() -> int:
         "sections": section_reports,
         "segments": segment_reports,
         "claimBoundary": (
-            "Code sections are rebuilt from segmented C source. Verified-function segments come from imported Mizuchi "
+            "Code sections are rebuilt from segmented C source. Verified-function segments come from imported ReconstructKit "
             "task candidates; gap segments are byte-source placeholders for code ranges without a semantic/function candidate."
         ),
     }

@@ -82,14 +82,14 @@ def read_json(path: Path) -> dict[str, Any]:
 def expected_json_replay_report_shapes() -> dict[str, Any]:
     return {
         "preflight": {
-            "schema": "mizuchi.one-shot-source-reconstruction-json-preflight.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-json-preflight.v1",
             "buildOverrideCount": "number of response candidate paths with build overrides",
             "buildOverridePaths": ["all response candidate paths with build overrides"],
             "buildOverrideExpectedPaths": ["expected candidate paths with build overrides"],
             "buildOverrideExtraPaths": ["extra candidate paths with build overrides"],
         },
         "import": {
-            "schema": "mizuchi.one-shot-source-reconstruction-json-import.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-json-import.v1",
             "buildOverrideCount": "number of response candidate paths with build overrides, including extras",
             "buildOverridePaths": ["all response candidate paths with build overrides"],
             "buildOverrideExpectedPaths": ["importable expected candidate paths with build overrides"],
@@ -140,7 +140,7 @@ def validate_sha256sums(package: Path) -> list[str]:
 def validate_package_manifest(package: Path) -> list[str]:
     errors: list[str] = []
     manifest = read_json(package / "package-manifest.json")
-    if manifest.get("schema") != "mizuchi.one-shot-source-package-manifest.v1":
+    if manifest.get("schema") != "reconkit.one-shot-source-package-manifest.v1":
         errors.append("package-manifest.json schema mismatch")
     files = manifest.get("files")
     if not isinstance(files, list):
@@ -169,7 +169,7 @@ def validate_package_manifest(package: Path) -> list[str]:
 def validate_content_manifest(package: Path) -> list[str]:
     errors: list[str] = []
     manifest = read_json(package / "CONTENT_MANIFEST.json")
-    if manifest.get("schema") != "mizuchi.one-shot-source-content-manifest.v1":
+    if manifest.get("schema") != "reconkit.one-shot-source-content-manifest.v1":
         errors.append("CONTENT_MANIFEST.json schema mismatch")
     files = manifest.get("files")
     if not isinstance(files, list):
@@ -205,7 +205,7 @@ def validate_claims(package: Path) -> list[str]:
     errors: list[str] = []
     claims = read_json(package / "CLAIMS.json")
     content = read_json(package / "CONTENT_MANIFEST.json")
-    if claims.get("schema") != "mizuchi.one-shot-source-claims.v1":
+    if claims.get("schema") != "reconkit.one-shot-source-claims.v1":
         errors.append("CLAIMS.json schema mismatch")
     if claims.get("status") != "authoritative":
         errors.append("CLAIMS.json status is not authoritative")
@@ -240,7 +240,7 @@ def validate_authority_gates(package: Path) -> list[str]:
     claims = read_json(package / "CLAIMS.json")
     content = read_json(package / "CONTENT_MANIFEST.json")
     receipt = read_json(package / "one-shot-source-receipt.json")
-    if gates_doc.get("schema") != "mizuchi.one-shot-source-authority-gates.v1":
+    if gates_doc.get("schema") != "reconkit.one-shot-source-authority-gates.v1":
         errors.append("AUTHORITY_GATES.json schema mismatch")
     if gates_doc.get("status") != "passed":
         errors.append("AUTHORITY_GATES.json status is not passed")
@@ -306,7 +306,7 @@ def validate_authority_summary(
     proof = read_json(package / "PACKAGE_PROOF.json")
     proof_commands = read_json(package / "PROOF_COMMANDS.json")
     expected = {
-        "schema": "mizuchi.one-shot-source-authority-summary.v1",
+        "schema": "reconkit.one-shot-source-authority-summary.v1",
         "status": claims.get("status"),
         "authorityClass": claims.get("authorityClass"),
         "accuracyClass": claims.get("accuracyClass"),
@@ -322,7 +322,7 @@ def validate_authority_summary(
             errors.append(f"AUTHORITY_SUMMARY.json mismatch for {key}")
     if summary.get("claimBoundary") != proof.get("claimBoundary"):
         errors.append("AUTHORITY_SUMMARY.json claimBoundary mismatch")
-    if proof_commands.get("schema") != "mizuchi.one-shot-source-proof-commands.v1":
+    if proof_commands.get("schema") != "reconkit.one-shot-source-proof-commands.v1":
         errors.append("PROOF_COMMANDS.json schema mismatch")
     if proof_commands.get("status") != claims.get("status"):
         errors.append("PROOF_COMMANDS.json status mismatch")
@@ -340,12 +340,23 @@ def validate_authority_summary(
         errors.append("PROOF_COMMANDS.json has no prerequisites object")
     else:
         expected_prerequisites = {
-            "packageLocal": ["python3", "gcc", "objcopy"],
-            "workspaceReplay": ["MIZUCHI_WORKSPACE", "scripts/decomp-cli.sh"],
-            "optionalOverrides": ["MIZUCHI_ARCHIVE_PATH", "MIZUCHI_BUNDLE_PATH"],
+            "packageLocal": [["python3", "gcc", "objcopy"]],
+            "workspaceReplay": [
+                ["RECONKIT_WORKSPACE", "scripts/decomp-cli.sh"],
+                ["RECONKIT_WORKSPACE", "scripts/decomp-cli.sh"],
+            ],
+            "optionalOverrides": [
+                ["RECONKIT_ARCHIVE_PATH", "RECONKIT_BUNDLE_PATH"],
+                ["RECONKIT_ARCHIVE_PATH", "RECONKIT_BUNDLE_PATH"],
+            ],
         }
         for key, value in expected_prerequisites.items():
-            if prerequisites.get(key) != value:
+            actual = prerequisites.get(key)
+            expected_values = expected_prerequisites[key]
+            if isinstance(expected_values[0], list):
+                if actual not in expected_values:
+                    errors.append(f"PROOF_COMMANDS.json prerequisites mismatch for {key}")
+            elif actual != expected_values:
                 errors.append(f"PROOF_COMMANDS.json prerequisites mismatch for {key}")
     entrypoints = proof_commands.get("entrypoints")
     if not isinstance(entrypoints, dict):
@@ -455,7 +466,7 @@ def validate_authority_summary(
         response_proof_path = package / "receipts" / "byte-accurate-response-proof.json"
         if response_proof_path.exists():
             response_proof = read_json(response_proof_path)
-            if response_proof.get("schema") != "mizuchi.one-shot-source-byte-accurate-response-proof.v1":
+            if response_proof.get("schema") != "reconkit.one-shot-source-byte-accurate-response-proof.v1":
                 errors.append("byte-accurate-response-proof.json schema mismatch")
             if response_proof.get("status") != "matched" or response_proof.get("ok") is not True:
                 errors.append("byte-accurate-response-proof.json status is not matched")
@@ -483,7 +494,7 @@ def validate_authority_summary(
         if bundle_verify_path.exists():
             bundle_verify = read_json(bundle_verify_path)
             bundle_verifier = deliverable.get("bundleVerifier")
-            if bundle_verify.get("schema") != "mizuchi.one-shot-source-deliverable-verify.v1":
+            if bundle_verify.get("schema") != "reconkit.one-shot-source-deliverable-verify.v1":
                 errors.append("bundle-verify.json schema mismatch")
             if bundle_verify.get("status") != "matched" or bundle_verify.get("ok") is not True:
                 errors.append("bundle-verify.json status is not matched")
@@ -533,7 +544,7 @@ def validate_source_index(package: Path) -> list[str]:
     index = read_json(package / "SOURCE_INDEX.json")
     receipt = read_json(package / "one-shot-source-receipt.json")
     roles_doc = read_json(package / "SOURCE_ROLES.json")
-    if index.get("schema") != "mizuchi.one-shot-source-index.v1":
+    if index.get("schema") != "reconkit.one-shot-source-index.v1":
         errors.append("SOURCE_INDEX.json schema mismatch")
     if index.get("status") != "authoritative":
         errors.append("SOURCE_INDEX.json status is not authoritative")
@@ -570,7 +581,7 @@ def validate_source_roles(package: Path) -> list[str]:
     errors: list[str] = []
     roles_doc = read_json(package / "SOURCE_ROLES.json")
     receipt = read_json(package / "one-shot-source-receipt.json")
-    if roles_doc.get("schema") != "mizuchi.one-shot-source-roles.v1":
+    if roles_doc.get("schema") != "reconkit.one-shot-source-roles.v1":
         errors.append("SOURCE_ROLES.json schema mismatch")
     if roles_doc.get("status") != receipt.get("status"):
         errors.append("SOURCE_ROLES.json status mismatch")
@@ -631,7 +642,7 @@ def validate_binary_evidence(package: Path) -> list[str]:
     errors: list[str] = []
     evidence = read_json(package / "BINARY_EVIDENCE.json")
     receipt = read_json(package / "one-shot-source-receipt.json")
-    if evidence.get("schema") != "mizuchi.one-shot-source-binary-evidence.v1":
+    if evidence.get("schema") != "reconkit.one-shot-source-binary-evidence.v1":
         errors.append("BINARY_EVIDENCE.json schema mismatch")
     if evidence.get("status") != "recorded":
         errors.append("BINARY_EVIDENCE.json status is not recorded")
@@ -656,7 +667,7 @@ def validate_binary_evidence(package: Path) -> list[str]:
 def validate_function_boundary_candidates(package: Path) -> list[str]:
     errors: list[str] = []
     candidates_doc = read_json(package / "FUNCTION_BOUNDARY_CANDIDATES.json")
-    if candidates_doc.get("schema") != "mizuchi.one-shot-source-function-boundary-candidates.v1":
+    if candidates_doc.get("schema") != "reconkit.one-shot-source-function-boundary-candidates.v1":
         errors.append("FUNCTION_BOUNDARY_CANDIDATES.json schema mismatch")
     if candidates_doc.get("status") not in ("hints-present", "absent"):
         errors.append("FUNCTION_BOUNDARY_CANDIDATES.json status mismatch")
@@ -680,7 +691,7 @@ def validate_function_boundary_candidates(package: Path) -> list[str]:
 def validate_function_byte_slices(package: Path) -> list[str]:
     errors: list[str] = []
     slices_doc = read_json(package / "FUNCTION_BYTE_SLICES.json")
-    if slices_doc.get("schema") != "mizuchi.one-shot-source-function-byte-slices.v1":
+    if slices_doc.get("schema") != "reconkit.one-shot-source-function-byte-slices.v1":
         errors.append("FUNCTION_BYTE_SLICES.json schema mismatch")
     if slices_doc.get("status") not in ("slices-present", "absent"):
         errors.append("FUNCTION_BYTE_SLICES.json status mismatch")
@@ -718,7 +729,7 @@ def validate_function_byte_slices(package: Path) -> list[str]:
 def validate_function_slice_sources(package: Path) -> list[str]:
     errors: list[str] = []
     sources_doc = read_json(package / "FUNCTION_SLICE_SOURCES.json")
-    if sources_doc.get("schema") != "mizuchi.one-shot-source-function-slice-sources.v1":
+    if sources_doc.get("schema") != "reconkit.one-shot-source-function-slice-sources.v1":
         errors.append("FUNCTION_SLICE_SOURCES.json schema mismatch")
     if sources_doc.get("status") not in ("sources-present", "absent"):
         errors.append("FUNCTION_SLICE_SOURCES.json status mismatch")
@@ -754,7 +765,7 @@ def validate_function_slice_sources(package: Path) -> list[str]:
 def validate_function_reconstruction_tasks(package: Path) -> list[str]:
     errors: list[str] = []
     tasks_doc = read_json(package / "FUNCTION_RECONSTRUCTION_TASKS.json")
-    if tasks_doc.get("schema") != "mizuchi.one-shot-source-function-reconstruction-tasks.v1":
+    if tasks_doc.get("schema") != "reconkit.one-shot-source-function-reconstruction-tasks.v1":
         errors.append("FUNCTION_RECONSTRUCTION_TASKS.json schema mismatch")
     if tasks_doc.get("status") not in ("tasks-present", "absent"):
         errors.append("FUNCTION_RECONSTRUCTION_TASKS.json status mismatch")
@@ -800,7 +811,7 @@ def validate_function_reconstruction_candidate_results(package: Path) -> list[st
     errors: list[str] = []
     results = read_json(package / "FUNCTION_RECONSTRUCTION_CANDIDATE_RESULTS.json")
     tasks = read_json(package / "FUNCTION_RECONSTRUCTION_TASKS.json")
-    if results.get("schema") != "mizuchi.one-shot-source-function-reconstruction-candidate-replay.v1":
+    if results.get("schema") != "reconkit.one-shot-source-function-reconstruction-candidate-replay.v1":
         errors.append("FUNCTION_RECONSTRUCTION_CANDIDATE_RESULTS.json schema mismatch")
     if results.get("status") not in ("no-candidates", "partial", "matched", "failed"):
         errors.append("FUNCTION_RECONSTRUCTION_CANDIDATE_RESULTS.json status mismatch")
@@ -896,7 +907,7 @@ def validate_one_shot_reconstruction_request(package: Path) -> list[str]:
         errors.append("PACKAGE_PROOF.json has no oneShotReconstructionRequestJson object")
     else:
         request_json = read_json(request_json_path)
-        if request_json.get("schema") != "mizuchi.one-shot-source-reconstruction-request.v1":
+        if request_json.get("schema") != "reconkit.one-shot-source-reconstruction-request.v1":
             errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json schema mismatch")
         if request_json.get("taskCount") != tasks.get("taskCount"):
             errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json taskCount mismatch")
@@ -909,9 +920,9 @@ def validate_one_shot_reconstruction_request(package: Path) -> list[str]:
         if request_json_proof.get("taskCount") != tasks.get("taskCount"):
             errors.append("PACKAGE_PROOF.json oneShotReconstructionRequestJson taskCount mismatch")
         preferred = request_json.get("preferredResponse")
-        if not isinstance(preferred, dict) or preferred.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+        if not isinstance(preferred, dict) or preferred.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
             errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json preferred response mismatch")
-        elif not isinstance(preferred.get("structuredShape"), dict) or preferred["structuredShape"].get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+        elif not isinstance(preferred.get("structuredShape"), dict) or preferred["structuredShape"].get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
             errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json structured preferred response mismatch")
         elif preferred.get("replayReportShapes") != expected_json_replay_report_shapes():
             errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json replay report shapes mismatch")
@@ -935,7 +946,7 @@ def validate_one_shot_reconstruction_request(package: Path) -> list[str]:
         errors.append("PACKAGE_PROOF.json has no oneShotReconstructionBundle object")
     else:
         request_bundle = read_json(request_bundle_path)
-        if request_bundle.get("schema") != "mizuchi.one-shot-source-reconstruction-request-bundle.v1":
+        if request_bundle.get("schema") != "reconkit.one-shot-source-reconstruction-request-bundle.v1":
             errors.append("ONE_SHOT_RECONSTRUCTION_BUNDLE.json schema mismatch")
         if request_bundle.get("status") != "candidate-source-request-bundle":
             errors.append("ONE_SHOT_RECONSTRUCTION_BUNDLE.json status mismatch")
@@ -1125,7 +1136,7 @@ def validate_one_shot_response_template(package: Path) -> list[str]:
     proof_exporter = proof.get("oneShotResponseTemplateExporter")
     proof_byte_exporter = proof.get("oneShotByteAccurateResponseExporter")
     proof_byte_prover = proof.get("oneShotByteAccurateResponseProver")
-    if template.get("schema") != "mizuchi.one-shot-source-reconstruction-response-template.v1":
+    if template.get("schema") != "reconkit.one-shot-source-reconstruction-response-template.v1":
         errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json schema mismatch")
     if template.get("status") != "empty-template":
         errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json status mismatch")
@@ -1165,12 +1176,12 @@ def validate_one_shot_response_template(package: Path) -> list[str]:
     if template.get("jsonValidateCommandWithBuildCommand") != "./VALIDATE_RECONSTRUCTION_RESPONSE_JSON.py --response-json <response.json> --allow-build-command":
         errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json build-command JSON validate command mismatch")
     shape = template.get("jsonResponseShape")
-    if not isinstance(shape, dict) or shape.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+    if not isinstance(shape, dict) or shape.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
         errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json JSON response shape mismatch")
     elif "candidates" in shape or not isinstance(shape.get("files"), dict):
         errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json JSON response shape must use files only")
     structured_shape = template.get("jsonStructuredResponseShape")
-    if not isinstance(structured_shape, dict) or structured_shape.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+    if not isinstance(structured_shape, dict) or structured_shape.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
         errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json structured JSON response shape mismatch")
     else:
         structured_candidates = structured_shape.get("candidates")
@@ -1225,7 +1236,7 @@ def validate_semantic_readiness(package: Path) -> list[str]:
     function_slice_sources = read_json(package / "FUNCTION_SLICE_SOURCES.json")
     reconstruction_tasks = read_json(package / "FUNCTION_RECONSTRUCTION_TASKS.json")
     receipt = read_json(package / "one-shot-source-receipt.json")
-    if readiness.get("schema") != "mizuchi.one-shot-source-semantic-readiness.v1":
+    if readiness.get("schema") != "reconkit.one-shot-source-semantic-readiness.v1":
         errors.append("SEMANTIC_READINESS.json schema mismatch")
     expected_status = "ready" if int(receipt.get("semanticSourceBundlesVerified") or 0) > 0 else "not-ready"
     if readiness.get("status") != expected_status:
@@ -1276,7 +1287,7 @@ def validate_semantic_source_authority_evaluation(package: Path) -> list[str]:
     tasks = read_json(package / "FUNCTION_RECONSTRUCTION_TASKS.json")
     results = read_json(package / "FUNCTION_RECONSTRUCTION_CANDIDATE_RESULTS.json")
     evaluator_path = package / "EVALUATE_SEMANTIC_SOURCE_AUTHORITY.py"
-    if evaluation.get("schema") != "mizuchi.one-shot-source-semantic-authority-evaluation.v1":
+    if evaluation.get("schema") != "reconkit.one-shot-source-semantic-authority-evaluation.v1":
         errors.append("SEMANTIC_SOURCE_AUTHORITY_EVALUATION.json schema mismatch")
     if evaluation.get("status") not in ("ready", "not-ready"):
         errors.append("SEMANTIC_SOURCE_AUTHORITY_EVALUATION.json status mismatch")
@@ -1366,7 +1377,7 @@ def validate_package_proof(package: Path) -> list[str]:
     toolchain = read_json(package / "TOOLCHAIN_PROVENANCE.json")
     receipt = read_json(package / "one-shot-source-receipt.json")
     authority_summary = read_json(package / "AUTHORITY_SUMMARY.json")
-    if proof.get("schema") != "mizuchi.one-shot-source-package-proof.v1":
+    if proof.get("schema") != "reconkit.one-shot-source-package-proof.v1":
         errors.append("PACKAGE_PROOF.json schema mismatch")
     if proof.get("status") != "authoritative":
         errors.append("PACKAGE_PROOF.json status is not authoritative")
@@ -1450,7 +1461,7 @@ def validate_package_proof(package: Path) -> list[str]:
 def validate_toolchain_provenance(package: Path) -> list[str]:
     errors: list[str] = []
     provenance = read_json(package / "TOOLCHAIN_PROVENANCE.json")
-    if provenance.get("schema") != "mizuchi.toolchain-provenance.v1":
+    if provenance.get("schema") != "reconkit.toolchain-provenance.v1":
         errors.append("TOOLCHAIN_PROVENANCE.json schema mismatch")
     if provenance.get("status") != "recorded":
         errors.append("TOOLCHAIN_PROVENANCE.json status is not recorded")
@@ -1475,7 +1486,7 @@ def validate_verified_source_candidates(package: Path) -> list[str]:
     manifest = read_json(package / "VERIFIED_SOURCE_CANDIDATES.json")
     receipt = read_json(package / "one-shot-source-receipt.json")
     roles_doc = read_json(package / "SOURCE_ROLES.json")
-    if manifest.get("schema") != "mizuchi.verified-source-candidates.v1":
+    if manifest.get("schema") != "reconkit.verified-source-candidates.v1":
         errors.append("VERIFIED_SOURCE_CANDIDATES.json schema mismatch")
     if manifest.get("status") != "authoritative":
         errors.append("VERIFIED_SOURCE_CANDIDATES.json status is not authoritative")
@@ -1535,7 +1546,7 @@ def validate_verified_source_candidates(package: Path) -> list[str]:
         recipe = read_json(package / "CANDIDATE_BUILD_RECIPE.json")
         if not (package / "REPLAY_CANDIDATE.sh").exists():
             errors.append("missing REPLAY_CANDIDATE.sh")
-        if recipe.get("schema") != "mizuchi.candidate-build-recipe.v1":
+        if recipe.get("schema") != "reconkit.candidate-build-recipe.v1":
             errors.append("CANDIDATE_BUILD_RECIPE.json schema mismatch")
         if recipe.get("status") != "authoritative":
             errors.append("CANDIDATE_BUILD_RECIPE.json status is not authoritative")
@@ -1549,7 +1560,7 @@ def validate_verified_source_candidates(package: Path) -> list[str]:
         observed_output = recipe.get("observedGenerationOutput")
         if not isinstance(observed_output, dict) or observed_output.get("sha256") != receipt.get("originalSha256"):
             errors.append("CANDIDATE_BUILD_RECIPE.json observed output mismatch")
-        if report.get("schema") != "mizuchi.supplied-source-candidate-roundtrip.v1":
+        if report.get("schema") != "reconkit.supplied-source-candidate-roundtrip.v1":
             errors.append("candidate-source-roundtrip.json schema mismatch")
         if report.get("status") != "matched":
             errors.append("candidate-source-roundtrip.json status is not matched")
@@ -1664,7 +1675,7 @@ def validate(
     if not content_identity_matches:
         errors.append("contentIdentity does not match expected value")
     return {
-        "schema": "mizuchi.one-shot-source-validate.v1",
+        "schema": "reconkit.one-shot-source-validate.v1",
         "package": str(package),
         "status": "valid" if not errors else "invalid",
         "ok": not errors,
@@ -1706,7 +1717,7 @@ def safe_members(archive: tarfile.TarFile) -> tuple[list[tarfile.TarInfo], str]:
 
 
 def validate_archive(path: Path, expect_content_identity: str | None = None, require_complete: bool = False) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="mizuchi-one-shot-validate-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-one-shot-validate-") as tmp:
         tmp_dir = Path(tmp)
         with tarfile.open(path, "r:gz") as archive:
             members, root = safe_members(archive)

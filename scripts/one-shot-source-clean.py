@@ -73,7 +73,7 @@ def clean_package(package: Path, dry_run: bool) -> dict:
             absent.append(name)
 
     return {
-        "schema": "mizuchi.one-shot-source-clean.v1",
+        "schema": "reconkit.one-shot-source-clean.v1",
         "package": str(root),
         "dryRun": dry_run,
         "removed": removed,

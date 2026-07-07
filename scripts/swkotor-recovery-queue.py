@@ -132,7 +132,7 @@ def main() -> int:
         tags = classify(row, data)
         entries.append(
             {
-                "schema": "mizuchi.swkotor-recovery-queue-entry.v1",
+                "schema": "reconkit.swkotor-recovery-queue-entry.v1",
                 "name": name,
                 "entry": row.get("entry"),
                 "section": row.get("section"),
@@ -153,7 +153,7 @@ def main() -> int:
     queue_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in selected) + "\n", encoding="utf-8")
 
     summary = {
-        "schema": "mizuchi.swkotor-recovery-queue.v1",
+        "schema": "reconkit.swkotor-recovery-queue.v1",
         "inventory": str(args.inventory),
         "queue": str(queue_path),
         "totalInventoryFunctions": total,

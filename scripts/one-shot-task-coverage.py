@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report one-shot-source reconstruction task coverage across Mizuchi prompts."""
+"""Report one-shot-source reconstruction task coverage across ReconstructKit prompts."""
 
 from __future__ import annotations
 
@@ -156,7 +156,7 @@ def main() -> int:
     if not manifest_path.exists():
         raise SystemExit(f"missing FUNCTION_RECONSTRUCTION_TASKS.json: {manifest_path}")
     manifest = read_json(manifest_path)
-    if manifest.get("schema") != "mizuchi.one-shot-source-function-reconstruction-tasks.v1":
+    if manifest.get("schema") != "reconkit.one-shot-source-function-reconstruction-tasks.v1":
         raise SystemExit("FUNCTION_RECONSTRUCTION_TASKS.json schema mismatch")
     tasks = manifest.get("tasks")
     if not isinstance(tasks, list):
@@ -243,7 +243,7 @@ def main() -> int:
     all_tasks_verified = counts["taskCount"] > 0 and counts["taskCount"] == counts["matched"] + counts["integrated"]
     semantic_ready = all_tasks_verified and semantic_evidence["semanticReadyByPackage"]
     report = {
-        "schema": "mizuchi.one-shot-task-coverage.v1",
+        "schema": "reconkit.one-shot-task-coverage.v1",
         "status": "semantic-ready" if semantic_ready else "incomplete",
         "package": str(package),
         "manifest": str(manifest_path),

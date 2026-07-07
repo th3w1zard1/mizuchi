@@ -4,7 +4,7 @@ set -euo pipefail
 
 queue_empty_json() {
   jq -n '{
-    schema: "mizuchi.vacuum-queue.v1",
+    schema: "reconkit.vacuum-queue.v1",
     pending: [],
     matched: [],
     integrated: [],
@@ -37,7 +37,7 @@ queue_load() {
     echo "queue-state: invalid queue JSON: $file" >&2
     return 1
   }
-  jq '.schema = (.schema // "mizuchi.vacuum-queue.v1") | .attempts = (.attempts // {})' "$file"
+  jq '.schema = (.schema // "reconkit.vacuum-queue.v1") | .attempts = (.attempts // {})' "$file"
 }
 
 queue_save() {
@@ -73,7 +73,7 @@ queue_seed_from_prompts() {
     jq -n --arg name "$name" --argjson score "$score" \
       '{name: $name, score: $score, reason: "seeded from prompt folder"}'
   done | jq -s '{
-    schema: "mizuchi.vacuum-queue.v1",
+    schema: "reconkit.vacuum-queue.v1",
     pending: .,
     matched: [],
     integrated: [],
@@ -157,7 +157,7 @@ queue_increment_attempt() {
 queue_status_summary() {
   local file="$1"
   queue_load "$file" | jq '{
-    schema: "mizuchi.vacuum-queue-summary.v1",
+    schema: "reconkit.vacuum-queue-summary.v1",
     pending: (.pending | length),
     matched: (.matched | length),
     integrated: (.integrated | length),

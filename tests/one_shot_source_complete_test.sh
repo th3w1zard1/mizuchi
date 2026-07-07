@@ -65,8 +65,8 @@ jq -e '
   .jsonReplayReportShapes.import.buildOverrideExtraPaths[0] == "extra candidate paths with build overrides that were not imported"
 ' "$PACKAGE/RECONSTRUCTION_RESPONSE_TEMPLATE.json" >/dev/null
 jq -e '
-  .preferredResponse.replayReportShapes.preflight.schema == "mizuchi.one-shot-source-reconstruction-json-preflight.v1" and
-  .preferredResponse.replayReportShapes.import.schema == "mizuchi.one-shot-source-reconstruction-json-import.v1"
+  .preferredResponse.replayReportShapes.preflight.schema == "reconkit.one-shot-source-reconstruction-json-preflight.v1" and
+  .preferredResponse.replayReportShapes.import.schema == "reconkit.one-shot-source-reconstruction-json-import.v1"
 ' "$PACKAGE/ONE_SHOT_RECONSTRUCTION_REQUEST.json" >/dev/null
 jq -e '
   .responseTemplate.jsonReplayReportShapes.preflight.buildOverridePaths[0] == "all response candidate paths with build overrides" and

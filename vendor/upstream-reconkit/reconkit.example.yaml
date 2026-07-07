@@ -1,0 +1,250 @@
+# ReconstructKit Configuration File
+# Place this file (reconkit.yaml) in your decompilation project's root directory.
+# All relative paths are resolved from this file's location (the project root).
+# Scripts (compilerScript, getContextScript) run with cwd = project root.
+
+# Global settings that apply to the entire pipeline
+global:
+  # Shell script whose stdout becomes the context content prepended during compilation.
+  # Runs with cwd = project root, so relative paths like "ctx.c" work directly.
+  # Template variables: {{functionName}}, {{targetObjectPath}}
+  #
+  # Static file example:
+  #   getContextScript: cat ctx.h
+  #
+  # Dynamic example (m2ctx.py):
+  #   getContextScript: |
+  #     python3 tools/m2ctx.py "$(echo "{{targetObjectPath}}" | sed 's|.*/build/||; s|\.o$|.c|')"
+  #     cat ctx.c
+  getContextScript: cat ctx.h
+
+  # Maximum retry attempts per prompt (default: 25)
+  maxRetries: 25
+
+  # Output directory for generated files and reports (default: current directory)
+  outputDir: '.'
+
+  # Shell script template for compilation.
+  # Runs with cwd = project root. {{cFilePath}} and {{objFilePath}} are absolute temp paths.
+  # Template variables: {{cFilePath}}, {{objFilePath}}, {{functionName}}
+  compilerScript: |
+    tools/agbcc/bin/agbcc \
+      "{{cFilePath}}" -o asm.s \
+      -mthumb-interwork -Wimplicit \
+      -Wparentheses -Werror -O2 -g -fhex-asm
+
+    sed '/\.size/d' asm.s > asm_stripped.s && mv asm_stripped.s asm.s
+
+    arm-none-eabi-as -mcpu=arm7tdmi -mthumb-interwork asm.s -o "{{objFilePath}}"
+
+  # Directory containing prompt folders (default: ./prompts)
+  promptsDir: ./prompts
+
+  # Path to GNU ld map file
+  mapFilePath: build/project.map
+
+  # Target platform for decompilation (default: gba)
+  # Supported values: gba, nds, n3ds, n64, gc, wii, ps1, ps2, psp, win32, switch, android_x86, irix, saturn, dreamcast
+  target: gba
+
+  # Directories containing non-matching assembly files
+  nonMatchingAsmFolders:
+    - asm
+
+  # Directories containing matching assembly files (relative to this file)
+  # Optional. Used as a fallback when objdiff fails to extract assembly from compiled .o files
+  # matchingAsmFolders:
+  #   - asm/matchings
+
+  # Directories to exclude from C source scanning (relative to this file, default: ['tools'])
+  # excludeFromScan:
+  #   - tools
+
+# Plugin-specific configurations
+# Each plugin receives only its own section along with the global config
+plugins:
+  # Objdiff Plugin
+  # Compares compiled object files with target using objdiff-wasm
+  objdiff:
+    # Architecture-specific diff settings passed to objdiff-wasm
+    diffSettings:
+      arm.archVersion: 'v4t'
+      functionRelocDiffs: 'none'
+
+  # Claude Runner Plugin
+  # Uses Claude Agent SDK to generate C code from assembly prompts
+  # Responses are automatically cached to avoid redundant API calls
+  claude-runner:
+    # Timeout in milliseconds for Claude requests (default: 600000 = 10 minutes)
+    timeoutMs: 600000
+
+    # TTFT (Time To First Token) timeout in milliseconds (default: 180000 = 3 minutes)
+    ttftTimeoutMs: 180000
+
+    # Soft timeout: gives Claude a chance to submit its best code before the hard timeout
+    softTimeout:
+      softTimeoutMs: 420000
+      prompt: 'You are running out of time. Submit your best C code now in a ```c block. Do not explain, do not use tools, just output the code.'
+      # Optional. Override model for the resumed query (defaults to the parent model)
+      # model: claude-haiku-4-5-20251001
+      # Optional. Override effort level for the resumed query
+      # effort: low
+
+    # Path to cache file for Claude responses (default: claude-cache.json in output directory)
+    # cachePath: ./claude-cache.json
+
+    # First user message sent to Claude to start the conversation
+    kickoffMessage: 'Decompile the function described in the system prompt. Respond with only the C code in a ```c code block.'
+
+    # System prompt template for Claude
+    # Template variables: {{contextFilePath}}, {{promptContent}}
+    systemPrompt: |
+      You are an automated decompilation system that converts assembly code into a C code that compiles into identical assembly.
+
+      **Operating Context**
+      - This is a fully automated pipeline with no human review
+      - Do not request clarifications, confirmations, or permissions
+      - You can use the read-only tools to inspect the codebase, but you cannot write or modify files directly
+      - The last C code you provided will be concatenated with the `{{contextFilePath}}` during compilation. No other import statements or includes are supported
+
+      **Output Requirements**
+      - Provide complete, compilable C code in a fenced code block (```c)
+      - The system extracts and compiles only the **last** ```c block in your response
+
+      **Success Criteria**
+      - The compiled output must produce assembly that matches the target exactly
+      - Functional equivalence is insufficient; the generated assembly must be identical
+
+      **Available Tools**
+      - `compile_and_view_assembly`: Compiles your C code, shows the resulting assembly, AND shows the diff against the target. The tool returns:
+        - The compiled assembly
+        - The number of instruction differences vs the target
+        - The specific mismatched instructions with their types (INSERTION, DELETION, REPLACEMENT, OPCODE_MISMATCH, ARGUMENT_MISMATCH)
+
+      **How to use the diff data**
+      - The tool returns the number of instruction differences. If the difference count is 0, submit your code. If it is not 0, examine the listed mismatches and fix them before submitting.
+      - Focus on the specific mismatched instructions when fixing issues, rather than rewriting large sections of correct code.
+      - Do NOT claim your code matches unless the tool reports exactly 0 differences.
+      - The code is concatenated with `{{contextFilePath}}` during compilation.
+
+      **Workflow**
+      1. Analyze the provided assembly
+      2. Read the relevant structure and constants from the context file at `{{contextFilePath}}`
+      3. Produce equivalent C code
+      4. Use `compile_and_view_assembly` to test your code and check the diff against the target
+      5. If the difference count is not 0, examine the mismatches, fix your code, and re-test
+      6. Once the difference count is 0, provide your final C code in a ```c block
+      7. The system compiles your code and compares the resulting assembly against the target
+      8. If mismatches occur, you will receive feedback for iteration
+
+      <decompilation_task>
+      {{promptContent}}
+      </decompilation_task>
+
+      # Implementation Process
+
+      1. Code Analysis
+
+      - Carefully analyze the original assembly function
+      - Identify function parameters, return values, and local variables
+      - Map register usage and memory access patterns
+      - Understand the control flow and logic structure
+      - Search the codebase to find existing struct, type definitions to reuse, and find patterns
+
+      2. C Code Generation
+
+      - Output ONLY the C code in a single ```c code block.
+
+      - Write clean, readable C code following these guidelines:
+
+        - Use meaningful variable names
+        - Avoid unnecessary goto statements - prefer structured control flow (if/else, loops)
+        - Minimize pointer arithmetic where possible
+        - Avoid unnecessary type casts
+        - Use appropriate data types that match the assembly operations
+        - Maintain the code styleguide
+        - Before adding a new type definition, search in the codebase if this struct already exists and reuse them whenever possible
+
+      - You might need to duplicate a structs if you identify that a struct might be wrong. If that's the case, duplicate it with a new name and modify it as needed.
+
+      - Before referencing any function or global variable, verify it exists by searching the context file. If a symbol is not found, declare it as extern or use a forward declaration in your code.
+
+      - ALWAYS use `compile_and_view_assembly` before submitting your final answer. Never submit code that you haven't test-compiled. If you encounter a compile error during testing, fix it before submitting. Only submit code that the tool reports as having 0 differences (or when you have exhausted your tool calls and must submit your best attempt).
+
+      # Additional Guidelines
+
+      - Test after each significant change
+      - If stuck, try different approaches (different variable types, control structures, etc.)
+
+  # m2c Plugin (optional)
+  m2c:
+    enable: true
+
+  # decomp-permuter Plugin (optional)
+  decomp-permuter:
+    enable: true
+    # Maximum iterations on the programmatic phase (default: 1000)
+    maxIterations: 1000
+    # Timeout in milliseconds per permuter run (default: 120000 = 2 minutes)
+    timeoutMs: 120000
+    # Flags passed to permuter.py (default: ['--show-errors', '-j 4'])
+    # Common flags: -j (multi-threaded), -J (distributed), --stack-diffs
+    # See: https://github.com/simonlindholm/decomp-permuter#usage
+    flags:
+      - '--show-errors'
+      - '-j 4'
+    # Override the permuter's compiler_type for randomization weights (default: inferred from target)
+    # Valid values: base, ido, mwcc, gcc
+    # Inferred defaults: gba/nds/n3ds → gcc, n64/ps1/ps2/psp/irix → ido, gc/wii → mwcc
+    # compilerType: gcc
+
+  # Integrator Plugin (optional)
+  # Integrates matched C code into the decomp project via a git worktree.
+  # Runs only after a successful match (post-match phase).
+  # See docs/integrator-plugin.md for how to write the integrator module.
+  # integrator:
+  #   enable: true
+  #   # Path to your JS module that performs the integration (relative to project root)
+  #   integratorModule: ./reconkit-integrator.mjs
+  #   # Shell script to verify the build after integration (optional)
+  #   # Template variable: {{worktreePath}}
+  #   verifyBuildScript: |
+  #     cd {{worktreePath}} && make compare
+  #   # How far automation goes after a match: "commit", "push", or "pr" (default: "commit")
+  #   autoAction: commit
+  #   # Commit message template. Template variable: {{functionName}}
+  #   commitMessageTemplate: "match {{functionName}}"
+  #   # Branch name template. Template variables: {{functionName}}, {{timestamp}}
+  #   branchTemplate: "reconkit/{{functionName}}"
+  #   # PR settings (used when autoAction is "pr")
+  #   pr:
+  #     title: "Match {{functionName}}"
+  #     body: "Matched `{{functionName}}` via ReconstructKit."
+  #   # AI-powered build fix: spawns a Claude session to fix build errors (optional)
+  #   aiBuildFix:
+  #     enable: true
+  #     timeoutMs: 300000
+
+# ---- MIPS Example (N64) ----
+# To configure for a MIPS target like N64, use settings like:
+#
+# global:
+#   getContextScript: cat ctx.h
+#   compilerScript: |
+#     COMPILER_PATH='tools/ido' \
+#       tools/ido/cc \
+#       -O2 -G0 -mips2 \
+#       -c "{{cFilePath}}" -o "{{objFilePath}}"
+#   mapFilePath: build/project.map
+#   target: n64
+#   nonMatchingAsmFolders:
+#     - asm/nonmatchfuncs
+#   matchingAsmFolders:
+#     - asm/matchings
+#
+# plugins:
+#   objdiff:
+#     diffSettings:
+#       mips.instrCategory: 'cpu'
+#   m2c:
+#     enable: true

@@ -7,8 +7,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/lib/prompt-settings.sh"
 # shellcheck source=scripts/lib/case-metadata.sh
 . "$ROOT/scripts/lib/case-metadata.sh"
-# shellcheck source=scripts/lib/mizuchi-config.sh
-. "$ROOT/scripts/lib/mizuchi-config.sh"
+# shellcheck source=scripts/lib/reconkit-config.sh
+. "$ROOT/scripts/lib/reconkit-config.sh"
 
 usage() {
   cat <<'EOF'
@@ -90,7 +90,7 @@ prompt_dirs_under_root() {
 if [[ "$all_prompts" -eq 1 ]]; then
   if [[ ! -d "$prompts_dir" ]]; then
     jq -n \
-      --arg schema "mizuchi.decomp-readiness-summary.v1" \
+      --arg schema "reconkit.decomp-readiness-summary.v1" \
       --arg promptsDir "$prompts_dir" \
       '{
         schema: $schema,
@@ -121,7 +121,7 @@ if [[ "$all_prompts" -eq 1 ]]; then
 
   if [[ "${#prompt_reports[@]}" -eq 0 ]]; then
     jq -n \
-      --arg schema "mizuchi.decomp-readiness-summary.v1" \
+      --arg schema "reconkit.decomp-readiness-summary.v1" \
       --arg promptsDir "$prompts_dir" \
       '{
         schema: $schema,
@@ -140,7 +140,7 @@ if [[ "$all_prompts" -eq 1 ]]; then
 
   reports_json="$(printf '%s\n' "${prompt_reports[@]}" | jq -s '.')"
   summary="$(jq -n \
-    --arg schema "mizuchi.decomp-readiness-summary.v1" \
+    --arg schema "reconkit.decomp-readiness-summary.v1" \
     --arg promptsDir "$prompts_dir" \
     --argjson prompts "$reports_json" \
     '{
@@ -162,7 +162,7 @@ fi
 
 if [[ ! -d "$prompt_dir" ]]; then
   jq -n \
-    --arg schema "mizuchi.decomp-readiness.v1" \
+    --arg schema "reconkit.decomp-readiness.v1" \
     --arg promptDir "$prompt_dir" \
     --argjson blockers "$(json_array_from_lines "prompt directory does not exist")" \
     '{schema: $schema, status: "not-ready", prompt: null, promptDir: $promptDir, blockers: $blockers, warnings: []}'
@@ -244,11 +244,11 @@ else
   if [[ -n "$compiler_command" ]]; then
     compiler_source="case.yaml"
   else
-    mizuchi_cfg=""
-    if mizuchi_config_resolve >/dev/null 2>&1; then
-      mizuchi_cfg="$MIZUCHI_CONFIG_PATH"
-      compiler_command="$(mizuchi_config_get "global.compilerScript" optional || true)"
-      [[ -n "$compiler_command" ]] && compiler_source="$mizuchi_cfg"
+    runtime_cfg=""
+    if recovery_config_resolve >/dev/null 2>&1; then
+      runtime_cfg="$RECONKIT_CONFIG_PATH"
+      compiler_command="$(recovery_config_get "global.compilerScript" optional || true)"
+      [[ -n "$compiler_command" ]] && compiler_source="$runtime_cfg"
     fi
   fi
 
@@ -279,7 +279,7 @@ if [[ "${#blockers[@]}" -gt 0 ]]; then
 fi
 
 jq -n \
-  --arg schema "mizuchi.decomp-readiness.v1" \
+  --arg schema "reconkit.decomp-readiness.v1" \
   --arg status "$status" \
   --arg prompt "$prompt_name" \
   --arg promptDir "$prompt_dir" \

@@ -2,7 +2,7 @@
 last_updated: 2026-07-06
 ---
 
-# Strategy — Mizuchi source parity recovery
+# Strategy — ReconstructKit source parity recovery
 
 ## Target problem
 
@@ -22,7 +22,7 @@ source recovery.
    executable coverage map.
 2. **Recover boundaries and context without heavyweight decompiler services.**
    Prefer binary inventory, symbol/map data, disassembly, existing unmatched
-   assembly, upstream Mizuchi prompts, m2c, decomp-permuter, and compiler
+   assembly, upstream ReconstructKit prompts, m2c, decomp-permuter, and compiler
    feedback. These are candidate-generation inputs, not proof.
 3. **Build a compiler-profile corpus.** Identify compiler family, version,
    flags, ABI, and object granularity through diverse small probes before

@@ -18,7 +18,7 @@ report="$("$ROOT/scripts/elf-auto-trivial.py" \
   --out "$TMP_DIR/functions" \
   --max-size 24)"
 
-printf '%s\n' "$report" | jq -e '.schema == "mizuchi.elf-auto-trivial.v1"' >/dev/null
+printf '%s\n' "$report" | jq -e '.schema == "reconkit.elf-auto-trivial.v1"' >/dev/null
 printf '%s\n' "$report" | jq -e '.matchedCount >= 1' >/dev/null
 printf '%s\n' "$report" | jq -e '.aggregateSourceRoundtrip.byteIdentical == true' >/dev/null
 printf '%s\n' "$report" | jq -e '.aggregateSourceRoundtrip.matchedSymbols == .matchedCount' >/dev/null

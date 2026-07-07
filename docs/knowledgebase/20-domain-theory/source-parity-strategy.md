@@ -18,7 +18,7 @@ code, not pseudocode that merely explains behavior.
 - decomp.dev's integration model requires target objects for the matched binary
   and base objects from source-built code. Full progress is object coverage, not
   whole-file hashing.
-- Mizuchi/Kappa-style AI flows are orchestration: Get Context -> m2c ->
+- ReconstructKit/Kappa-style AI flows are orchestration: Get Context -> m2c ->
   compiler -> objdiff -> permuter -> AI loop. The AI proposes source; the
   compiler and objdiff accept or reject it.
 - LLM decompiler research such as LLM4Decompile and recompilable-decompilation
@@ -113,7 +113,7 @@ source-shape search process.
 - objdiff: https://github.com/encounter/objdiff
 - decomp.me FAQ: https://www.decomp.me/faq
 - decomp.dev integration guide: https://decomp.wiki/tools/decomp-dev
-- Macabeus, Mizuchi matching-decompilation benchmark:
+- Macabeus, ReconstructKit matching-decompilation benchmark:
   https://macabeus.medium.com/can-llms-really-do-matching-decompilation-i-tested-60-functions-to-find-out-4e39b0ae4288
 - Chris Lewis one-shot workflow mirror:
   https://simonwillison.net/2025/Dec/6/one-shot-decompilation/

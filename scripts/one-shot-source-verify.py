@@ -217,7 +217,7 @@ def verify_package(package_dir: Path, timeout: int, expect_content_identity: str
     expected_sha = str(receipt.get("originalSha256") or "")
     if source is None:
         return {
-            "schema": "mizuchi.one-shot-source-verify.v1",
+            "schema": "reconkit.one-shot-source-verify.v1",
             "package": str(package_dir),
             "status": "failed",
             "byteIdentical": False,
@@ -225,7 +225,7 @@ def verify_package(package_dir: Path, timeout: int, expect_content_identity: str
         }
     if not source.exists():
         return {
-            "schema": "mizuchi.one-shot-source-verify.v1",
+            "schema": "reconkit.one-shot-source-verify.v1",
             "package": str(package_dir),
             "source": str(source),
             "status": "failed",
@@ -234,7 +234,7 @@ def verify_package(package_dir: Path, timeout: int, expect_content_identity: str
         }
     if not expected_sha:
         return {
-            "schema": "mizuchi.one-shot-source-verify.v1",
+            "schema": "reconkit.one-shot-source-verify.v1",
             "package": str(package_dir),
             "source": str(source),
             "status": "failed",
@@ -252,7 +252,7 @@ def verify_package(package_dir: Path, timeout: int, expect_content_identity: str
         )
     except subprocess.TimeoutExpired:
         return {
-            "schema": "mizuchi.one-shot-source-verify.v1",
+            "schema": "reconkit.one-shot-source-verify.v1",
             "package": str(package_dir),
             "source": str(source),
             "status": "failed",
@@ -261,10 +261,10 @@ def verify_package(package_dir: Path, timeout: int, expect_content_identity: str
         }
 
     objcopy_proc = subprocess.CompletedProcess(["objcopy"], 1, "", "compile failed")
-    if compile_proc.returncode == 0:
+        if compile_proc.returncode == 0:
         try:
             objcopy_proc = run(
-                ["objcopy", "-O", "binary", "-j", ".mizuchi_image", object_path.name, rebuilt_path.name],
+                ["objcopy", "-O", "binary", "-j", ".reconkit_image", object_path.name, rebuilt_path.name],
                 timeout,
                 package_dir,
             )
@@ -296,7 +296,7 @@ def verify_package(package_dir: Path, timeout: int, expect_content_identity: str
         and content_identity_matches
     )
     report = {
-        "schema": "mizuchi.one-shot-source-verify.v1",
+        "schema": "reconkit.one-shot-source-verify.v1",
         "package": str(package_dir),
         "receipt": str(receipt_path),
         "source": str(source),

@@ -15,7 +15,7 @@ work_delegate: codex           # codex | false (default: false)
 # Settings written by /ce-product-pulse first-run interview. Re-run the skill with
 # argument `setup` or `reconfigure` to edit interactively.
 
-pulse_product_name: "Mizuchi.rs"                          # used in report titles (no default)
+pulse_product_name: "ReconstructKit.rs"                          # used in report titles (no default)
 pulse_lookback_default: 30d                           # 1h | 24h | 7d | 30d (default: 24h)
 # pulse_primary_event: "session_started"                # the event that means "user showed up"
 # pulse_value_event: "task_completed"                   # the event that means "user got value"

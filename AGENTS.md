@@ -1,4 +1,4 @@
-# Mizuchi workspace — agent guide
+# ReconstructKit workspace — agent guide
 
 Matching decompilation for reverse-engineered binaries (KOTOR / Odyssey focus). Success = **objdiff 0 differences** between target `.o` and recompiled C.
 
@@ -26,7 +26,7 @@ Load via `@matching-decompilation-overview` or by name:
 
 - `decomp-context-builder` — m2ctx / Get Context
 - `decomp-programmatic-tools` — m2c, compile, objdiff, permuter
-- `decomp-pipeline` — Mizuchi phase orchestration
+- `decomp-pipeline` — ReconstructKit phase orchestration
 - `decomp-prompt-builder` — Decomp Atlas prompts
 - `decomp-atlas-index` — index codebase, similar examples
 - `decomp-verify-match` — objdiff gate before integrate
@@ -42,11 +42,11 @@ Workspace skill stubs and quick references: `.cursor/skills/`.
 
 Plugin reference: `docs/reference/agent-pitfalls.md` in the matching-decompilation-re plugin.
 
-## Mizuchi upstream
+## ReconstructKit upstream
 
-When a full decomp project uses [macabeus/mizuchi](https://github.com/macabeus/mizuchi):
+When a full decomp project uses [macabeus/reconkit](https://github.com/macabeus/reconkit):
 
-- Config: `mizuchi.example.yaml` in this workspace (copy to `mizuchi.yaml` in decomp project)
+- Config: `reconkit.example.yaml` in this workspace (copy to `reconkit.yaml` in decomp project)
 - Prompt folders: `prompts/<name>/` with `prompt.md` + `settings.yaml` (three fields only)
 - Case manifests: `case.yaml` carries proof target metadata, target family, optional target/candidate sources, and compiler command
 - Example scaffold: `prompts/fun_00148020/` (Xbox `.xbe`, asm-only)
@@ -54,9 +54,9 @@ When a full decomp project uses [macabeus/mizuchi](https://github.com/macabeus/m
 - Validate case manifests: `./scripts/validate-case-manifests.sh prompts`
 - Validate one prompt end-to-end: `./scripts/decomp-cli.sh decomp-validate <name>`
 - Audit production readiness: `./scripts/decomp-cli.sh decomp-readiness <name>` or `--all`
-- Run: `npm start -- run --config mizuchi.yaml`
-- AI tool (Mizuchi MCP): `compile_and_view_assembly({ code, function_name })`
-- One-shot matcher: `./scripts/decomp-cli.sh matcher <name> --response-file response.txt` or set `MIZUCHI_MATCHER_COMMAND` for a headless runner that writes `{{responseFile}}`
+- Run: `npm start -- run --config reconkit.yaml`
+- AI tool (ReconstructKit MCP): `compile_and_view_assembly({ code, function_name })`
+- One-shot matcher: `./scripts/decomp-cli.sh matcher <name> --response-file response.txt` or set `RECONKIT_MATCHER_COMMAND` for a headless runner that writes `{{responseFile}}`
 - Autonomous scorer: `./scripts/decomp-cli.sh scorer --queue state/queue.json --update-queue --out state/scores.json` ranks pending prompts by deterministic asm complexity; ML hooks are metadata-only for now
 - Vacuum init/orchestrator: `./scripts/decomp-cli.sh vacuum init --queue state/queue.json --prompts-dir prompts`, then `./scripts/decomp-cli.sh vacuum start --queue state/queue.json --max-functions 1 --timeout 30m`; it processes scored pending prompts with persistent logs, session state, timeout, quota backoff, `resume`, and `reset-queue --name <fn>`
 - One-shot task importer: `./scripts/decomp-cli.sh import-one-shot-tasks --package target/<app>/one-shot-source --prompts-dir prompts` converts `FUNCTION_RECONSTRUCTION_TASKS.json` into prompt folders with custom byte-slice verifier commands

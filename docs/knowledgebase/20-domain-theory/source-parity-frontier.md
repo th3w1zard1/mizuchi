@@ -125,7 +125,7 @@ the main variable:
   https://blog.chrislewis.au/the-unexpected-effectiveness-of-one-shot-decompilation-with-claude/
 - Simon Willison summary with implementation links:
   https://simonwillison.net/2025/Dec/6/one-shot-decompilation/
-- Bruno Macabeus, Mizuchi matching-decompilation benchmark:
+- Bruno Macabeus, ReconstructKit matching-decompilation benchmark:
   https://macabeus.medium.com/can-llms-really-do-matching-decompilation-i-tested-60-functions-to-find-out-4e39b0ae4288
 - objdiff:
   https://github.com/encounter/objdiff

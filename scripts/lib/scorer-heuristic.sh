@@ -107,7 +107,7 @@ scorer_score_prompt_json() {
 
   if [[ -z "${asm//[[:space:]]/}" ]]; then
     jq -n --arg name "$name" --arg prompt_dir "$prompt_dir" --arg status "$status" --arg mtime "${mtime:-0}" '{
-      schema: "mizuchi.scorer-entry.v1",
+      schema: "reconkit.scorer-entry.v1",
       name: $name,
       promptDir: $prompt_dir,
       status: $status,
@@ -126,7 +126,7 @@ scorer_score_prompt_json() {
     --arg status "$status" \
     --arg mtime "${mtime:-0}" \
     '. + {
-      schema: "mizuchi.scorer-entry.v1",
+      schema: "reconkit.scorer-entry.v1",
       name: $name,
       promptDir: $prompt_dir,
       status: $status,

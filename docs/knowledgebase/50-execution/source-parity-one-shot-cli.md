@@ -9,7 +9,7 @@ lanes and keeps the full goal explicit.
 
 ## Quickstart
 
-Run from the Mizuchi workspace:
+Run from the ReconstructKit workspace:
 
 ```bash
 ./scripts/decomp-cli.sh source-parity-one-shot \

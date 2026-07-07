@@ -396,7 +396,7 @@ def verify_full_binary_roundtrip(
                     "-O",
                     "binary",
                     "-j",
-                    ".mizuchi_image",
+                    ".reconkit_image",
                     object_path.name,
                     rebuilt_path.name,
                 ],
@@ -654,7 +654,7 @@ def verify_manifest(manifest_path: Path, out_dir: Path, timeout: int) -> dict[st
     failures = [report for report in bundle_reports if report.get("status") not in {"matched", "skipped"}]
     failures.extend(report for report in full_binary_reports if report.get("status") != "matched")
     report = {
-        "schema": "mizuchi.app-source-roundtrip-verify.v1",
+        "schema": "reconkit.app-source-roundtrip-verify.v1",
         "manifest": str(manifest_path),
         "app": manifest.get("app"),
         "appid": manifest.get("appid"),

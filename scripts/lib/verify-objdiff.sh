@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared objdiff runner/parser for Mizuchi verification gates.
+# Shared objdiff runner/parser for ReconstructKit verification gates.
 set -euo pipefail
 
 verify_objdiff_usage() {
@@ -50,7 +50,7 @@ verify_objdiff_parse() {
       --arg output "$body" \
       --argjson objdiffExit "$objdiff_exit" \
       '{
-        schema: "mizuchi.verify-objdiff.v1",
+        schema: "reconkit.verify-objdiff.v1",
         status: "error",
         differences: $differences,
         message: "objdiff exited with error",
@@ -61,7 +61,7 @@ verify_objdiff_parse() {
     jq -n \
       --arg output "$body" \
       '{
-        schema: "mizuchi.verify-objdiff.v1",
+        schema: "reconkit.verify-objdiff.v1",
         status: "matched",
         differences: 0,
         message: "Object files match",
@@ -72,7 +72,7 @@ verify_objdiff_parse() {
       --argjson differences "$differences" \
       --arg output "$body" \
       '{
-        schema: "mizuchi.verify-objdiff.v1",
+        schema: "reconkit.verify-objdiff.v1",
         status: "mismatched",
         differences: $differences,
         message: "Object files do not match",
@@ -82,7 +82,7 @@ verify_objdiff_parse() {
     jq -n \
       --arg output "$body" \
       '{
-        schema: "mizuchi.verify-objdiff.v1",
+        schema: "reconkit.verify-objdiff.v1",
         status: "error",
         differences: -1,
         message: "could not confirm objdiff result from output",
@@ -116,22 +116,22 @@ verify_objdiff_main() {
 
   if [[ -z "$target" || -z "$candidate" ]]; then
     jq -n --arg message "target and candidate paths required" \
-      '{schema:"mizuchi.verify-objdiff.v1", status:"error", differences:-1, message:$message}'
+      '{schema:"reconkit.verify-objdiff.v1", status:"error", differences:-1, message:$message}'
     return 1
   fi
   if [[ ! -f "$target" ]]; then
     jq -n --arg file "$target" --arg message "Target file not found: $target" \
-      '{schema:"mizuchi.verify-objdiff.v1", status:"error", differences:-1, message:$message, file:$file}'
+      '{schema:"reconkit.verify-objdiff.v1", status:"error", differences:-1, message:$message, file:$file}'
     return 1
   fi
   if [[ ! -f "$candidate" ]]; then
     jq -n --arg file "$candidate" --arg message "Candidate file not found: $candidate" \
-      '{schema:"mizuchi.verify-objdiff.v1", status:"error", differences:-1, message:$message, file:$file}'
+      '{schema:"reconkit.verify-objdiff.v1", status:"error", differences:-1, message:$message, file:$file}'
     return 1
   fi
   if ! command -v objdiff >/dev/null 2>&1; then
     jq -n --arg message "objdiff not found on PATH (install from https://github.com/encounter/objdiff)" \
-      '{schema:"mizuchi.verify-objdiff.v1", status:"error", differences:-1, message:$message}'
+      '{schema:"reconkit.verify-objdiff.v1", status:"error", differences:-1, message:$message}'
     return 1
   fi
 

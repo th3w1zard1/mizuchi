@@ -42,7 +42,7 @@ write_matched_verifier_report() {
     --arg sha "$sha" \
     --argjson size "$size" \
     '{
-      schema: "mizuchi.build-and-verify.v1",
+      schema: "reconkit.build-and-verify.v1",
       status: "matched",
       method: "cmp",
       prompt: $prompt_name,
@@ -127,7 +127,7 @@ jq -n \
   --argjson target_size "$objdiff_target_size" \
   --argjson candidate_size "$objdiff_candidate_size" \
   '{
-    schema: "mizuchi.build-and-verify.v1",
+    schema: "reconkit.build-and-verify.v1",
     status: "matched",
     method: "objdiff",
     prompt: $prompt_name,
@@ -152,7 +152,7 @@ mkdir -p "$phase_prompt/build"
 jq -n \
   --arg prompt_dir "$phase_prompt" \
   '{
-    schema: "mizuchi.programmatic-phase.v1",
+    schema: "reconkit.programmatic-phase.v1",
     status: "blocked",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -165,14 +165,14 @@ jq -n \
 jq -n \
   --arg prompt_dir "$phase_prompt" \
   '{
-    schema: "mizuchi.ai-phase.v1",
+    schema: "reconkit.ai-phase.v1",
     status: "blocked",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
     runner: null,
     reason: "fixture blocked",
-    config: "mizuchi.yaml",
-    image: "docker.io/bolabaden/mizuchi:latest",
+    config: "reconkit.yaml",
+    image: "docker.io/bolabaden/reconkit:latest",
     anthropicApiKeyPresent: false,
     exitCode: 3
   }' >"$phase_prompt/build/ai-phase.json"
@@ -185,14 +185,14 @@ mkdir -p "$ai_matched_prompt/build"
 jq -n \
   --arg prompt_dir "$ai_matched_prompt" \
   '{
-    schema: "mizuchi.ai-phase.v1",
+    schema: "reconkit.ai-phase.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
-    runner: "native-mizuchi",
-    reason: "mizuchi run completed with objdiff 0",
-    config: "mizuchi.yaml",
-    image: "docker.io/bolabaden/mizuchi:latest",
+    runner: "native-reconkit",
+    reason: "reconkit run completed with objdiff 0",
+    config: "reconkit.yaml",
+    image: "docker.io/bolabaden/reconkit:latest",
     anthropicApiKeyPresent: false,
     exitCode: 0
   }' >"$ai_matched_prompt/build/ai-phase.json"
@@ -205,14 +205,14 @@ mkdir -p "$bad_ai_prompt/build"
 jq -n \
   --arg prompt_dir "$bad_ai_prompt" \
   '{
-    schema: "mizuchi.ai-phase.v1",
+    schema: "reconkit.ai-phase.v1",
     status: "failed",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
-    runner: "native-mizuchi",
-    reason: "mizuchi run failed",
-    config: "mizuchi.yaml",
-    image: "docker.io/bolabaden/mizuchi:latest",
+    runner: "native-reconkit",
+    reason: "reconkit run failed",
+    config: "reconkit.yaml",
+    image: "docker.io/bolabaden/reconkit:latest",
     anthropicApiKeyPresent: false,
     exitCode: 0
   }' >"$bad_ai_prompt/build/ai-phase.json"
@@ -225,7 +225,7 @@ mkdir -p "$bad_phase_prompt/build"
 jq -n \
   --arg prompt_dir "$bad_phase_prompt" \
   '{
-    schema: "mizuchi.programmatic-phase.v1",
+    schema: "reconkit.programmatic-phase.v1",
     status: "no-match",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -264,7 +264,7 @@ jq -n \
   --arg source_sha "$source_sha" \
   --arg verifier_report "$integrated_prompt/build/build-and-verify.json" \
   '{
-    schema: "mizuchi.integration-receipt.v1",
+    schema: "reconkit.integration-receipt.v1",
     status: "integrated",
     candidateSource: $candidate_source,
     sourceOut: $source_out,
@@ -302,7 +302,7 @@ jq -n \
   --arg source_sha "$stale_source_sha" \
   --arg verifier_report "$stale_integrated_prompt/build/build-and-verify.json" \
   '{
-    schema: "mizuchi.integration-receipt.v1",
+    schema: "reconkit.integration-receipt.v1",
     status: "integrated",
     candidateSource: $candidate_source,
     sourceOut: $source_out,
@@ -322,8 +322,8 @@ bad_integrated_root="$TMP_DIR/bad_integrated"
 bad_integrated_prompt="$bad_integrated_root/sample_fn"
 write_prompt "$bad_integrated_prompt" integrated
 cat >>"$bad_integrated_prompt/case.yaml" <<'YAML'
-integratedSourcePath: /tmp/mizuchi-missing-source.c
-integrationReceiptPath: /tmp/mizuchi-missing-receipt.json
+integratedSourcePath: /tmp/reconkit-missing-source.c
+integrationReceiptPath: /tmp/reconkit-missing-receipt.json
 integratedAt: 2026-06-28T00:00:00Z
 YAML
 expect_invalid "$bad_integrated_root" "integratedSourcePath does not exist"
@@ -337,7 +337,7 @@ jq -n \
   --arg prompt_dir "$decomp_prompt" \
   --arg verifier_report "$decomp_prompt/build/build-and-verify.json" \
   '{
-    schema: "mizuchi.programmatic-phase.v1",
+    schema: "reconkit.programmatic-phase.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -351,7 +351,7 @@ jq -n \
   --arg prompt_dir "$decomp_prompt" \
   --arg programmatic_report "$decomp_prompt/build/programmatic-phase.json" \
   '{
-    schema: "mizuchi.decomp-function.v1",
+    schema: "reconkit.decomp-function.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -376,7 +376,7 @@ jq -n \
   --arg prompt_dir "$stale_ai_prompt" \
   --arg verifier_report "$stale_ai_prompt/build/build-and-verify.json" \
   '{
-    schema: "mizuchi.programmatic-phase.v1",
+    schema: "reconkit.programmatic-phase.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -386,13 +386,13 @@ jq -n \
     reason: null,
     verifierReport: $verifier_report
   }' >"$stale_ai_prompt/build/programmatic-phase.json"
-jq -n '{schema: "mizuchi.ai-phase.v1", status: "blocked", runner: null}' >"$stale_ai_prompt/build/ai-phase.json"
+jq -n '{schema: "reconkit.ai-phase.v1", status: "blocked", runner: null}' >"$stale_ai_prompt/build/ai-phase.json"
 jq -n \
   --arg prompt_dir "$stale_ai_prompt" \
   --arg programmatic_report "$stale_ai_prompt/build/programmatic-phase.json" \
   --arg ai_report "$stale_ai_prompt/build/ai-phase.json" \
   '{
-    schema: "mizuchi.decomp-function.v1",
+    schema: "reconkit.decomp-function.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -418,7 +418,7 @@ jq -n \
   --arg prompt_dir "$bad_verifier_prompt" \
   --arg verifier_report "$bad_verifier_prompt/build/build-and-verify.json" \
   '{
-    schema: "mizuchi.programmatic-phase.v1",
+    schema: "reconkit.programmatic-phase.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -432,7 +432,7 @@ jq -n \
   --arg prompt_dir "$bad_verifier_prompt" \
   --arg programmatic_report "$bad_verifier_prompt/build/programmatic-phase.json" \
   '{
-    schema: "mizuchi.decomp-function.v1",
+    schema: "reconkit.decomp-function.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -458,7 +458,7 @@ jq -n \
   --arg prompt_dir "$stale_hash_prompt" \
   --arg verifier_report "$stale_hash_prompt/build/build-and-verify.json" \
   '{
-    schema: "mizuchi.programmatic-phase.v1",
+    schema: "reconkit.programmatic-phase.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,
@@ -472,7 +472,7 @@ jq -n \
   --arg prompt_dir "$stale_hash_prompt" \
   --arg programmatic_report "$stale_hash_prompt/build/programmatic-phase.json" \
   '{
-    schema: "mizuchi.decomp-function.v1",
+    schema: "reconkit.decomp-function.v1",
     status: "matched",
     prompt: "sample_fn",
     promptDir: $prompt_dir,

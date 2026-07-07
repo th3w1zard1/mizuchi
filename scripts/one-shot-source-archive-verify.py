@@ -25,14 +25,14 @@ def sha256_file(path: Path) -> str:
 def expected_json_replay_report_shapes() -> dict[str, Any]:
     return {
         "preflight": {
-            "schema": "mizuchi.one-shot-source-reconstruction-json-preflight.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-json-preflight.v1",
             "buildOverrideCount": "number of response candidate paths with build overrides",
             "buildOverridePaths": ["all response candidate paths with build overrides"],
             "buildOverrideExpectedPaths": ["expected candidate paths with build overrides"],
             "buildOverrideExtraPaths": ["extra candidate paths with build overrides"],
         },
         "import": {
-            "schema": "mizuchi.one-shot-source-reconstruction-json-import.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-json-import.v1",
             "buildOverrideCount": "number of response candidate paths with build overrides, including extras",
             "buildOverridePaths": ["all response candidate paths with build overrides"],
             "buildOverrideExpectedPaths": ["importable expected candidate paths with build overrides"],
@@ -73,7 +73,7 @@ def verify_archive(
 ) -> dict[str, Any]:
     archive_sha = sha256_file(archive_path)
     archive_sha_matches = expect_archive_sha256 is None or archive_sha == expect_archive_sha256
-    with tempfile.TemporaryDirectory(prefix="mizuchi-one-shot-archive-verify-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-one-shot-archive-verify-") as tmp:
         tmp_dir = Path(tmp)
         with tarfile.open(archive_path, "r:gz") as archive:
             members, root = safe_members(archive)
@@ -97,7 +97,7 @@ def verify_archive(
             )
         except subprocess.TimeoutExpired:
             return {
-                "schema": "mizuchi.one-shot-source-archive-verify.v1",
+                "schema": "reconkit.one-shot-source-archive-verify.v1",
                 "archive": str(archive_path),
                 "archiveSha256": archive_sha,
                 "packageRoot": root,
@@ -416,7 +416,7 @@ def verify_archive(
         authority_errors.append("PACKAGE_PROOF.json authorityClass is not byte-authoritative-source")
     if package_proof.get("accuracyClass") != "byte-exact":
         authority_errors.append("PACKAGE_PROOF.json accuracyClass is not byte-exact")
-    if binary_evidence.get("schema") != "mizuchi.one-shot-source-binary-evidence.v1":
+    if binary_evidence.get("schema") != "reconkit.one-shot-source-binary-evidence.v1":
         authority_errors.append("BINARY_EVIDENCE.json schema mismatch")
     if binary_evidence.get("status") != "recorded":
         authority_errors.append("BINARY_EVIDENCE.json status is not recorded")
@@ -430,7 +430,7 @@ def verify_archive(
         authority_errors.append("BINARY_EVIDENCE.json overclaims verified source boundaries")
     if package_proof.get("binaryEvidence") != binary_evidence:
         authority_errors.append("PACKAGE_PROOF.json binaryEvidence mismatch")
-    if boundary_candidates.get("schema") != "mizuchi.one-shot-source-function-boundary-candidates.v1":
+    if boundary_candidates.get("schema") != "reconkit.one-shot-source-function-boundary-candidates.v1":
         authority_errors.append("FUNCTION_BOUNDARY_CANDIDATES.json schema mismatch")
     if boundary_candidates.get("status") not in ("hints-present", "absent"):
         authority_errors.append("FUNCTION_BOUNDARY_CANDIDATES.json status mismatch")
@@ -445,7 +445,7 @@ def verify_archive(
         authority_errors.append("FUNCTION_BOUNDARY_CANDIDATES.json candidateCount mismatch")
     if package_proof.get("functionBoundaryCandidates") != boundary_candidates:
         authority_errors.append("PACKAGE_PROOF.json functionBoundaryCandidates mismatch")
-    if function_byte_slices.get("schema") != "mizuchi.one-shot-source-function-byte-slices.v1":
+    if function_byte_slices.get("schema") != "reconkit.one-shot-source-function-byte-slices.v1":
         authority_errors.append("FUNCTION_BYTE_SLICES.json schema mismatch")
     if function_byte_slices.get("status") not in ("slices-present", "absent"):
         authority_errors.append("FUNCTION_BYTE_SLICES.json status mismatch")
@@ -463,7 +463,7 @@ def verify_archive(
     authority_errors.extend(function_byte_slice_errors)
     if package_proof.get("functionByteSlices") != function_byte_slices:
         authority_errors.append("PACKAGE_PROOF.json functionByteSlices mismatch")
-    if function_slice_sources.get("schema") != "mizuchi.one-shot-source-function-slice-sources.v1":
+    if function_slice_sources.get("schema") != "reconkit.one-shot-source-function-slice-sources.v1":
         authority_errors.append("FUNCTION_SLICE_SOURCES.json schema mismatch")
     if function_slice_sources.get("status") not in ("sources-present", "absent"):
         authority_errors.append("FUNCTION_SLICE_SOURCES.json status mismatch")
@@ -479,7 +479,7 @@ def verify_archive(
     authority_errors.extend(function_slice_source_errors)
     if package_proof.get("functionSliceSources") != function_slice_sources:
         authority_errors.append("PACKAGE_PROOF.json functionSliceSources mismatch")
-    if function_reconstruction_tasks.get("schema") != "mizuchi.one-shot-source-function-reconstruction-tasks.v1":
+    if function_reconstruction_tasks.get("schema") != "reconkit.one-shot-source-function-reconstruction-tasks.v1":
         authority_errors.append("FUNCTION_RECONSTRUCTION_TASKS.json schema mismatch")
     if function_reconstruction_tasks.get("status") not in ("tasks-present", "absent"):
         authority_errors.append("FUNCTION_RECONSTRUCTION_TASKS.json status mismatch")
@@ -500,7 +500,7 @@ def verify_archive(
     authority_errors.extend(function_reconstruction_task_errors)
     if package_proof.get("functionReconstructionTasks") != function_reconstruction_tasks:
         authority_errors.append("PACKAGE_PROOF.json functionReconstructionTasks mismatch")
-    if function_reconstruction_results.get("schema") != "mizuchi.one-shot-source-function-reconstruction-candidate-replay.v1":
+    if function_reconstruction_results.get("schema") != "reconkit.one-shot-source-function-reconstruction-candidate-replay.v1":
         authority_errors.append("FUNCTION_RECONSTRUCTION_CANDIDATE_RESULTS.json schema mismatch")
     if function_reconstruction_results.get("status") not in ("no-candidates", "partial", "matched", "failed"):
         authority_errors.append("FUNCTION_RECONSTRUCTION_CANDIDATE_RESULTS.json status mismatch")
@@ -588,16 +588,16 @@ def verify_archive(
     if not isinstance(one_shot_request_json_proof, dict):
         authority_errors.append("PACKAGE_PROOF.json missing oneShotReconstructionRequestJson")
     else:
-        if one_shot_request_json.get("schema") != "mizuchi.one-shot-source-reconstruction-request.v1":
+        if one_shot_request_json.get("schema") != "reconkit.one-shot-source-reconstruction-request.v1":
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json schema mismatch")
         if one_shot_request_json.get("taskCount") != function_reconstruction_tasks.get("taskCount"):
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json taskCount mismatch")
         if one_shot_request_json.get("semanticDecompilation") is not False:
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json overclaims semantic decompilation")
         preferred = one_shot_request_json.get("preferredResponse")
-        if not isinstance(preferred, dict) or preferred.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+        if not isinstance(preferred, dict) or preferred.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json preferred response mismatch")
-        elif not isinstance(preferred.get("structuredShape"), dict) or preferred["structuredShape"].get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+        elif not isinstance(preferred.get("structuredShape"), dict) or preferred["structuredShape"].get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json structured preferred response mismatch")
         elif preferred.get("replayReportShapes") != expected_json_replay_report_shapes():
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_REQUEST.json replay report shapes mismatch")
@@ -625,7 +625,7 @@ def verify_archive(
     if not isinstance(one_shot_request_bundle_proof, dict):
         authority_errors.append("PACKAGE_PROOF.json missing oneShotReconstructionBundle")
     else:
-        if one_shot_request_bundle.get("schema") != "mizuchi.one-shot-source-reconstruction-request-bundle.v1":
+        if one_shot_request_bundle.get("schema") != "reconkit.one-shot-source-reconstruction-request-bundle.v1":
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_BUNDLE.json schema mismatch")
         if one_shot_request_bundle.get("status") != "candidate-source-request-bundle":
             authority_errors.append("ONE_SHOT_RECONSTRUCTION_BUNDLE.json status mismatch")
@@ -724,7 +724,7 @@ def verify_archive(
         if one_shot_receipt_refresher.get("semanticDecompilation") is not False:
             authority_errors.append("PACKAGE_PROOF.json oneShotReceiptRefresher overclaims semantic decompilation")
     proof_response_template = package_proof.get("oneShotResponseTemplate")
-    if one_shot_response_template.get("schema") != "mizuchi.one-shot-source-reconstruction-response-template.v1":
+    if one_shot_response_template.get("schema") != "reconkit.one-shot-source-reconstruction-response-template.v1":
         authority_errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json schema mismatch")
     if one_shot_response_template.get("status") != "empty-template":
         authority_errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json status mismatch")
@@ -756,7 +756,7 @@ def verify_archive(
     if one_shot_response_template.get("exporterSha256") != one_shot_response_template_exporter_sha256:
         authority_errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json exporter hash mismatch")
     response_shape = one_shot_response_template.get("jsonResponseShape")
-    if not isinstance(response_shape, dict) or response_shape.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+    if not isinstance(response_shape, dict) or response_shape.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
         authority_errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json JSON response shape mismatch")
     elif "candidates" in response_shape or not isinstance(response_shape.get("files"), dict):
         authority_errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json JSON response shape must use files only")
@@ -765,7 +765,7 @@ def verify_archive(
     if one_shot_response_template.get("jsonValidateCommandWithBuildCommand") != "./VALIDATE_RECONSTRUCTION_RESPONSE_JSON.py --response-json <response.json> --allow-build-command":
         authority_errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json build-command JSON validate command mismatch")
     structured_response_shape = one_shot_response_template.get("jsonStructuredResponseShape")
-    if not isinstance(structured_response_shape, dict) or structured_response_shape.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+    if not isinstance(structured_response_shape, dict) or structured_response_shape.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
         authority_errors.append("RECONSTRUCTION_RESPONSE_TEMPLATE.json structured JSON response shape mismatch")
     else:
         structured_candidates = structured_response_shape.get("candidates")
@@ -809,7 +809,7 @@ def verify_archive(
             authority_errors.append("PACKAGE_PROOF.json oneShotByteAccurateResponseProver hash mismatch")
         if one_shot_byte_prover.get("semanticDecompilation") is not False:
             authority_errors.append("PACKAGE_PROOF.json oneShotByteAccurateResponseProver overclaims semantic decompilation")
-    if source_roles.get("schema") != "mizuchi.one-shot-source-roles.v1":
+    if source_roles.get("schema") != "reconkit.one-shot-source-roles.v1":
         authority_errors.append("SOURCE_ROLES.json schema mismatch")
     if source_roles.get("status") != claims.get("status"):
         authority_errors.append("SOURCE_ROLES.json status mismatch")
@@ -840,7 +840,7 @@ def verify_archive(
             authority_errors.append(f"SOURCE_ROLES.json overclaims semantic decompilation: {rel}")
     if package_proof.get("sourceRoles") != source_roles.get("roles"):
         authority_errors.append("PACKAGE_PROOF.json sourceRoles mismatch")
-    if semantic_readiness.get("schema") != "mizuchi.one-shot-source-semantic-readiness.v1":
+    if semantic_readiness.get("schema") != "reconkit.one-shot-source-semantic-readiness.v1":
         authority_errors.append("SEMANTIC_READINESS.json schema mismatch")
     expected_semantic_status = "ready" if int(semantic_readiness.get("semanticSourceBundlesVerified") or 0) > 0 else "not-ready"
     if semantic_readiness.get("status") != expected_semantic_status:
@@ -895,7 +895,7 @@ def verify_archive(
         )
         else "not-ready"
     )
-    if semantic_authority_evaluation.get("schema") != "mizuchi.one-shot-source-semantic-authority-evaluation.v1":
+    if semantic_authority_evaluation.get("schema") != "reconkit.one-shot-source-semantic-authority-evaluation.v1":
         authority_errors.append("SEMANTIC_SOURCE_AUTHORITY_EVALUATION.json schema mismatch")
     if semantic_authority_evaluation.get("status") != expected_authority_eval_status:
         authority_errors.append("SEMANTIC_SOURCE_AUTHORITY_EVALUATION.json status mismatch")
@@ -977,7 +977,7 @@ def verify_archive(
             authority_errors.append(f"SOURCE_ROLES.json missing candidate role: {candidate.get('path')}")
         elif candidate.get("sourceRole") != role.get("role"):
             authority_errors.append(f"source candidate role mismatch: {candidate.get('path')}")
-    if proof_commands.get("schema") != "mizuchi.one-shot-source-proof-commands.v1":
+    if proof_commands.get("schema") != "reconkit.one-shot-source-proof-commands.v1":
         authority_errors.append("PROOF_COMMANDS.json schema mismatch")
     if proof_commands.get("status") != claims.get("status"):
         authority_errors.append("PROOF_COMMANDS.json status mismatch")
@@ -991,8 +991,8 @@ def verify_archive(
         authority_errors.append("PROOF_COMMANDS.json artifactLayers mismatch")
     expected_prerequisites = {
         "packageLocal": ["python3", "gcc", "objcopy"],
-        "workspaceReplay": ["MIZUCHI_WORKSPACE", "scripts/decomp-cli.sh"],
-        "optionalOverrides": ["MIZUCHI_ARCHIVE_PATH", "MIZUCHI_BUNDLE_PATH"],
+        "workspaceReplay": ["RECONKIT_WORKSPACE", "scripts/decomp-cli.sh"],
+        "optionalOverrides": ["RECONKIT_ARCHIVE_PATH", "RECONKIT_BUNDLE_PATH"],
     }
     if proof_commands.get("prerequisites") != expected_prerequisites:
         authority_errors.append("PROOF_COMMANDS.json prerequisites mismatch")
@@ -1030,7 +1030,7 @@ def verify_archive(
     if proof_commands.get("expectedSuccess") != expected_success:
         authority_errors.append("PROOF_COMMANDS.json expectedSuccess mismatch")
     authority_summary = {
-        "schema": "mizuchi.one-shot-source-authority-summary.v1",
+        "schema": "reconkit.one-shot-source-authority-summary.v1",
         "status": claims.get("status"),
         "authorityClass": claims.get("authorityClass"),
         "accuracyClass": claims.get("accuracyClass"),
@@ -1055,7 +1055,7 @@ def verify_archive(
         and not authority_errors
     )
     return {
-        "schema": "mizuchi.one-shot-source-archive-verify.v1",
+        "schema": "reconkit.one-shot-source-archive-verify.v1",
         "archive": str(archive_path),
         "archiveSha256": archive_sha,
         "expectedArchiveSha256": expect_archive_sha256,

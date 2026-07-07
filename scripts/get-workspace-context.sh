@@ -5,6 +5,7 @@ set -euo pipefail
 # Returns JSON with: prompt_queue, build_artifacts, active_branches, workspace_metrics
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$root_dir/scripts/lib/reconkit-config.sh"
 . "$root_dir/scripts/lib/case-metadata.sh"
 . "$root_dir/scripts/lib/prompt-settings.sh"
 READINESS_CACHE_KEY=""
@@ -67,7 +68,7 @@ get_case_field() {
 }
 
 get_readiness_summary() {
-  local prompts_dir="${1:-${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}}"
+  local prompts_dir="${1:-$(reconkit_default_prompts_dir "$root_dir")}"
   if [[ "$READINESS_CACHE_KEY" == "$prompts_dir" && -n "$READINESS_CACHE_VALUE" ]]; then
     printf '%s' "$READINESS_CACHE_VALUE"
     return
@@ -83,14 +84,14 @@ get_readiness_summary() {
     printf '%s' "$READINESS_CACHE_VALUE"
   else
     READINESS_CACHE_KEY="$prompts_dir"
-    READINESS_CACHE_VALUE="$(jq -n '{schema: "mizuchi.decomp-readiness-summary.v1", status: "error", prompts: []}')"
+    READINESS_CACHE_VALUE="$(jq -n '{schema: "reconkit.decomp-readiness-summary.v1", status: "error", prompts: []}')"
     printf '%s' "$READINESS_CACHE_VALUE"
   fi
 }
 
 # Build prompt_queue array
 build_prompt_queue() {
-  local prompts_dir="${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}"
+  local prompts_dir="$(reconkit_default_prompts_dir "$root_dir")"
   local readiness_summary="${1:-}"
   if [[ -z "$readiness_summary" ]]; then
     readiness_summary="$(get_readiness_summary "$prompts_dir")"
@@ -231,7 +232,7 @@ get_active_branches() {
 
 # Get recent build artifacts
 get_build_artifacts() {
-  local artifacts_dir="${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}"
+  local artifacts_dir="$(reconkit_default_prompts_dir "$root_dir")"
   local recent_builds=()
   
   # Find most recently modified build/ directories and compiled .o files
@@ -293,7 +294,7 @@ get_build_artifacts() {
 
 # Calculate workspace metrics
 get_workspace_metrics() {
-  local prompts_dir="${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}"
+  local prompts_dir="$(reconkit_default_prompts_dir "$root_dir")"
   
   local total_prompts=0
   local matched_count=0
@@ -347,7 +348,7 @@ get_workspace_metrics() {
 }
 
 get_readiness_metrics() {
-  local prompts_dir="${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}"
+  local prompts_dir="$(reconkit_default_prompts_dir "$root_dir")"
   local summary="${1:-}"
   if [[ -z "$summary" ]]; then
     summary="$(get_readiness_summary "$prompts_dir")"
@@ -366,7 +367,7 @@ get_readiness_metrics() {
 # Main: assemble JSON response
 main() {
   local readiness_summary
-  readiness_summary="$(get_readiness_summary "${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}")"
+  readiness_summary="$(get_readiness_summary "$(reconkit_default_prompts_dir "$root_dir")")"
 
   local prompt_queue
   prompt_queue=$(build_prompt_queue "$readiness_summary")

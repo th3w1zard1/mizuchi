@@ -94,7 +94,7 @@ if [[ ! -f "$verify_report" ]]; then
 fi
 
 if ! jq -e '
-  .schema == "mizuchi.build-and-verify.v1"
+  .schema == "reconkit.build-and-verify.v1"
   and .status == "matched"
   and (
     (.method == "objdiff")
@@ -133,7 +133,7 @@ if [[ -z "$message" ]]; then
 fi
 
 jq -n \
-  --arg schema "mizuchi.commit-receipt.v1" \
+  --arg schema "reconkit.commit-receipt.v1" \
   --arg status "verified" \
   --arg prompt "$prompt_name" \
   --arg function_name "$function_name" \

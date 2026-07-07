@@ -52,7 +52,7 @@ struct.pack_into("<IIIIIIHHI", headers, section + 8, 0x20, text_rva, text_size, 
 out.write_bytes(headers + code)
 PY
 
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.mizuchi_cli "$TMP_DIR/pe_tiny.exe" \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m reconkit_re.reconkit_cli "$TMP_DIR/pe_tiny.exe" \
   --work-dir "$TMP_DIR/recover" \
   --no-resume \
   --no-byte-authority \

@@ -294,7 +294,7 @@ def emit_app_workspaces(inventory: dict[str, object], workspace_root: Path) -> N
         app_dir = workspace_root / f"{app['appid'] or 'unknown'}-{slugify(app['name'])}"
         app_dir.mkdir(parents=True, exist_ok=True)
         manifest = {
-            "schema": "mizuchi.steam-app-roundtrip-workspace.v1",
+            "schema": "reconkit.steam-app-roundtrip-workspace.v1",
             "generatedAt": inventory["generatedAt"],
             "app": app,
         }
@@ -386,7 +386,7 @@ def build_inventory(steamapps: Path, app_filter: str | None = None, limit: int |
     }
     matched = sum(1 for app in apps if app["roundtrip_evidence"]["byteIdentical"])
     return {
-        "schema": "mizuchi.steam-roundtrip-inventory.v1",
+        "schema": "reconkit.steam-roundtrip-inventory.v1",
         "generatedAt": _datetime.datetime.now(_datetime.UTC).isoformat(),
         "steamapps": str(steamapps),
         "app_count": len(apps),

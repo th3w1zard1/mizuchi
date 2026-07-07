@@ -68,7 +68,7 @@ YAML
 single="$("$SCORER" --prompt easy_fn --prompts-dir "$PROMPTS")"
 printf '%s\n' "$single" | jq -e '
   .name == "easy_fn" and
-  .schema == "mizuchi.scorer-entry.v1" and
+  .schema == "reconkit.scorer-entry.v1" and
   .scorer == "heuristic" and
   .metrics.instructions == 2 and
   .score > 90
@@ -78,7 +78,7 @@ scores="$STATE/scores.json"
 report="$("$SCORER" --prompts-dir "$PROMPTS" --out "$scores")"
 [[ -f "$scores" ]]
 printf '%s\n' "$report" | jq -e '
-  .schema == "mizuchi.scorer.v1" and
+  .schema == "reconkit.scorer.v1" and
   .scorer == "heuristic" and
   .ml.enabled == false and
   .count == 2 and
@@ -103,7 +103,7 @@ jq -e '
 EMPTY="$STATE/empty.json"
 cat >"$EMPTY" <<'JSON'
 {
-  "schema": "mizuchi.vacuum-queue.v1",
+  "schema": "reconkit.vacuum-queue.v1",
   "pending": [],
   "matched": [],
   "integrated": [],

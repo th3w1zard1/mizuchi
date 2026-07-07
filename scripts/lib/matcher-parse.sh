@@ -62,7 +62,7 @@ matcher_parse_main() {
       if [[ -n "$json_file" ]]; then
         mkdir -p "$(dirname "$json_file")"
         jq -n --arg status "$status" --arg reason "$reason" --arg input "$input" \
-          '{schema:"mizuchi.matcher-parse.v1", status:$status, reason:$reason, input:$input, output:null, bytes:0}' >"$json_file"
+          '{schema:"reconkit.matcher-parse.v1", status:$status, reason:$reason, input:$input, output:null, bytes:0}' >"$json_file"
       fi
       echo "matcher-parse: $reason" >&2
       return 1
@@ -75,7 +75,7 @@ matcher_parse_main() {
     if [[ -n "$json_file" ]]; then
       mkdir -p "$(dirname "$json_file")"
       jq -n --arg status "$status" --arg reason "$reason" --arg input "$input" \
-        '{schema:"mizuchi.matcher-parse.v1", status:$status, reason:$reason, input:$input, output:null, bytes:0}' >"$json_file"
+        '{schema:"reconkit.matcher-parse.v1", status:$status, reason:$reason, input:$input, output:null, bytes:0}' >"$json_file"
     fi
     echo "matcher-parse: $reason" >&2
     return 1
@@ -90,7 +90,7 @@ matcher_parse_main() {
       --arg input "$input" \
       --arg output "$out_file" \
       --argjson bytes "$code_bytes" \
-      '{schema:"mizuchi.matcher-parse.v1", status:"parsed", reason:null, input:$input, output:$output, bytes:$bytes}' >"$json_file"
+      '{schema:"reconkit.matcher-parse.v1", status:"parsed", reason:null, input:$input, output:$output, bytes:$bytes}' >"$json_file"
   fi
 }
 

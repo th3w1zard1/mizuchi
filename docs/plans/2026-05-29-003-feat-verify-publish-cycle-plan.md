@@ -8,11 +8,11 @@ origin: none
 
 ## Summary
 
-Run full parity verification gates (bootstrap, smoke, surface, cli verify) on the current Mizuchi workspace and publish a timestamped snapshot to a fresh GitHub repository with tracked remote. This is an operational ritual cycle to prove workspace surface integrity before upstream decomp guide integration resumes.
+Run full parity verification gates (bootstrap, smoke, surface, cli verify) on the current ReconstructKit workspace and publish a timestamped snapshot to a fresh GitHub repository with tracked remote. This is an operational ritual cycle to prove workspace surface integrity before upstream decomp guide integration resumes.
 
 ## Problem Frame
 
-The Mizuchi workspace has been bootstrapped with decomp pipeline infrastructure (skills, agents, MCP wiring, CLI entrypoints). Prior cycles have established parity invariants. This cycle validates those invariants remain green and publishes proof-of-state as a versioned artifact.
+The ReconstructKit workspace has been bootstrapped with decomp pipeline infrastructure (skills, agents, MCP wiring, CLI entrypoints). Prior cycles have established parity invariants. This cycle validates those invariants remain green and publishes proof-of-state as a versioned artifact.
 
 ## Scope Boundaries
 
@@ -69,7 +69,7 @@ The Mizuchi workspace has been bootstrapped with decomp pipeline infrastructure 
 
 **Approach:**
 
-1. Change to repository root: `cd /home/brunner56/Workspaces/Mizuchi`
+1. Change to repository root: `cd /home/brunner56/Workspaces/ReconstructKit`
 2. Run `bash tests/bootstrap_re_pipeline_test.sh`; capture exit code and last output line.
 3. Run `bash tests/lfg_smoke_test.sh`; capture exit code and last output line.
 4. Run `bash tests/verify_workspace_surface_test.sh`; capture exit code and last output line.
@@ -111,7 +111,7 @@ The Mizuchi workspace has been bootstrapped with decomp pipeline infrastructure 
 1. Parse existing remotes: `git remote | awk '/^origin[0-9]+$/{sub("origin",""); print $0}' | sort -n | tail -1`.
 2. Compute next index: `nextIndex = lastIndex + 1`.
 3. If no prior remotes found (first-time setup), default to `originN = 1`.
-4. Create new GitHub repo with name `mizuchi-<YYYYMMDD-HHMMSS>` using `gh repo create`.
+4. Create new GitHub repo with name `reconkit-<YYYYMMDD-HHMMSS>` using `gh repo create`.
 5. Extract repo URL from `gh` output.
 6. Add remote: `git remote add origin<nextIndex> <repo-url>`.
 7. Push current branch: `git push --set-upstream origin<nextIndex> HEAD`.
@@ -120,7 +120,7 @@ The Mizuchi workspace has been bootstrapped with decomp pipeline infrastructure 
 **Patterns to follow:**
 
 - Remote naming convention: `origin1`, `origin2`, ..., `origin18` (incremented per cycle).
-- Repo naming: `mizuchi-YYYYMMDD-HHMMSS` (timestamp at push time).
+- Repo naming: `reconkit-YYYYMMDD-HHMMSS` (timestamp at push time).
 - Use `gh repo create --confirm` to skip interactive prompts (no user input in pipeline mode).
 
 **Technical design (directional):**
@@ -133,7 +133,7 @@ NEXT_INDEX=$((NEXT_INDEX + 1))
 
 # Create repo and push
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-REPO_NAME="mizuchi-$TIMESTAMP"
+REPO_NAME="reconkit-$TIMESTAMP"
 gh repo create "$REPO_NAME" --confirm --private || --public  # adjust privacy per project
 REPO_URL=$(gh repo view "$REPO_NAME" --json url --jq .url)
 

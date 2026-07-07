@@ -51,7 +51,7 @@ time:
 - Chris Lewis' one-shot workflow is a throughput wrapper: score likely-easy
   functions, create a narrow matching environment, let the agent attempt that
   one function, build/diff, commit only verified matches, and log hard cases.
-- Mizuchi's published benchmark uses a plugin pipeline:
+- ReconstructKit's published benchmark uses a plugin pipeline:
   Get Context -> m2c -> Compiler -> Objdiff -> Permuter -> AI loop. The AI
   phase still submits C to a compiler and objdiff gate; it is not a replacement
   for the gate.
@@ -214,7 +214,7 @@ hypothesis at a time and preserve every failed result as future evidence.
 - decomp.dev integration guide: https://decomp.wiki/tools/decomp-dev
 - Chris Lewis, one-shot decompilation workflow:
   https://blog.chrislewis.au/the-unexpected-effectiveness-of-one-shot-decompilation-with-claude/
-- Bruno Macabeus, Mizuchi benchmark:
+- Bruno Macabeus, ReconstructKit benchmark:
   https://macabeus.medium.com/can-llms-really-do-matching-decompilation-i-tested-60-functions-to-find-out-4e39b0ae4288
 - Microsoft C++ compiler options:
   https://learn.microsoft.com/en-us/cpp/build/reference/compiler-options

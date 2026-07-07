@@ -67,7 +67,7 @@ def summarize_package(package_dir: Path, artifact: str) -> dict[str, Any]:
     toolchain = read_json(package_dir / "TOOLCHAIN_PROVENANCE.json")
     authority_summary_path = package_dir / "AUTHORITY_SUMMARY.json"
     return {
-        "schema": "mizuchi.one-shot-source-claims-summary.v1",
+        "schema": "reconkit.one-shot-source-claims-summary.v1",
         "artifact": artifact,
         "package": str(package_dir),
         "claimStatus": claims.get("status"),
@@ -108,7 +108,7 @@ def summarize_package(package_dir: Path, artifact: str) -> dict[str, Any]:
 
 
 def summarize_archive(path: Path) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="mizuchi-one-shot-claims-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-one-shot-claims-") as tmp:
         tmp_dir = Path(tmp)
         with tarfile.open(path, "r:gz") as archive:
             members, root = safe_members(archive)

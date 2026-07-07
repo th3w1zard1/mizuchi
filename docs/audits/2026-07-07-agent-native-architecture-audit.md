@@ -1,8 +1,8 @@
-# Agent-Native Architecture Review: Mizuchi
+# Agent-Native Architecture Review: ReconstructKit
 
 Date: 2026-07-07
 
-Scope: local Mizuchi workspace, including CLI front doors, Cursor command specs, prompt folders, scripts, documented MCP analogues, and proof artifacts. Mizuchi is not a conventional web UI; this audit treats user-facing shell commands, slash commands, prompt folders, manifests, and generated proof files as the product surface.
+Scope: local ReconstructKit workspace, including CLI front doors, Cursor command specs, prompt folders, scripts, documented MCP analogues, and proof artifacts. ReconstructKit is not a conventional web UI; this audit treats user-facing shell commands, slash commands, prompt folders, manifests, and generated proof files as the product surface.
 
 ## Overall Score Summary
 
@@ -28,7 +28,7 @@ Status legend:
 ## Evidence Inventory
 
 - CLI bridge exposes 42 shell subcommands in `scripts/decomp-cli.sh`.
-- Installable Python front door exposes the default one-shot recovery path, three upstream-compatible command shims, two self-report commands, and 11 legacy command pass-throughs in `src/mizuchi_re/mizuchi_cli.py`.
+- Installable Python front door exposes the default one-shot recovery path, three upstream-compatible command shims, two self-report commands, and 11 legacy command pass-throughs in the recovery runtime front-door module (`src/recovery_runtime/reconkit_cli.py`, with implementation in `src/reconkit_re/reconkit_cli.py`).
 - Cursor surface includes 5 command specs, 2 agent specs, and 8 local skill specs under `.cursor/`.
 - Current test inventory includes 118 top-level test scripts.
 - Prompt corpus includes 87 prompt `case.yaml` manifests.
@@ -50,7 +50,7 @@ User actions found:
 | Run one-shot package workflows | `one-shot-source*`, `binary-source-roundtrip`, PE/ELF roundtrip commands | CLI | Covered |
 | Run source parity synthesis | `source-parity-synthesize`, `source-parity-one-shot`, `recover` | CLI and Python modules | Covered |
 | Manage autonomous queues | `queue`, `scorer`, `vacuum`, `init-vacuum-state` | CLI | Covered |
-| Inspect capabilities/help | `verify-surface`, `help-command.sh`, `mizuchi-cli self-check`, `upstream-status` | CLI | Covered |
+| Inspect capabilities/help | `verify-surface`, `help-command.sh`, `reconkit-cli self-check`, `upstream-status` | CLI | Covered |
 | Discover live Ghidra/BinaryNinja-style function details | `CAPABILITY_MATRIX.md`, AgentDecompile references | External MCP/config | Partial: not fully executable from the repo alone |
 | Delete or archive generated work | `one-shot-source-clean`, queue reset | Specific cleanup commands only | Partial by design, because destructive operations are constrained |
 
@@ -64,7 +64,7 @@ Missing or partial parity:
 
 Recommendations:
 
-- Add a generated capability map that derives rows directly from `scripts/decomp-cli.sh`, `.cursor/commands`, and `mizuchi-cli upstream-status`.
+- Add a generated capability map that derives rows directly from `scripts/decomp-cli.sh`, `.cursor/commands`, and `reconkit-cli upstream-status`.
 - Promote `decomp-atlas` from a guidance echo into a concrete local search/index command or mark it explicitly external-only.
 - Add a non-destructive `prompt scaffold` command that creates missing prompt files from `_template` without overwriting existing user edits.
 
@@ -78,14 +78,14 @@ Tool analysis:
 | `list_prompts` | `scripts/list-prompts.sh` | Primitive | Lists prompt entities with optional status filters. |
 | `run_objdiff` | `scripts/run-objdiff.sh`, `scripts/lib/verify-objdiff.sh` | Primitive | Performs a single verification comparison. |
 | `compile_and_view_assembly` | `scripts/compile-and-view-assembly.sh` | Primitive | Compiles one candidate and returns assembly/diff data. |
-| `export-context` | `src/mizuchi_re/cli.py` | Primitive-ish | Packages context, but includes analysis policy knobs. |
+| `export-context` | `cli.py` (`src/recovery_runtime/cli.py`, impl in `src/reconkit_re/cli.py`) | Primitive-ish | Packages context, but includes analysis policy knobs. |
 | `decomp-function` | `scripts/decomp-cli.sh` | Workflow | Encodes programmatic phase, AI fallback, and report writing. |
-| `recover` | `src/mizuchi_re/cli.py`, `pipeline.py` | Workflow | Full staged recovery pipeline. |
-| `source-parity-one-shot` | `src/mizuchi_re/source_parity_one_shot.py` | Workflow | Orchestrates a complete one-shot pipeline. |
+| `recover` | `cli.py` (`src/recovery_runtime/cli.py`, impl in `src/reconkit_re/cli.py`), `pipeline.py` (`src/reconkit_re/pipeline.py`) | Workflow | Full staged recovery pipeline. |
+| `source-parity-one-shot` | `source_parity_one_shot.py` (`src/recovery_runtime/source_parity_one_shot.py`, impl in `src/reconkit_re/source_parity_one_shot.py`) | Workflow | Orchestrates a complete one-shot pipeline. |
 | `commit-verified-match` | `scripts/commit-verified-match.sh` | Domain workflow | Verification-gated staging helper, appropriately high-stakes. |
 | `one-shot-source-clean` | `scripts/one-shot-source-clean.py` | Domain workflow | Cleanup policy is encoded for safety. |
 | `queue summary/next/move/attempt` | `scripts/lib/queue-state.sh` | Mixed | Entity-state primitives grouped under one command. |
-| `mizuchi-cli self-check` | `src/mizuchi_re/mizuchi_cli.py` | Primitive report | Inspects local assets and capabilities. |
+| `reconkit-cli self-check` | `reconkit_cli.py` (`src/recovery_runtime/reconkit_cli.py`, impl in `src/reconkit_re/reconkit_cli.py`) | Primitive report | Inspects local assets and capabilities. |
 | `verify-surface` | `scripts/verify-workspace-surface.sh` | Primitive report | Verifies command/config presence. |
 | Cursor command specs | `.cursor/commands/*.md` | Prompt-native workflows | Natural-language feature definitions over executable primitives. |
 
@@ -113,7 +113,7 @@ Context types analysis:
 | Prompt queue summary | Yes | `.cursor/agents/*.md`, `scripts/inject-context.sh` | Explicit context field. |
 | Recent activity | Partial | `.cursor/agents/*.md`, prompt notes | Documented, but freshness depends on notes/state quality. |
 | Constraints/guardrails | Yes | `AGENTS.md`, `CAPABILITY_MATRIX.md`, `.cursor/rules` | Objdiff and no-direct-edit invariants are prominent. |
-| Tool availability/provenance | Partial | `mizuchi-cli self-check`, `src/mizuchi_re/tools.py` | Available as report, not clearly injected in every workflow. |
+| Tool availability/provenance | Partial | `reconkit-cli self-check`, `tools.py` (`src/reconkit_re/tools.py`) | Available as report, not clearly injected in every workflow. |
 | User/project preferences | Partial | `AGENTS.md`, prompt docs | Project constraints exist; personalized preference context is external to repo. |
 
 Score: 5/7 expected context types injected or documented.
@@ -237,7 +237,7 @@ Missing discovery:
 Recommendations:
 
 - Generate a capability appendix from CLI parsers and Cursor command files.
-- Add a `mizuchi-cli capabilities --json` command or extend `self-check` with explicit command inventory.
+- Add a `reconkit-cli capabilities --json` command or extend `self-check` with explicit command inventory.
 - Add first-run guidance for an empty `prompts/` queue.
 
 ## Prompt-Native Features Audit

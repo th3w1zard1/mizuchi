@@ -28,8 +28,14 @@ def load_module(name: str, path: Path):
 
 
 archive_verify_mod = load_module(
-    "mizuchi_one_shot_source_archive_verify",
+    "reconkit_one_shot_source_archive_verify",
     ROOT / "scripts" / "one-shot-source-archive-verify.py",
+)
+sys.modules.setdefault(
+    "reconkit_one_shot_source_archive_verify", archive_verify_mod
+)
+sys.modules.setdefault(
+    "recovery_one_shot_source_archive_verify", archive_verify_mod
 )
 
 
@@ -95,7 +101,7 @@ def verify_deliverable(path: Path, timeout: int) -> dict[str, Any]:
     deliverable = read_json(path)
     base = path.resolve().parent
     errors: list[str] = []
-    if deliverable.get("schema") != "mizuchi.one-shot-source-deliverable.v1":
+    if deliverable.get("schema") != "reconkit.one-shot-source-deliverable.v1":
         errors.append("deliverable schema mismatch")
     archive = deliverable.get("archive")
     if not isinstance(archive, dict):
@@ -187,7 +193,7 @@ def verify_deliverable(path: Path, timeout: int) -> dict[str, Any]:
         if replay.get("authorityContractStatus") != "passed":
             errors.append("archive authority contract is not passed")
         expected_summary = {
-            "schema": "mizuchi.one-shot-source-authority-summary.v1",
+            "schema": "reconkit.one-shot-source-authority-summary.v1",
             "status": "authoritative",
             "authorityClass": "byte-authoritative-source",
             "accuracyClass": "byte-exact",
@@ -239,7 +245,7 @@ def verify_deliverable(path: Path, timeout: int) -> dict[str, Any]:
                 )
                 if (
                     byte_accurate_response_proof.get("schema")
-                    != "mizuchi.one-shot-source-byte-accurate-response-proof.v1"
+                    != "reconkit.one-shot-source-byte-accurate-response-proof.v1"
                 ):
                     errors.append("deliverable byteAccurateResponseProof receipt schema mismatch")
                 if byte_accurate_response_proof.get("status") != "matched":
@@ -260,7 +266,7 @@ def verify_deliverable(path: Path, timeout: int) -> dict[str, Any]:
         errors.append("deliverable receipts must be an object")
     ok = not errors
     return {
-        "schema": "mizuchi.one-shot-source-deliverable-verify.v1",
+        "schema": "reconkit.one-shot-source-deliverable-verify.v1",
         "deliverable": str(path),
         "status": "matched" if ok else "failed",
         "ok": ok,
@@ -331,7 +337,7 @@ def verify_deliverable(path: Path, timeout: int) -> dict[str, Any]:
 
 
 def verify_bundle(path: Path, timeout: int) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="mizuchi-one-shot-deliverable-bundle-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-one-shot-deliverable-bundle-") as tmp:
         tmp_dir = Path(tmp)
         with tarfile.open(path, "r:gz") as archive:
             members = safe_members(archive)
@@ -347,7 +353,7 @@ def verify_bundle(path: Path, timeout: int) -> dict[str, Any]:
         except SystemExit as exc:
             bundle_manifest_errors.append(str(exc))
         if bundle_manifest is not None:
-            if bundle_manifest.get("schema") != "mizuchi.one-shot-source-deliverable-bundle-manifest.v1":
+            if bundle_manifest.get("schema") != "reconkit.one-shot-source-deliverable-bundle-manifest.v1":
                 bundle_manifest_errors.append("bundle manifest schema mismatch")
             manifest_authority_summary_sha = bundle_manifest.get("authoritySummarySha256")
             if not isinstance(manifest_authority_summary_sha, str) or not manifest_authority_summary_sha:
@@ -383,7 +389,7 @@ def verify_bundle(path: Path, timeout: int) -> dict[str, Any]:
         deliverables = sorted(tmp_dir.glob("*/receipts/deliverable.json"))
         if len(deliverables) != 1:
             return {
-                "schema": "mizuchi.one-shot-source-deliverable-verify.v1",
+                "schema": "reconkit.one-shot-source-deliverable-verify.v1",
                 "bundle": str(path),
                 "status": "failed",
                 "ok": False,

@@ -42,11 +42,11 @@ Include **call graph hints** so agent respects caller/callee ABI.
 
 Matching proves **object** equivalence for one translation unit. Integrator proves **project** still builds and links.
 
-## Mizuchi prompt contract
+## Recovery prompt contract
 
 ### settings.yaml (strict)
 
-[REPO] Mizuchi validates exactly three keys (`src/shared/prompt-builder/prompt-settings.ts`):
+[REPO] ReconstructKit validates exactly three keys (`src/shared/prompt-builder/prompt-settings.ts`):
 
 | Field | Role |
 |-------|------|
@@ -58,14 +58,14 @@ Optional provenance (tier, binary, address) belongs in **`notes.md`** or `prompt
 
 ### compile_and_view_assembly
 
-[REPO] MCP tool `mcp__mizuchi__compile_and_view_assembly` (`claude-runner-plugin.ts`):
+[REPO] MCP tool `compile_and_view_assembly` (workspace MCP namespace, commonly exposed as `mcp__<project-name>__compile_and_view_assembly`, e.g. `mcp__recovery_runtime__compile_and_view_assembly`):
 
 - **Input:** `code` (C source), `function_name`
 - **Output:** Compiled assembly + objdiff summary
 - **0 differences:** message includes `PERFECT MATCH — submit this code`
 - **Limit:** per-attempt tool call budget (`maxCompileToolCallsPerTurn`)
 
-[SYNTH] In Cursor without Mizuchi daemon, emulate with Shell compile script + objdiff; same 0-diff gate.
+[SYNTH] In Cursor without ReconstructKit daemon, emulate with Shell compile script + objdiff; same 0-diff gate.
 
 ### notes.md lifecycle
 

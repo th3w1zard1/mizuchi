@@ -142,7 +142,7 @@ def feature_row(row: dict[str, Any], *, matched: dict[str, Any] | None = None) -
     data = parse_bytes(row)
     tags = classify(data, row)
     output = {
-        "schema": "mizuchi.source-parity-function-features.v1",
+        "schema": "reconkit.source-parity-function-features.v1",
         "name": row.get("name"),
         "entry": row.get("entry"),
         "section": row.get("section"),
@@ -237,7 +237,7 @@ def retrieve(remaining: list[dict[str, Any]], matched: list[dict[str, Any]], top
         scored.sort(key=lambda row: row["score"], reverse=True)
         rows.append(
             {
-                "schema": "mizuchi.source-parity-retrieval.v1",
+                "schema": "reconkit.source-parity-retrieval.v1",
                 "name": item["name"],
                 "entry": item["entry"],
                 "strategyClass": item["strategyClass"],
@@ -294,7 +294,7 @@ def main() -> int:
     strategy_counts = Counter(row["strategyClass"] for row in remaining_features)
     tag_counts = Counter(tag for row in remaining_features for tag in row["tags"])
     strategy = {
-        "schema": "mizuchi.source-parity-strategy-index.v1",
+        "schema": "reconkit.source-parity-strategy-index.v1",
         "inventory": str(args.inventory),
         "queue": str(args.queue),
         "matchedSummaries": [str(path) for path in args.matched_summary],
@@ -326,7 +326,7 @@ def main() -> int:
     write_jsonl(retrieval_path, retrieval_rows)
     write_json(strategy_path, strategy)
     summary = {
-        "schema": "mizuchi.source-parity-feature-index-summary.v1",
+        "schema": "reconkit.source-parity-feature-index-summary.v1",
         "matchedExamples": len(matched_features),
         "remainingIndexed": len(remaining_features),
         "matchedExamplesPath": str(matched_path),

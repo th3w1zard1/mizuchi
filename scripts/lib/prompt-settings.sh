@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers to read Mizuchi prompt folders (settings.yaml).
+# Shared helpers to read ReconstructKit prompt folders (settings.yaml).
 # Source from other scripts: . "$(dirname "$0")/lib/prompt-settings.sh"
 
 prompt_settings_require_dir() {

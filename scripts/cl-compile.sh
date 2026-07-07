@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mizuchi compilerScript backend: compile a candidate .c with the real MSVC
+# reconkit compilerScript backend: compile a candidate .c with the real MSVC
 # cl.exe (portable VC8, run under wine) to a COFF .obj. This is what makes the
 # article's objdiff gate meaningful for x86/MSVC targets. gcc/clang cannot
 # reproduce MSVC codegen; this wrapper has produced byte-exact output for small
@@ -12,7 +12,7 @@
 #   CL_OPT      optimization flag                          default: /O2
 set -euo pipefail
 
-VC_ROOT="${VC_ROOT:-/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main}"
+VC_ROOT="${VC_ROOT:-/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main}"
 export WINEPREFIX="${WINEPREFIX:-/tmp/vctk2003/wineprefix}"
 export WINEDEBUG="${WINEDEBUG:--all}"
 CL_OPT="${CL_OPT:-/O2}"

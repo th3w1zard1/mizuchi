@@ -2,15 +2,15 @@
 
 *Updated: 2026-06-29*
 
-`mizuchi_re` is the new architecture replacing the previous collection of ad hoc scripts for source parity recovery. Its primary goal is to provide a single, clear command-line interface (CLI) that processes a folder or binary file, records every decision as persistent state, supports safe resumption, and never claims that source code matches the original binary without explicit verification.
+The recovery runtime package now also exposes a neutral `recovery_runtime` namespace with a compatibility implementation kept in `src/reconkit_re`; together they replace the earlier collection of ad hoc scripts for source parity recovery. The system is a single, stateful CLI path that processes folders or binaries, supports resumable progress, and only advances to source claims with explicit verification.
 
 ### Command-Line Interface
 
 The main commands are:
 
 ```bash
-PYTHONPATH=src python3 -m mizuchi_re.cli inspect <folder-or-binary>
-PYTHONPATH=src python3 -m mizuchi_re.cli recover <folder-or-binary> --resume
+./scripts/decomp-cli.sh inspect <folder-or-binary>
+./scripts/decomp-cli.sh recover <folder-or-binary> --resume
 ./scripts/decomp-cli.sh recover <folder-or-binary> --resume
 ```
 
@@ -72,7 +72,7 @@ Manual C/C++ source is not accepted as direct input for the generic recovery pro
 
 ### Research Grounding
 
-Effective matching and decompilation workflows go beyond simply running a decompiler. Approaches such as Chris Lewis’ one-shot method emphasize structured loops, scoring, defensive tooling, and clear stopping conditions based on `objdiff` evidence. Macabeus’ Mizuchi/Kappa documentation highlights the value of matched examples, call-target retrieval, rich prompt context, and exact assembly matching. Modern decompiler research similarly stresses compiler-aware techniques, control-flow representations, and constraint-guided refinement—all of which rely on structured evidence and iterative validation rather than unverified source generation.
+Effective matching and decompilation workflows go beyond simply running a decompiler. Approaches such as Chris Lewis’ one-shot method emphasize structured loops, scoring, defensive tooling, and clear stopping conditions based on `objdiff` evidence. Macabeus’ ReconstructKit/Kappa documentation highlights the value of matched examples, call-target retrieval, rich prompt context, and exact assembly matching. Modern decompiler research similarly stresses compiler-aware techniques, control-flow representations, and constraint-guided refinement—all of which rely on structured evidence and iterative validation rather than unverified source generation.
 
 ### Claim Boundary
 

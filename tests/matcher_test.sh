@@ -48,7 +48,7 @@ TXT
 
 "$ROOT/scripts/lib/matcher-parse.sh" --input "$TMP_DIR/response.txt" --out "$TMP_DIR/trial.c" --json "$TMP_DIR/parse.json"
 grep -q "value \\* 3 + 7" "$TMP_DIR/trial.c"
-jq -e '.schema == "mizuchi.matcher-parse.v1" and .status == "parsed" and .bytes > 0' "$TMP_DIR/parse.json" >/dev/null
+jq -e '.schema == "reconkit.matcher-parse.v1" and .status == "parsed" and .bytes > 0' "$TMP_DIR/parse.json" >/dev/null
 
 cat >"$TMP_DIR/raw.c" <<'C'
 int test_fn(int value) {
@@ -70,13 +70,13 @@ set -e
 jq -e '.status == "parse_error"' "$TMP_DIR/bad-parse.json" >/dev/null
 
 out="$("$ROOT/scripts/matcher.sh" --prompt "$PROMPT" --response-file "$TMP_DIR/response.txt")"
-printf '%s\n' "$out" | jq -e '.schema == "mizuchi.matcher.v1" and .status == "success" and .trialSourcePresent == true and .runner == "response-file"' >/dev/null
+printf '%s\n' "$out" | jq -e '.schema == "reconkit.matcher.v1" and .status == "success" and .trialSourcePresent == true and .runner == "response-file"' >/dev/null
 cmp -s "$TMP_DIR/trial.c" "$PROMPT/trial.c"
 [[ -f "$PROMPT/build/matcher-prompt.md" ]]
 [[ -f "$PROMPT/build/matcher-response.txt" ]]
 [[ -f "$PROMPT/build/matcher-parse.json" ]]
 
-cli_out="$(MIZUCHI_PROMPTS_DIR="$PROMPTS" "$ROOT/scripts/decomp-cli.sh" matcher test_fn --response-file "$TMP_DIR/response.txt")"
+cli_out="$(RECONKIT_PROMPTS_DIR="$PROMPTS" "$ROOT/scripts/decomp-cli.sh" matcher test_fn --response-file "$TMP_DIR/response.txt")"
 printf '%s\n' "$cli_out" | jq -e '.status == "success"' >/dev/null
 
 set +e

@@ -1,5 +1,5 @@
 functionName: 'fcn.0071cc99'
-targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0036_fcn_0071cc99/target.bin'
+targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/ReconstructKit/target/swkotor-one-shot-source/function-reconstruction-tasks/0036_fcn_0071cc99/target.bin'
 asm: |
   fcn.0071cc99:
       .byte 0xfa, 0x87, 0xa6, 0x88, 0xad, 0x50, 0x90, 0x06, 0x80, 0x7c, 0xc6, 0xdd

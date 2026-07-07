@@ -86,7 +86,7 @@ fi
 
 report="$(
   jq -n \
-    --arg schema "mizuchi.scorer.v1" \
+    --arg schema "reconkit.scorer.v1" \
     --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg prompts_dir "$prompt_root" \
     --arg queue_path "$queue" \

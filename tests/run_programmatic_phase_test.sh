@@ -47,7 +47,7 @@ matched_prompt="$TMP_DIR/matched"
 write_prompt "$matched_prompt" "value * 3 + 7"
 "$SCRIPT" --prompt "$matched_prompt" --skip-context --skip-m2c --skip-permuter >/dev/null
 jq -e '
-  .schema == "mizuchi.programmatic-phase.v1" and
+  .schema == "reconkit.programmatic-phase.v1" and
   .status == "matched" and
   .exitCode == 0 and
   .matchedStage == "candidate" and
@@ -68,7 +68,7 @@ set -e
   exit 1
 }
 jq -e '
-  .schema == "mizuchi.programmatic-phase.v1" and
+  .schema == "reconkit.programmatic-phase.v1" and
   .status == "no-match" and
   .exitCode == 1 and
   .matchedStage == null and
@@ -97,7 +97,7 @@ set -e
   exit 1
 }
 jq -e '
-  .schema == "mizuchi.programmatic-phase.v1" and
+  .schema == "reconkit.programmatic-phase.v1" and
   .status == "blocked" and
   .exitCode == 3 and
   .reason == "fixture blocked" and

@@ -45,12 +45,12 @@ source_out="$TMP_DIR/src/roundtrip_identity.c"
 receipt="$PROMPT/build/integration-receipt.json"
 
 out="$("$SCRIPT" --prompt "$PROMPT" --source-out "$source_out")"
-printf '%s\n' "$out" | jq -e '.schema == "mizuchi.integration-receipt.v1" and .status == "integrated"' >/dev/null
+printf '%s\n' "$out" | jq -e '.schema == "reconkit.integration-receipt.v1" and .status == "integrated"' >/dev/null
 [[ -f "$source_out" ]]
 cmp -s "$PROMPT/candidate.c" "$source_out"
 jq -e '.status == "integrated" and .sourceOut == "'"$source_out"'"' "$receipt" >/dev/null
 jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .status == "matched" and
   .byte_identical == true and
   .target_sha256 == .candidate_sha256

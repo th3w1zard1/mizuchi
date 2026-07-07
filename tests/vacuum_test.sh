@@ -71,7 +71,7 @@ SCORES="$STATE/scores.json"
   --commit-dry-run \
   --runner-command 'test "{{name}}" = "easy_fn"' \
   | jq -e '
-    .schema == "mizuchi.vacuum.v1" and
+    .schema == "reconkit.vacuum.v1" and
     .processed == 1 and
     .summary.matched == 1 and
     .summary.pending == 1
@@ -83,7 +83,7 @@ jq -e '
   .attempts.easy_fn.count == 1 and
   .attempts.easy_fn.lastStatus == "matched"
 ' "$QUEUE" >/dev/null
-jq -e '.schema == "mizuchi.vacuum-session.v1" and .status == "matched" and .currentFunction == "easy_fn"' "$SESSION" >/dev/null
+jq -e '.schema == "reconkit.vacuum-session.v1" and .status == "matched" and .currentFunction == "easy_fn"' "$SESSION" >/dev/null
 grep -q 'easy_fn MATCHED' "$LOG"
 grep -q 'easy_fn COMMIT_VERIFIED' "$LOG"
 [[ -f "$SCORES" ]]
@@ -149,7 +149,7 @@ jq -e '
 grep -q 'hard_fn BACKOFF quota' "$LOG"
 
 "$CLI" vacuum status --queue "$QUEUE" --log "$LOG" --session "$SESSION" | jq -e '
-  .schema == "mizuchi.vacuum-status.v1" and
+  .schema == "reconkit.vacuum-status.v1" and
   .summary.pending == 1 and
   .lastSession.status == "backoff"
 ' >/dev/null
@@ -177,7 +177,7 @@ if grep -q 'should-not-run' "$LOG"; then
 fi
 
 "$CLI" vacuum inspect-queue --queue "$QUEUE" | jq -e '
-  .schema == "mizuchi.vacuum-queue.v1" and (.matched | length) == 1 and (.pending | length) == 1
+  .schema == "reconkit.vacuum-queue.v1" and (.matched | length) == 1 and (.pending | length) == 1
 ' >/dev/null
 
 echo "ok"

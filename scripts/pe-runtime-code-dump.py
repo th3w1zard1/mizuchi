@@ -239,7 +239,7 @@ def main() -> int:
         terminate(proc, args.wineprefix.resolve())
 
     report = {
-        "schema": "mizuchi.pe-runtime-code-dump.v1",
+        "schema": "reconkit.pe-runtime-code-dump.v1",
         "status": "dumped",
         "binary": str(binary),
         "pid": pid,

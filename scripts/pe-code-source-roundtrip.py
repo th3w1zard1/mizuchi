@@ -170,7 +170,7 @@ def main() -> int:
     rebuilt_path.write_bytes(rebuilt)
     executable_bytes = sum(int(section["size"]) for section in sections)
     report = {
-        "schema": "mizuchi.pe-code-source-roundtrip.v1",
+        "schema": "reconkit.pe-code-source-roundtrip.v1",
         "status": "matched",
         "binary": str(binary),
         "rebuiltExe": str(rebuilt_path),

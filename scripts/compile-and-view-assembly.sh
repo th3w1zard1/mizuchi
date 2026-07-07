@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cursor-native analogue of Mizuchi compile_and_view_assembly MCP tool.
+# Cursor-native analogue of ReconstructKit compile_and_view_assembly MCP tool.
 #
 # Compiles candidate C (prepended with context), disassembles the .o, optionally
 # runs objdiff against the golden target from settings.yaml.

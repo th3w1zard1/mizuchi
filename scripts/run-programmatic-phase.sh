@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Orchestrate Mizuchi programmatic phase: get-context → m2c → compile/objdiff → permuter.
+# Orchestrate ReconstructKit programmatic phase: get-context → m2c → compile/objdiff → permuter.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,7 +10,7 @@ usage() {
   cat <<'EOF'
 Usage: run-programmatic-phase.sh --prompt <prompt-dir> [options]
 
-Runs the one-way programmatic pipeline from the Macabeus/Mizuchi article:
+Runs the one-way programmatic pipeline from the Macabeus/ReconstructKit article:
   1. Get Context (get-context.sh)
   2. m2c (run-m2c.sh)
   3. compile + objdiff gate (compile-trial.sh)
@@ -52,7 +52,7 @@ write_report() {
   local stage_json
   stage_json="$(json_array_from_lines "${STAGES[@]}")"
   jq -n \
-    --arg schema "mizuchi.programmatic-phase.v1" \
+    --arg schema "reconkit.programmatic-phase.v1" \
     --arg status "$status" \
     --arg prompt "$PROMPT_NAME" \
     --arg prompt_dir "$PROMPT_DIR" \

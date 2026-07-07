@@ -450,9 +450,9 @@ def run_app_batch_source_roundtrip(
             chunk_offset = int(unit["chunkOffset"])
             chunk_size = int(unit["chunkSize"])
             section = (
-                f".mizuchi_file_{index:06d}"
+                f".recovery_file_{index:06d}"
                 if chunk_count == 1
-                else f".mizuchi_file_{index:06d}_chunk_{chunk_index:06d}"
+                else f".recovery_file_{index:06d}_chunk_{chunk_index:06d}"
             )
             rel = binary.relative_to(app_path).as_posix()
             blob_ref = str(binary.resolve())
@@ -473,16 +473,16 @@ def run_app_batch_source_roundtrip(
             lines.extend(
                 [
                     f'.section {asm_string(section)},"a"',
-                    f".global mizuchi_file_{index:06d}_chunk_{chunk_index:06d}_start",
-                    f".global mizuchi_file_{index:06d}_chunk_{chunk_index:06d}_end",
-                    f"mizuchi_file_{index:06d}_chunk_{chunk_index:06d}_start:",
+                    f".global recovery_file_{index:06d}_chunk_{chunk_index:06d}_start",
+                    f".global recovery_file_{index:06d}_chunk_{chunk_index:06d}_end",
+                    f"recovery_file_{index:06d}_chunk_{chunk_index:06d}_start:",
                     f"  .incbin {incbin_args}",
-                    f"mizuchi_file_{index:06d}_chunk_{chunk_index:06d}_end:",
+                    f"recovery_file_{index:06d}_chunk_{chunk_index:06d}_end:",
                 ]
             )
             batch_entries.append(
                 {
-                    "schema": "mizuchi.binary-source-roundtrip.v1",
+                    "schema": "reconkit.binary-source-roundtrip.v1",
                     "binary": str(binary),
                     "relativePath": rel,
                     "source": str(source_path),
@@ -763,7 +763,7 @@ def write_app_source_manifest(
         )
 
     manifest = {
-        "schema": "mizuchi.app-source-roundtrip-manifest.v1",
+        "schema": "reconkit.app-source-roundtrip-manifest.v1",
         "app": app.get("name"),
         "appid": app.get("appid"),
         "workspace": str(app_dir),
@@ -1053,7 +1053,7 @@ def main() -> int:
                     }
                 )
                 matched_functions = {
-                    "schema": "mizuchi.app-function-matches.v1",
+                    "schema": "reconkit.app-function-matches.v1",
                     "app": app.get("name"),
                     "binary": str(binary),
                     "matchedFunctions": match_report.get("matches", []),
@@ -1126,7 +1126,7 @@ def main() -> int:
             (app_dir / "matched-pe-export-functions.json").write_text(
                 json.dumps(
                     {
-                        "schema": "mizuchi.app-pe-export-function-matches.v1",
+                        "schema": "reconkit.app-pe-export-function-matches.v1",
                         "app": app.get("name"),
                         "matchedFunctions": pe_match_count,
                         "binaries": pe_reports,
@@ -1160,7 +1160,7 @@ def main() -> int:
         apps.append(app_report)
 
     report = {
-        "schema": "mizuchi.steam-roundtrip-run.v1",
+        "schema": "reconkit.steam-roundtrip-run.v1",
         "generatedAt": _datetime.datetime.now(_datetime.UTC).isoformat(),
         "steamapps": str(args.steamapps),
         "workspaceRoot": str(workspaces),

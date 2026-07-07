@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${MIZUCHI_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
+TARGET="${RECONKIT_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 

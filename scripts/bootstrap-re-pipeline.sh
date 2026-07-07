@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap a Mizuchi prompt folder with required files for RE workflows.
+# Bootstrap a ReconstructKit prompt folder with required files for RE workflows.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -1,4 +1,4 @@
-// Export per-function inventory rows as JSONL for Mizuchi source-parity pipelines.
+// Export per-function inventory rows as JSONL for ReconstructKit source-parity pipelines.
 // @category Export
 // @keybinding
 // @menupath

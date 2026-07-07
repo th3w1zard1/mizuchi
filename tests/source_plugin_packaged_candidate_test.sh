@@ -26,7 +26,7 @@ from pathlib import Path
 
 tmp = Path(os.environ["TMP_DIR"])
 task = {
-    "schema": "mizuchi.source-generation-task.v1",
+    "schema": "reconkit.source-generation-task.v1",
     "status": "generated-unverified",
     "name": "recovered",
     "entry": "0x1000",
@@ -70,9 +70,9 @@ import json
 import os
 from pathlib import Path
 
-from mizuchi_re.source_plugin_runner import SourcePluginRunConfig, run_source_plugin_pipeline
-from mizuchi_re.source_parity_synthesize import generate
-from mizuchi_re.sourcegen import generated_candidate_from_target_bytes
+from reconkit_re.source_plugin_runner import SourcePluginRunConfig, run_source_plugin_pipeline
+from reconkit_re.source_parity_synthesize import generate
+from reconkit_re.sourcegen import generated_candidate_from_target_bytes
 
 summary = run_source_plugin_pipeline(
     SourcePluginRunConfig(
@@ -118,7 +118,7 @@ framed_bytes_path = Path(os.environ["OUT_DIR"]).parent / "framed.target.bin"
 framed_bytes_path.write_bytes(framed_bytes)
 framed_tasks = Path(os.environ["OUT_DIR"]).parent / "framed.tasks.jsonl"
 framed_task = {
-    "schema": "mizuchi.source-generation-task.v1",
+    "schema": "reconkit.source-generation-task.v1",
     "status": "generated-unverified",
     "name": "framed",
     "entry": "0x2000",
@@ -174,7 +174,7 @@ framed_arg_bytes_path = Path(os.environ["OUT_DIR"]).parent / "framed_arg.target.
 framed_arg_bytes_path.write_bytes(framed_arg_bytes)
 framed_arg_tasks = Path(os.environ["OUT_DIR"]).parent / "framed_arg.tasks.jsonl"
 framed_arg_task = {
-    "schema": "mizuchi.source-generation-task.v1",
+    "schema": "reconkit.source-generation-task.v1",
     "status": "generated-unverified",
     "name": "framed_arg",
     "entry": "0x2100",

@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "mizuchi": {
+    "reconkit": {
       "transport": "stdio",
-      "command": "mizuchi",
+      "command": "reconkit",
       "args": [
         "mcp",
         "--config",
-        "mizuchi.yaml"
+        "reconkit.yaml"
       ],
       "env": {}
     },

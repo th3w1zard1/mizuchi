@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test suite for run-objdiff.sh MCP tool
 
-ROOT_DIR="/home/brunner56/Workspaces/Mizuchi"
+ROOT_DIR="/home/brunner56/Workspaces/ReconstructKit"
 SCRIPT_PATH="$ROOT_DIR/scripts/run-objdiff.sh"
 
 TESTS_RUN=0

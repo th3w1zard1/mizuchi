@@ -11,7 +11,7 @@ printf 'preset_name=Wide Piano\n' >"$TMP_DIR/input/Fake DAW/Resources/preset.txt
 printf 'standalone installer bytes\n' >"$TMP_DIR/input/Standalone.exe"
 printf 'game config\n' >"$TMP_DIR/input/Fake Game/config.ini"
 
-PYTHONPATH="$ROOT/src" python -m mizuchi_re.cli export-context-batch \
+PYTHONPATH="$ROOT/src" python -m reconkit_re.cli export-context-batch \
   "$TMP_DIR/input" \
   --out-dir "$TMP_DIR/out" \
   --item-mode top-level \

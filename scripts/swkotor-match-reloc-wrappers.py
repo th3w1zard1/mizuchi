@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_VC_ROOT = Path("/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main")
+DEFAULT_VC_ROOT = Path("/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main")
 DEFAULT_WINEPREFIX = ROOT / "target/toolchain-acquire/vctoolkit2003/wineprefix"
 IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -342,7 +342,7 @@ def main() -> int:
             target_proc = run(["clang", "-target", "i686-pc-windows-msvc", "-c", str(target_s), "-o", str(target_obj)])
             if target_proc.returncode != 0:
                 record = {
-                    "schema": "mizuchi.swkotor-reloc-wrapper-match.v1",
+                    "schema": "reconkit.swkotor-reloc-wrapper-match.v1",
                     "name": candidate.name,
                     "entry": row.get("entry"),
                     "kind": candidate.kind,
@@ -375,7 +375,7 @@ def main() -> int:
             (out_dir / "compile.stderr").write_text(compile_proc.stderr, encoding="utf-8")
             if compile_proc.returncode != 0:
                 record = {
-                    "schema": "mizuchi.swkotor-reloc-wrapper-match.v1",
+                    "schema": "reconkit.swkotor-reloc-wrapper-match.v1",
                     "name": candidate.name,
                     "entry": row.get("entry"),
                     "kind": candidate.kind,
@@ -416,7 +416,7 @@ def main() -> int:
                 matched += 1
             attempted += 1
             record = {
-                "schema": "mizuchi.swkotor-reloc-wrapper-match.v1",
+                "schema": "reconkit.swkotor-reloc-wrapper-match.v1",
                 "name": candidate.name,
                 "entry": row.get("entry"),
                 "section": row.get("section"),
@@ -449,7 +449,7 @@ def main() -> int:
             }
         )
     rollup = {
-        "schema": "mizuchi.swkotor-reloc-wrapper-matches-summary.v1",
+        "schema": "reconkit.swkotor-reloc-wrapper-matches-summary.v1",
         "inventory": str(args.inventory),
         "summaryJsonl": str(args.out),
         "attempted": len(records),

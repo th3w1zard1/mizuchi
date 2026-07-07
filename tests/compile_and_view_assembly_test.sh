@@ -54,7 +54,7 @@ printf '%s\n' "$out" | grep -q "=== objdiff summary ==="
 printf '%s\n' "$out" | grep -q "diff_count: non-zero"
 printf '%s\n' "$out" | grep -q "verdict: NOT_MATCHED"
 jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .status == "mismatched" and
   .byte_identical == false and
   .target_sha256 != .candidate_sha256 and
@@ -66,7 +66,7 @@ out_match="$(cat "$PROMPT/candidate.c" | "$SCRIPT" --prompt "$PROMPT" --code-std
 printf '%s\n' "$out_match" | grep -q "diff_count: 0"
 printf '%s\n' "$out_match" | grep -q "verdict: MATCH"
 jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .status == "matched" and
   .byte_identical == true and
   .target_sha256 == .candidate_sha256

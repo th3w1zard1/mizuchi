@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=lib/mizuchi-config.sh
-source "$ROOT/scripts/lib/mizuchi-config.sh"
+# shellcheck source=lib/reconkit-config.sh
+source "$ROOT/scripts/lib/reconkit-config.sh"
 
 usage() {
   cat <<'EOF'
@@ -58,7 +58,7 @@ if [[ -z "$PROMPT_DIR" ]]; then
 fi
 
 PROMPT_DIR="$(cd "$PROMPT_DIR" && pwd)"
-CONFIG="$(mizuchi_config_resolve "$ROOT")"
+CONFIG="$(recovery_config_resolve "$ROOT")"
 
 args=(python3 "$ROOT/scripts/lib/permuter-run.py" --prompt-dir "$PROMPT_DIR" --config "$CONFIG")
 [[ -n "$BASE_C" ]] && args+=(--base-c "$BASE_C")

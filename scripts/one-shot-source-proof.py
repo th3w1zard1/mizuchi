@@ -36,7 +36,7 @@ def prove_package(package: Path, timeout: int, expect_content_identity: str | No
     verification = verify_mod.verify_package(package, timeout, expect_content_identity=expect_content_identity)
     ok = validation.get("ok") is True and verification.get("status") == "authoritative"
     return {
-        "schema": "mizuchi.one-shot-source-proof.v1",
+        "schema": "reconkit.one-shot-source-proof.v1",
         "artifact": str(package),
         "artifactType": "package",
         "status": "authoritative" if ok else "failed",
@@ -64,7 +64,7 @@ def prove_archive(
     )
     ok = validation.get("ok") is True and verification.get("ok") is True
     return {
-        "schema": "mizuchi.one-shot-source-proof.v1",
+        "schema": "reconkit.one-shot-source-proof.v1",
         "artifact": str(archive),
         "artifactType": "archive",
         "status": "authoritative" if ok else "failed",

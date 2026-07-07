@@ -84,7 +84,7 @@ if [[ ! -f "$verify_report" ]]; then
   exit 1
 fi
 if ! jq -e '
-  .schema == "mizuchi.build-and-verify.v1"
+  .schema == "reconkit.build-and-verify.v1"
   and .status == "matched"
   and .byte_identical == true
   and .target_sha256 == .candidate_sha256
@@ -104,7 +104,7 @@ candidate_sha="$(sha256sum "$candidate" | awk '{print $1}')"
 source_sha="$(sha256sum "$source_out" | awk '{print $1}')"
 
 jq -n \
-  --arg schema "mizuchi.integration-receipt.v1" \
+  --arg schema "reconkit.integration-receipt.v1" \
   --arg status "integrated" \
   --arg prompt "$prompt_name" \
   --arg function_name "$function_name" \

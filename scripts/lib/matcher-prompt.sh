@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a fixed one-shot matching prompt from a Mizuchi prompt folder.
+# Build a fixed one-shot matching prompt from a ReconstructKit prompt folder.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

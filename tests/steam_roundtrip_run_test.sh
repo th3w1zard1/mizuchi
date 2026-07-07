@@ -19,7 +19,7 @@ report="$("$ROOT/scripts/steam-roundtrip-run.py" \
   --matcher-timeout 180 \
   --out "$TMP_DIR/roundtrip")"
 
-printf '%s\n' "$report" | jq -e '.schema == "mizuchi.steam-roundtrip-run.v1"' >/dev/null
+printf '%s\n' "$report" | jq -e '.schema == "reconkit.steam-roundtrip-run.v1"' >/dev/null
 printf '%s\n' "$report" | jq -e '.appCount == 1' >/dev/null
 printf '%s\n' "$report" | jq -e '.eligibleApps == 1' >/dev/null
 printf '%s\n' "$report" | jq -e '.matcherRuns == 1' >/dev/null
@@ -45,7 +45,7 @@ jq -e '.fullBinaryRoundtrips[] | select(.kind == "whole-binary-byte-source" and 
 manifest_verify="$("$ROOT/scripts/decomp-cli.sh" steam-roundtrip-verify-manifest \
   --manifest "$APP_DIR/source-roundtrip-manifest.json" \
   --out "$TMP_DIR/verify-vvvvvv-manifest")"
-printf '%s\n' "$manifest_verify" | jq -e '.schema == "mizuchi.app-source-roundtrip-verify.v1"' >/dev/null
+printf '%s\n' "$manifest_verify" | jq -e '.schema == "reconkit.app-source-roundtrip-verify.v1"' >/dev/null
 printf '%s\n' "$manifest_verify" | jq -e '.byteIdentical == true and .matchedSymbols >= 1' >/dev/null
 printf '%s\n' "$manifest_verify" | jq -e '.fullBinaryByteIdentical >= 1' >/dev/null
 

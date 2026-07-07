@@ -5,21 +5,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/case-metadata.sh
 . "$ROOT/scripts/lib/case-metadata.sh"
+. "$ROOT/scripts/lib/reconkit-config.sh"
 
 usage() {
   cat >&2 <<'EOF'
 usage: matcher.sh --prompt <prompt-dir|name> [--prompts-dir <dir>] [--response-file <file>] [--runner-command <cmd>]
 
 Builds a fixed one-shot prompt and writes <prompt>/trial.c from a fenced C
-response. Without --response-file, set --runner-command or MIZUCHI_MATCHER_COMMAND.
+response. Without --response-file, set --runner-command or RECONKIT_MATCHER_COMMAND.
 The command may contain {{promptFile}} and {{responseFile}} placeholders.
 EOF
 }
 
 prompt_arg=""
-prompts_dir="$ROOT/prompts"
+prompts_dir="$(reconkit_default_prompts_dir "$ROOT")"
 response_file=""
-runner_command="${MIZUCHI_MATCHER_COMMAND:-}"
+runner_command="$(reconkit_matcher_command)"
 prompt_out=""
 trial_out=""
 result_out=""
@@ -59,7 +60,7 @@ write_result() {
   local trial_exists=false
   [[ -f "$trial_out" ]] && trial_exists=true
   jq -n \
-    --arg schema "mizuchi.matcher.v1" \
+    --arg schema "reconkit.matcher.v1" \
     --arg status "$status" \
     --arg prompt "$prompt_name" \
     --arg prompt_dir "$prompt_dir" \
@@ -130,7 +131,7 @@ else
   write_result "manual-required" 3 "no matcher runner configured" ""
   cat >&2 <<EOF
 matcher: no matcher runner configured.
-Set MIZUCHI_MATCHER_COMMAND or pass --runner-command with {{promptFile}} and {{responseFile}},
+	Set RECONKIT_MATCHER_COMMAND or pass --runner-command with {{promptFile}} and {{responseFile}},
 or pass --response-file for an offline one-shot response.
 Prompt written to: $prompt_out
 EOF

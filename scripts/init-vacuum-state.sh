@@ -70,7 +70,7 @@ find "$prompts_dir" -mindepth 1 -maxdepth 1 -type d | sort | while IFS= read -r 
 done >"$entries_tmp"
 
 jq -s '{
-  schema: "mizuchi.vacuum-queue.v1",
+  schema: "reconkit.vacuum-queue.v1",
   pending: [ .[] | select(.status == "pending") | {name: .name, score: 0, reason: "initialized from prompt manifest"} ],
   matched: [ .[] | select(.status == "matched") | {name: .name, score: 0, reason: "initialized from prompt manifest"} ],
   integrated: [ .[] | select(.status == "integrated") | {name: .name, score: 0, reason: "initialized from prompt manifest"} ],
@@ -91,7 +91,7 @@ now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 summary="$("$ROOT/scripts/lib/queue-state.sh" summary --queue "$queue_abs")"
 
 jq -n \
-  --arg schema "mizuchi.vacuum-session.v1" \
+  --arg schema "reconkit.vacuum-session.v1" \
   --arg status "initialized" \
   --arg updated_at "$now" \
   --arg queue "$queue_abs" \
@@ -115,7 +115,7 @@ jq -n \
   }' >"$session_abs"
 
 jq -n \
-  --arg schema "mizuchi.vacuum-init.v1" \
+  --arg schema "reconkit.vacuum-init.v1" \
   --arg status "initialized" \
   --arg queue "$queue_abs" \
   --arg scores "$scores_abs" \

@@ -28,7 +28,7 @@ Produce candidate.c.
 MD
 cat >"$TASK/task.json" <<'JSON'
 {
-  "schema": "mizuchi.one-shot-source-function-reconstruction-task.v1",
+  "schema": "reconkit.one-shot-source-function-reconstruction-task.v1",
   "name": "test_fn",
   "status": "ready-for-semantic-source-attempt",
   "semanticDecompilation": false,
@@ -53,7 +53,7 @@ void test_fn(void) {}
 C
 cat >"$PACKAGE/FUNCTION_RECONSTRUCTION_TASKS.json" <<'JSON'
 {
-  "schema": "mizuchi.one-shot-source-function-reconstruction-tasks.v1",
+  "schema": "reconkit.one-shot-source-function-reconstruction-tasks.v1",
   "status": "tasks-present",
   "taskCount": 1,
   "semanticDecompilation": false,
@@ -76,7 +76,7 @@ JSON
 
 report="$("$CLI" import-one-shot-tasks --package "$PACKAGE" --prompts-dir "$PROMPTS" --prefix oss_ --copy-candidates)"
 printf '%s\n' "$report" | jq -e '
-  .schema == "mizuchi.import-one-shot-tasks.v1" and
+  .schema == "reconkit.import-one-shot-tasks.v1" and
   .status == "imported" and
   .importedCount == 1 and
   .prompts[0].name == "oss_test_fn" and
@@ -90,7 +90,7 @@ PROMPT="$PROMPTS/oss_test_fn"
 grep -q -- "--verifier 'verifiers/run.sh'" "$PROMPT/case.yaml"
 
 "$ROOT/scripts/build-and-verify.sh" --prompt "$PROMPT" | jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .status == "matched" and
   .method == "custom" and
   .byte_identical == true
@@ -98,7 +98,7 @@ grep -q -- "--verifier 'verifiers/run.sh'" "$PROMPT/case.yaml"
 
 STATE="$TMP_DIR/state"
 "$CLI" vacuum init --prompts-dir "$PROMPTS" --queue "$STATE/queue.json" --scores "$STATE/scores.json" --session "$STATE/session.json" --log "$TMP_DIR/logs/progress.log" | jq -e '
-  .schema == "mizuchi.vacuum-init.v1" and .summary.pending == 1
+  .schema == "reconkit.vacuum-init.v1" and .summary.pending == 1
 ' >/dev/null
 
 BAD_PACKAGE="$TMP_DIR/bad-package"
@@ -109,7 +109,7 @@ mkdir -p "$BAD_TASK/verifiers"
 cp "$TASK/verifiers/run.sh" "$BAD_TASK/verifiers/run.sh"
 cat >"$BAD_TASK/task.json" <<'JSON'
 {
-  "schema": "mizuchi.one-shot-source-function-reconstruction-task.v1",
+  "schema": "reconkit.one-shot-source-function-reconstruction-task.v1",
   "name": "bad_fn",
   "status": "ready-for-semantic-source-attempt",
   "semanticDecompilation": false,
@@ -126,7 +126,7 @@ cat >"$BAD_TASK/task.json" <<'JSON'
 JSON
 cat >"$BAD_PACKAGE/FUNCTION_RECONSTRUCTION_TASKS.json" <<'JSON'
 {
-  "schema": "mizuchi.one-shot-source-function-reconstruction-tasks.v1",
+  "schema": "reconkit.one-shot-source-function-reconstruction-tasks.v1",
   "status": "tasks-present",
   "taskCount": 1,
   "tasks": [

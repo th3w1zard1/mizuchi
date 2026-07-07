@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import one-shot-source reconstruction tasks as Mizuchi prompt folders."""
+"""Import one-shot-source reconstruction tasks as ReconstructKit prompt folders."""
 
 from __future__ import annotations
 
@@ -199,7 +199,7 @@ def main() -> int:
     if not manifest_path.exists():
         raise SystemExit(f"missing FUNCTION_RECONSTRUCTION_TASKS.json: {manifest_path}")
     manifest = read_json(manifest_path)
-    if manifest.get("schema") != "mizuchi.one-shot-source-function-reconstruction-tasks.v1":
+    if manifest.get("schema") != "reconkit.one-shot-source-function-reconstruction-tasks.v1":
         raise SystemExit("FUNCTION_RECONSTRUCTION_TASKS.json schema mismatch")
     tasks = manifest.get("tasks")
     if not isinstance(tasks, list):
@@ -219,7 +219,7 @@ def main() -> int:
         if isinstance(task, dict)
     ]
     report = {
-        "schema": "mizuchi.import-one-shot-tasks.v1",
+        "schema": "reconkit.import-one-shot-tasks.v1",
         "status": "imported",
         "package": str(package),
         "manifest": str(manifest_path),

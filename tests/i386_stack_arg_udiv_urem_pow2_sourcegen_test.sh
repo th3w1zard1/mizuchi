@@ -19,8 +19,8 @@ import json
 import sys
 from pathlib import Path
 
-from mizuchi_re.source_parity_synthesize import generate
-from mizuchi_re.sourcegen import generated_candidate_from_target_bytes
+from reconkit_re.source_parity_synthesize import generate
+from reconkit_re.sourcegen import generated_candidate_from_target_bytes
 
 tmp = Path(sys.argv[1])
 base_patterns = [
@@ -65,7 +65,7 @@ for index, (name, hex_bytes, convention, operation, operator, divisor, shift, ma
     bytes_path.write_bytes(data)
     tasks.append(
         {
-            "schema": "mizuchi.source-task.v1",
+            "schema": "reconkit.source-task.v1",
             "name": name,
             "entry": hex(address),
             "address": address,
@@ -81,7 +81,7 @@ for index, (name, hex_bytes, convention, operation, operator, divisor, shift, ma
 (tmp / "tasks.jsonl").write_text("\n".join(json.dumps(row, sort_keys=True) for row in tasks) + "\n", encoding="utf-8")
 PY
 
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/tasks.jsonl" \
   --source-tasks-only \
   --out-dir "$TMP_DIR/out" \

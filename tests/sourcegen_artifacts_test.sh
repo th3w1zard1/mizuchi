@@ -10,11 +10,11 @@ import json
 import sys
 from pathlib import Path
 
-from mizuchi_re.sourcegen import generate_source_candidates
-from mizuchi_re.source_parity_synthesize import main as synthesize_main
-from mizuchi_re.pipeline import RecoveryConfig, RecoveryRunner
-from mizuchi_re.strategy import build_strategy
-from mizuchi_re.targets import TargetIdentity
+from reconkit_re.sourcegen import generate_source_candidates
+from reconkit_re.source_parity_synthesize import main as synthesize_main
+from reconkit_re.pipeline import RecoveryConfig, RecoveryRunner
+from reconkit_re.strategy import build_strategy
+from reconkit_re.targets import TargetIdentity
 
 tmp = Path(sys.argv[1])
 binary = tmp / "sample.bin"
@@ -26,7 +26,7 @@ profile_dir.mkdir(parents=True)
 (profile_dir / "summary.json").write_text(
     json.dumps(
         {
-            "schema": "mizuchi.source-parity-profile-corpus-summary.v1",
+            "schema": "reconkit.source-parity-profile-corpus-summary.v1",
             "status": "complete",
             "compilerProfiles": [{"name": "vc71", "root": "/toolchains/vc71"}],
             "profileFlagMatches": {"vc71 /O2 /GS- /Oy": 3},
@@ -77,7 +77,7 @@ inventory = {
     "codeRanges": [{"name": ".text", "rva": 0x1000, "size": 4, "fileOffset": 0, "fileSize": 4}],
 }
 function_candidates = {
-    "schema": "mizuchi.function-candidates.v1",
+    "schema": "reconkit.function-candidates.v1",
     "candidates": [
         {
             "name": "return_zero",
@@ -138,7 +138,7 @@ assert task["acceptanceGate"].startswith("compile with selected compiler profile
 
 normalized = Path(summary["functionFactArtifacts"]["factsJsonl"])
 rows = [json.loads(line) for line in normalized.read_text(encoding="utf-8").splitlines()]
-assert rows[0]["schema"] == "mizuchi.normalized-function-fact.v1", rows
+assert rows[0]["schema"] == "reconkit.normalized-function-fact.v1", rows
 assert rows[0]["calls"] == ["puts"], rows
 
 candidate_json = run_dir / "source-generation" / "return_zero_401000" / "candidate.json"

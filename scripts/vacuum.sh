@@ -113,7 +113,7 @@ write_session() {
   local status="$1" name="${2:-}" message="${3:-}" backoff="${4:-0}" debug_log="${5:-}"
   mkdir -p "$(dirname "$session_abs")"
   jq -n \
-    --arg schema "mizuchi.vacuum-session.v1" \
+    --arg schema "reconkit.vacuum-session.v1" \
     --arg status "$status" \
     --arg name "$name" \
     --arg message "$message" \
@@ -266,7 +266,7 @@ vacuum_start() {
   done
 
   jq -n \
-    --arg schema "mizuchi.vacuum.v1" \
+    --arg schema "reconkit.vacuum.v1" \
     --arg queue "$queue_abs" \
     --arg scores "$scores_abs" \
     --arg log "$log_abs" \
@@ -287,7 +287,7 @@ case "$cmd" in
   status)
     if [[ -f "$session_abs" ]]; then
       jq -n \
-        --arg schema "mizuchi.vacuum-status.v1" \
+        --arg schema "reconkit.vacuum-status.v1" \
         --arg queue "$queue_abs" \
         --arg log "$log_abs" \
         --arg session "$session_abs" \
@@ -296,7 +296,7 @@ case "$cmd" in
         '{schema: $schema, queue: $queue, log: $log, session: $session, summary: $summary, lastSession: ($session_doc[0] // null)}'
     else
       jq -n \
-        --arg schema "mizuchi.vacuum-status.v1" \
+        --arg schema "reconkit.vacuum-status.v1" \
         --arg queue "$queue_abs" \
         --arg log "$log_abs" \
         --arg session "$session_abs" \

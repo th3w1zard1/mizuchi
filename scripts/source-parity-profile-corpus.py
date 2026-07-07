@@ -149,7 +149,7 @@ def main() -> int:
     write_json(
         selected_path,
         {
-            "schema": "mizuchi.source-parity-profile-corpus-selection.v1",
+            "schema": "reconkit.source-parity-profile-corpus-selection.v1",
             "matchedExamples": str(args.matched_examples),
             "maxCases": args.max_cases,
             "selectedCount": len(selected),
@@ -170,7 +170,7 @@ def main() -> int:
 
     if args.dry_run or not case_names:
         summary = {
-            "schema": "mizuchi.source-parity-profile-corpus-summary.v1",
+            "schema": "reconkit.source-parity-profile-corpus-summary.v1",
             "status": "selected-only",
             "selectedCases": len(case_names),
             "selectedCasesPath": str(selected_path),
@@ -193,7 +193,7 @@ def main() -> int:
     profile_summary_tsv = args.out_dir / "runs/summary.tsv"
     evidence = summarize(profile_summary_jsonl) if profile_summary_jsonl.exists() else {}
     summary = {
-        "schema": "mizuchi.source-parity-profile-corpus-summary.v1",
+        "schema": "reconkit.source-parity-profile-corpus-summary.v1",
         "status": "complete" if proc.returncode == 0 else "failed",
         "returnCode": proc.returncode,
         "selectedCases": len(case_names),

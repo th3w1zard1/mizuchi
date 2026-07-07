@@ -17,7 +17,7 @@ JSONL
 
 cat >"$TMP_DIR/simple_matches.manifest.json" <<'JSON'
 {
-  "schema": "mizuchi.swkotor-recovered-source-shard.v1",
+  "schema": "reconkit.swkotor-recovered-source-shard.v1",
   "status": "complete",
   "functionCount": 1,
   "functions": [

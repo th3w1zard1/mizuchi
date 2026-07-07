@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${MIZUCHI_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
-VC_ROOT="${VC_ROOT:-/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main}"
+TARGET="${RECONKIT_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
+VC_ROOT="${VC_ROOT:-/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -39,32 +39,32 @@ jq -e '.semanticGeneratedRatio == 0.887446 and .highLevelGeneratedRatio == 0.047
 jq -e '.boundaryRepair.fragmentCount == 4 and .boundaryRepair.appliedRepairCount == 45 and .boundaryRepair.countsByFragmentClass["boundary-fragment"] == 4 and (.boundaryRepair.countsByFragmentClass["tail-fragment"] | not) and .boundaryRepair.countsByRecommendedRepair["merge-with-adjacent-boundary-fragment"] == 4 and (.boundaryRepair.countsByRecommendedRepair["prepend-to-previous-function-tail"] | not) and (.boundaryRepair.appliedRepairs | test("applied-boundary-repairs.jsonl$")) and (.boundaryRepair.manifest | test("boundary-repair-manifest.jsonl$")) and (.boundaryRepair.summary | test("boundary-repair-summary.json$"))' "$TMP_DIR/recover/source-generation/artifacts/semantic-coverage.json" >/dev/null
 jq -e '.sourceCoverageArtifacts.boundaryRepair.fragmentCount == 4 and .sourceCoverageArtifacts.boundaryRepair.appliedRepairCount == 45 and .sourceCoverageArtifacts.boundaryRepair.countsByFragmentClass["boundary-fragment"] == 4 and (.sourceCoverageArtifacts.boundaryRepair.countsByFragmentClass["tail-fragment"] | not) and (.sourceCoverageArtifacts.boundaryRepair.manifest | test("boundary-repair-manifest.jsonl$"))' "$TMP_DIR/recover/source-generation/summary.json" >/dev/null
 
-if [[ -n "${MIZUCHI_MSVCSMOKE_STRATEGIES:-}" ]]; then
+if [[ -n "${RECONKIT_MSVCSMOKE_STRATEGIES:-}" ]]; then
   FOCUSED_OUT="$TMP_DIR/source-synthesis-focused"
   FOCUSED_SOURCE_QUALITY_ARGS=()
-  if [[ -n "${MIZUCHI_MSVCSMOKE_SOURCE_QUALITY:-}" ]]; then
-    FOCUSED_SOURCE_QUALITY_ARGS=(--source-quality "$MIZUCHI_MSVCSMOKE_SOURCE_QUALITY")
+  if [[ -n "${RECONKIT_MSVCSMOKE_SOURCE_QUALITY:-}" ]]; then
+    FOCUSED_SOURCE_QUALITY_ARGS=(--source-quality "$RECONKIT_MSVCSMOKE_SOURCE_QUALITY")
   fi
   FOCUSED_PACKAGED_SOURCE_ARGS=()
-  if [[ "${MIZUCHI_MSVCSMOKE_VERIFY_PACKAGED_SOURCE:-}" == "1" ]]; then
+  if [[ "${RECONKIT_MSVCSMOKE_VERIFY_PACKAGED_SOURCE:-}" == "1" ]]; then
     FOCUSED_PACKAGED_SOURCE_ARGS=(--verify-packaged-source)
   fi
-  PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+  PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
     --source-tasks "$TMP_DIR/recover/source-generation/tasks.jsonl" \
     --source-tasks-only \
     "${FOCUSED_PACKAGED_SOURCE_ARGS[@]}" \
     --out-dir "$FOCUSED_OUT" \
     --compiler msvc \
-    --strategies "$MIZUCHI_MSVCSMOKE_STRATEGIES" \
+    --strategies "$RECONKIT_MSVCSMOKE_STRATEGIES" \
     "${FOCUSED_SOURCE_QUALITY_ARGS[@]}" \
-    --limit "${MIZUCHI_MSVCSMOKE_LIMIT:-200}" \
-    --max-variants-per-function "${MIZUCHI_MSVCSMOKE_MAX_VARIANTS:-1}" \
-    --timeout "${MIZUCHI_MSVCSMOKE_TIMEOUT:-45}" \
+    --limit "${RECONKIT_MSVCSMOKE_LIMIT:-200}" \
+    --max-variants-per-function "${RECONKIT_MSVCSMOKE_MAX_VARIANTS:-1}" \
+    --timeout "${RECONKIT_MSVCSMOKE_TIMEOUT:-45}" \
     --semantic-only >/dev/null
 
   jq -e '.compiler == "msvc" and .semanticOnly == true and .generatedCandidates > 0 and .attemptedCandidates == .generatedCandidates and .semanticCodeSliceMatchedCandidates == .generatedCandidates and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and (.generatedBySourceQuality | values | add) == .generatedCandidates and (.attemptedBySourceQuality | values | add) == .attemptedCandidates and (.semanticCodeSliceMatchedBySourceQuality | values | add) == .semanticCodeSliceMatchedCandidates and (.semanticMismatchedBySourceQuality | values | add // 0) == 0 and (.compileFailedBySourceQuality | values | add // 0) == 0 and (.errorBySourceQuality | values | add // 0) == 0' "$FOCUSED_OUT/summary.json" >/dev/null
-  if [[ -n "${MIZUCHI_MSVCSMOKE_EXPECT_MATCHES:-}" ]]; then
-    jq -e --argjson expected "$MIZUCHI_MSVCSMOKE_EXPECT_MATCHES" '.generatedCandidates == $expected and .attemptedCandidates == $expected and .semanticCodeSliceMatchedCandidates == $expected' "$FOCUSED_OUT/summary.json" >/dev/null
+  if [[ -n "${RECONKIT_MSVCSMOKE_EXPECT_MATCHES:-}" ]]; then
+    jq -e --argjson expected "$RECONKIT_MSVCSMOKE_EXPECT_MATCHES" '.generatedCandidates == $expected and .attemptedCandidates == $expected and .semanticCodeSliceMatchedCandidates == $expected' "$FOCUSED_OUT/summary.json" >/dev/null
   fi
   jq -e 'select(.status != "code-slice-matched" or .differences != 0)' "$FOCUSED_OUT/attempts.jsonl" >/dev/null && exit 1
   echo "ok"
@@ -95,7 +95,7 @@ jq -e '.sourceGenerationSummary.sourceCoverageArtifacts.generatorOpportunities |
 
 jq -c 'select(.targetSlice.boundaryQuality.sizeSource == "boundary-repaired-tail-fragment")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/boundary-repaired-owner-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/boundary-repaired-owner-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-boundary-repaired-owners" \
   --compiler msvc \
@@ -120,7 +120,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.targetSlice.boundaryQuality.sizeSource == "boundary-repaired-prefix-fragment")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/prefix-repaired-owner-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/prefix-repaired-owner-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-prefix-repaired-owners" \
   --compiler msvc \
@@ -143,7 +143,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "import-tail-jump")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/import-tail-jump-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/import-tail-jump-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-import-tail-jump" \
   --compiler msvc \
@@ -156,7 +156,7 @@ jq -e --arg vc_root "$VC_ROOT" 'select(.compiler == "msvc" and .verificationTier
 
 jq -c 'select(.automaticGenerator.rule == "live-eax-nullable-import-tailjmp-stdcall4")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/live-eax-nullable-import-tailjmp-stdcall4-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/live-eax-nullable-import-tailjmp-stdcall4-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-live-eax-nullable-import-tailjmp-stdcall4" \
   --compiler msvc \
@@ -169,7 +169,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "ecx-global-cmp-return-else-tailjmp")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/ecx-global-cmp-return-else-tailjmp-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/ecx-global-cmp-return-else-tailjmp-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-ecx-global-cmp-return-else-tailjmp" \
   --compiler msvc \
@@ -182,7 +182,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-copy-to-buffer-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-copy-to-buffer-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-copy-to-buffer-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-copy-to-buffer-forwarder" \
   --compiler msvc \
@@ -195,7 +195,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-buffer-clear-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-buffer-clear-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-buffer-clear-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-buffer-clear-forwarder" \
   --compiler msvc \
@@ -208,7 +208,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-buffer-unlock-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-buffer-unlock-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-buffer-unlock-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-buffer-unlock-forwarder" \
   --compiler msvc \
@@ -221,7 +221,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-buffer-set-offset-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-buffer-set-offset-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-buffer-set-offset-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-buffer-set-offset-forwarder" \
   --compiler msvc \
@@ -234,7 +234,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-buffer-set-direct-draw-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-buffer-set-direct-draw-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-buffer-set-direct-draw-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-buffer-set-direct-draw-forwarder" \
   --compiler msvc \
@@ -247,7 +247,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-close-track-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-close-track-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-close-track-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-close-track-forwarder" \
   --compiler msvc \
@@ -260,7 +260,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-pause-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-pause-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-pause-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-pause-forwarder" \
   --compiler msvc \
@@ -273,7 +273,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-get-key-frame-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-get-key-frame-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-get-key-frame-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-get-key-frame-forwarder" \
   --compiler msvc \
@@ -286,7 +286,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-check-cursor-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-check-cursor-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-check-cursor-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-check-cursor-forwarder" \
   --compiler msvc \
@@ -299,7 +299,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-open-track-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-open-track-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-open-track-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-open-track-forwarder" \
   --compiler msvc \
@@ -312,7 +312,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-buffer-get-description-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-buffer-get-description-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-buffer-get-description-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-buffer-get-description-forwarder" \
   --compiler msvc \
@@ -325,7 +325,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-next-frame-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-next-frame-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-next-frame-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-next-frame-forwarder" \
   --compiler msvc \
@@ -338,7 +338,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-get-realtime-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-get-realtime-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-get-realtime-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-get-realtime-forwarder" \
   --compiler msvc \
@@ -351,7 +351,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-goto-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-goto-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-goto-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-goto-forwarder" \
   --compiler msvc \
@@ -364,7 +364,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-get-summary-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-get-summary-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-get-summary-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-get-summary-forwarder" \
   --compiler msvc \
@@ -377,7 +377,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-close-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-close-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-close-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-close-forwarder" \
   --compiler msvc \
@@ -390,7 +390,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "bink-wait-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-wait-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-wait-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-wait-forwarder" \
   --compiler msvc \
@@ -403,7 +403,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "short-direct-call-ret-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/short-direct-call-ret-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/short-direct-call-ret-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-short-direct-call-ret-masm" \
   --compiler msvc \
@@ -428,7 +428,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "compact-terminal-ret-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/compact-terminal-ret-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/compact-terminal-ret-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-compact-terminal-ret-masm" \
   --compiler msvc \
@@ -455,7 +455,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "compact-import-call-ret-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/compact-import-call-ret-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/compact-import-call-ret-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-compact-import-call-ret-masm" \
   --compiler msvc \
@@ -478,7 +478,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "packed-leading-function-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/packed-leading-function-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/packed-leading-function-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-packed-leading-function-masm" \
   --compiler msvc \
@@ -500,7 +500,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "bounded-terminal-leaf-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bounded-terminal-leaf-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bounded-terminal-leaf-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bounded-terminal-leaf-masm" \
   --compiler msvc \
@@ -524,7 +524,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "bounded-direct-call-terminal-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bounded-direct-call-terminal-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bounded-direct-call-terminal-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bounded-direct-call-terminal-masm" \
   --compiler msvc \
@@ -546,7 +546,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "bounded-import-call-terminal-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bounded-import-call-terminal-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bounded-import-call-terminal-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bounded-import-call-terminal-masm" \
   --compiler msvc \
@@ -568,7 +568,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "bounded-leading-return-slice-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bounded-leading-return-slice-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bounded-leading-return-slice-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bounded-leading-return-slice-masm" \
   --compiler msvc \
@@ -591,7 +591,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "extended-terminal-body-masm")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/extended-terminal-body-masm-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/extended-terminal-body-masm-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-extended-terminal-body-masm" \
   --compiler msvc \
@@ -612,7 +612,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "bink-surface-type-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-surface-type-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-surface-type-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-surface-type-forwarder" \
   --compiler msvc \
@@ -632,7 +632,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "rad-aligned-malloc-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/rad-aligned-malloc-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/rad-aligned-malloc-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-rad-aligned-malloc-forwarder" \
   --compiler msvc \
@@ -645,7 +645,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "rad-aligned-free-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/rad-aligned-free-forwarder-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/rad-aligned-free-forwarder-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-rad-aligned-free-forwarder" \
   --compiler msvc \
@@ -658,7 +658,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "rad-direct-free-wrapper")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/rad-direct-free-wrapper-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/rad-direct-free-wrapper-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-rad-direct-free-wrapper" \
   --compiler msvc \
@@ -671,7 +671,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "rad-timer-read-forwarder")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/rad-timer-read-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/rad-timer-read-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-rad-timer-read-forwarder" \
   --compiler msvc \
@@ -684,7 +684,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule | test("bink-buffer-(check-win-pos|close|lock|set-scale)-forwarder"))' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/bink-buffer-expanded-forwarder-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/bink-buffer-expanded-forwarder-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-bink-buffer-expanded-forwarder" \
   --compiler msvc \
@@ -714,7 +714,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '
 
 jq -c 'select(.automaticGenerator.rule == "x87-temp-i16-return")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/x87-temp-i16-return-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/x87-temp-i16-return-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-x87-temp-i16-return" \
   --compiler msvc \
@@ -730,7 +730,7 @@ jq -e '[select(.automaticGenerator.rule == "x87-pop-return-zero")] | length == 0
 
 jq -c 'select(.automaticGenerator.rule == "x87-control-word-masked-setter")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/x87-control-word-masked-setter-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/x87-control-word-masked-setter-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-x87-control-word-masked-setter" \
   --compiler msvc \
@@ -743,7 +743,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "x87-double-exponent-adjust-return")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/x87-double-exponent-adjust-return-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/x87-double-exponent-adjust-return-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-x87-double-exponent-adjust-return" \
   --compiler msvc \
@@ -756,7 +756,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "x87-round-stack-double-return")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/x87-round-stack-double-return-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/x87-round-stack-double-return-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-x87-round-stack-double-return" \
   --compiler msvc \
@@ -769,7 +769,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "stack-arg-range-global-mode-setter")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/stack-arg-range-global-mode-setter-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/stack-arg-range-global-mode-setter-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-stack-arg-range-global-mode-setter" \
   --compiler msvc \
@@ -782,7 +782,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "ebx-bitfield-mode-remap")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/ebx-bitfield-mode-remap-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/ebx-bitfield-mode-remap-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-ebx-bitfield-mode-remap" \
   --compiler msvc \
@@ -795,7 +795,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "push-stack-stack-const-call-wrapper")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/push-stack-stack-const-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/push-stack-stack-const-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-push-stack-stack-const" \
   --compiler msvc \
@@ -809,7 +809,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "push-imm32-pair-call-wrapper")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/push-imm32-pair-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/push-imm32-pair-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-push-imm32-pair" \
   --compiler msvc \
@@ -822,7 +822,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "u32-add-store-wrap-flag")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/u32-add-store-wrap-flag-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/u32-add-store-wrap-flag-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-u32-add-store-wrap-flag" \
   --compiler msvc \
@@ -835,7 +835,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "u96-bit-tail-clear-check")' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/u96-bit-tail-clear-check-task.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/u96-bit-tail-clear-check-task.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-u96-bit-tail-clear-check" \
   --compiler msvc \
@@ -848,7 +848,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "stdcall-yuv-blit-format-wrapper" and (.name | test("^_YUV_blit_.*@48$")))' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/yuv-blit-format-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/yuv-blit-format-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-yuv-blit-format" \
   --compiler msvc \
@@ -861,7 +861,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "stdcall-yuv-blit-alpha-wrapper" and (.name | test("^_YUV_blit_.*@52$")))' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/yuv-blit-alpha-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/yuv-blit-alpha-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-yuv-blit-alpha" \
   --compiler msvc \
@@ -874,7 +874,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "stdcall-yuv-blit-packed-wrapper" and (.name | test("^_YUV_blit_.*@48$")))' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/yuv-blit-packed-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/yuv-blit-packed-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-yuv-blit-packed" \
   --compiler msvc \
@@ -887,7 +887,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "stdcall-yuv-blit-mask-format-prefix" and (.name | test("^_YUV_blit_.*@56$")))' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/yuv-blit-mask-format-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/yuv-blit-mask-format-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-yuv-blit-mask-format" \
   --compiler msvc \
@@ -900,7 +900,7 @@ jq -s -e --arg vc_root "$VC_ROOT" '[.[] | select(.compiler == "msvc" and .verifi
 
 jq -c 'select(.automaticGenerator.rule == "stdcall-yuv-blit-mask-alpha-prefix" and (.name | test("^_YUV_blit_.*@60$")))' \
   "$TMP_DIR/recover/source-generation/tasks.jsonl" >"$TMP_DIR/yuv-blit-mask-alpha-tasks.jsonl"
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m mizuchi_re.source_parity_synthesize \
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" VC_ROOT="$VC_ROOT" python3 -m reconkit_re.source_parity_synthesize \
   --source-tasks "$TMP_DIR/yuv-blit-mask-alpha-tasks.jsonl" \
   --out-dir "$TMP_DIR/source-synthesis-yuv-blit-mask-alpha" \
   --compiler msvc \

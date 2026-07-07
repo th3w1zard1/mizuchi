@@ -92,7 +92,7 @@ validate_verifier_report() {
   fi
 
   if ! jq -e --arg prompt "$prompt_name" '
-    .schema == "mizuchi.build-and-verify.v1"
+    .schema == "reconkit.build-and-verify.v1"
     and .prompt == $prompt
     and (.status as $status | ["matched", "mismatched"] | index($status))
     and (.method as $method | ["objdiff", "cmp", "custom"] | index($method))
@@ -175,7 +175,7 @@ validate_programmatic_phase_report() {
   prompt_name="$(basename "$prompt_dir")"
 
   if ! jq -e --arg prompt "$prompt_name" '
-    .schema == "mizuchi.programmatic-phase.v1"
+    .schema == "reconkit.programmatic-phase.v1"
     and .prompt == $prompt
     and (.exitCode | type == "number")
     and (.stages | type == "array")
@@ -230,7 +230,7 @@ validate_ai_phase_report() {
   prompt_name="$(basename "$prompt_dir")"
 
   if ! jq -e --arg prompt "$prompt_name" '
-    .schema == "mizuchi.ai-phase.v1"
+    .schema == "reconkit.ai-phase.v1"
     and .prompt == $prompt
     and (.status as $status | ["started", "matched", "failed", "manual-required", "blocked"] | index($status))
     and (.anthropicApiKeyPresent | type == "boolean")
@@ -286,7 +286,7 @@ validate_decomp_function_receipt() {
   prompt_name="$(basename "$prompt_dir")"
 
   if ! jq -e --arg prompt "$prompt_name" '
-    .schema == "mizuchi.decomp-function.v1"
+    .schema == "reconkit.decomp-function.v1"
     and .prompt == $prompt
     and (.exitCode | type == "number")
     and (.status as $status | ["matched", "manual-required", "blocked", "failed"] | index($status))
@@ -315,7 +315,7 @@ validate_decomp_function_receipt() {
   if [[ -z "$programmatic_report" || ! -f "$programmatic_report" ]]; then
     record_invalid "$prompt_dir" "decomp-function receipt missing programmatic report"
   elif ! jq -e --arg status "$programmatic_status" '
-    .schema == "mizuchi.programmatic-phase.v1"
+    .schema == "reconkit.programmatic-phase.v1"
     and .status == $status
   ' "$programmatic_report" >/dev/null; then
     record_invalid "$prompt_dir" "decomp-function programmatic report status mismatch"
@@ -350,7 +350,7 @@ validate_decomp_function_receipt() {
       if [[ -z "$ai_report" || ! -f "$ai_report" ]]; then
         record_invalid "$prompt_dir" "decomp-function receipt missing ai report"
       elif ! jq -e --arg status "$ai_status" '
-        .schema == "mizuchi.ai-phase.v1"
+        .schema == "reconkit.ai-phase.v1"
         and .status == $status
       ' "$ai_report" >/dev/null; then
         record_invalid "$prompt_dir" "decomp-function ai report status mismatch"
@@ -409,7 +409,7 @@ validate_lifecycle_metadata() {
         if [[ ! -f "$receipt_path" ]]; then
           record_invalid "$prompt_dir" "integrationReceiptPath does not exist: $receipt_path"
         elif ! jq -e --arg source_path "$source_path" '
-          .schema == "mizuchi.integration-receipt.v1"
+          .schema == "reconkit.integration-receipt.v1"
           and .status == "integrated"
           and .sourceOut == $source_path
         ' "$receipt_path" >/dev/null; then

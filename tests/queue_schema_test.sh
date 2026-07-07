@@ -10,21 +10,21 @@ QUEUE="$TMP_DIR/state/queue.json"
 
 missing="$("$SCRIPT" summary --queue "$QUEUE")"
 printf '%s\n' "$missing" | jq -e '
-  .schema == "mizuchi.vacuum-queue-summary.v1" and
+  .schema == "reconkit.vacuum-queue-summary.v1" and
   .pending == 0 and .matched == 0 and .attempts == 0 and .next == null
 ' >/dev/null
 
 "$SCRIPT" init --queue "$QUEUE" >/dev/null
 [[ -f "$QUEUE" ]]
 jq -e '
-  .schema == "mizuchi.vacuum-queue.v1" and
+  .schema == "reconkit.vacuum-queue.v1" and
   (.pending | length) == 0 and
   (.attempts | type) == "object"
 ' "$QUEUE" >/dev/null
 
 cat >"$QUEUE" <<'JSON'
 {
-  "schema": "mizuchi.vacuum-queue.v1",
+  "schema": "reconkit.vacuum-queue.v1",
   "pending": [
     {"name": "hard_fn", "score": 10, "reason": "many branches"},
     {"name": "easy_fn", "score": 90, "reason": "straight-line"},

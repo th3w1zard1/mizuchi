@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${MIZUCHI_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
+TARGET="${RECONKIT_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -28,7 +28,7 @@ jq -e '.compiler == "clang-cl" and .semanticGeneratedCandidates == 1 and .semant
 jq -e 'select(.compiler == "clang-cl" and .verificationTier == "synthetic-target-coff-objdiff" and .rule == "stdcall-store-two-stack-args-to-globals" and .semanticSource == true and .status == "mismatched" and .differences == 1 and .sourceShapeSearchSummary.status == "no-match")' "$TMP_DIR/recover/source-synthesis/attempts.jsonl" >/dev/null
 SEARCH_JSON="$(find "$TMP_DIR/recover/source-synthesis" -path '*/source-shape-search/summary.json' | head -n 1)"
 [[ -f "$SEARCH_JSON" ]]
-jq -e '.schema == "mizuchi.source-shape-search.v1" and .status == "no-match" and (.attempts | length) >= 5 and .best.commonPrefixBytes >= 1' "$SEARCH_JSON" >/dev/null
+jq -e '.schema == "reconkit.source-shape-search.v1" and .status == "no-match" and (.attempts | length) >= 5 and .best.commonPrefixBytes >= 1' "$SEARCH_JSON" >/dev/null
 jq -e '.lanes[] | select(.name == "matching-decompilation" and .status == "semantic-source-needs-compiler-profile")' "$TMP_DIR/recover/strategy.json" >/dev/null
 jq -e '.sourceSynthesisSummary.sourceShapeSearches == 1 and .sourceSynthesisSummary.sourceShapeSearchMatches == 0' "$TMP_DIR/recover/strategy.json" >/dev/null
 

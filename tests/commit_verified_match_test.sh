@@ -46,7 +46,7 @@ MD
 
 out="$("$SCRIPT" --prompt "$PROMPT" --path prompt:/notes.md --dry-run)"
 printf '%s\n' "$out" | jq -e '
-  .schema == "mizuchi.commit-receipt.v1" and
+  .schema == "reconkit.commit-receipt.v1" and
   .status == "verified" and
   .dryRun == true and
   (.paths | map(endswith("candidate.c")) | any) and
@@ -54,7 +54,7 @@ printf '%s\n' "$out" | jq -e '
   (.paths | map(endswith("notes.md")) | any)
 ' >/dev/null
 jq -e '
-  .schema == "mizuchi.build-and-verify.v1" and
+  .schema == "reconkit.build-and-verify.v1" and
   .status == "matched" and
   .byte_identical == true
 ' "$PROMPT/build/build-and-verify.json" >/dev/null

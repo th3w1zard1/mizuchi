@@ -65,7 +65,7 @@ init_report="$("$CLI" vacuum init \
   --session "$SESSION")"
 
 printf '%s\n' "$init_report" | jq -e '
-  .schema == "mizuchi.vacuum-init.v1" and
+  .schema == "reconkit.vacuum-init.v1" and
   .status == "initialized" and
   .promptTotal == 4 and
   .blockedPrompts == 1 and
@@ -82,7 +82,7 @@ jq -e '
   ([.pending[].name, .matched[].name, .integrated[].name] | index("_template") | not)
 ' "$QUEUE" >/dev/null
 jq -e '.status == "initialized" and .blockedPrompts == 1' "$SESSION" >/dev/null
-jq -e '.schema == "mizuchi.scorer.v1" and .count == 1 and .entries[0].name == "pending_fn"' "$SCORES" >/dev/null
+jq -e '.schema == "reconkit.scorer.v1" and .count == 1 and .entries[0].name == "pending_fn"' "$SCORES" >/dev/null
 
 "$CLI" vacuum start \
   --prompts-dir "$PROMPTS" \
@@ -108,11 +108,11 @@ jq -e '.schema == "mizuchi.scorer.v1" and .count == 1 and .entries[0].name == "p
 jq -e '.pending[0].name == "pending_fn" and (.matched | length) == 1' "$QUEUE" >/dev/null
 
 "$CLI" vacuum status --queue "$QUEUE" --session "$SESSION" --log "$LOGS/progress.log" | jq -e '
-  .schema == "mizuchi.vacuum-status.v1" and .summary.pending == 1
+  .schema == "reconkit.vacuum-status.v1" and .summary.pending == 1
 ' >/dev/null
 
 "$CLI" vacuum inspect-queue --queue "$QUEUE" | jq -e '
-  .schema == "mizuchi.vacuum-queue.v1" and .pending[0].name == "pending_fn"
+  .schema == "reconkit.vacuum-queue.v1" and .pending[0].name == "pending_fn"
 ' >/dev/null
 
 echo "ok"

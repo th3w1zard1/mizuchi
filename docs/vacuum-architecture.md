@@ -40,7 +40,7 @@ Quota exhaustion triggers exponential backoff without losing queue state.
 
 ```json
 {
-  "schema": "mizuchi.vacuum-queue.v1",
+  "schema": "reconkit.vacuum-queue.v1",
   "pending": [{"name": "fun_x", "score": 98.8, "reason": "..."}],
   "matched": [],
   "integrated": [],

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deterministic local compiler for Mizuchi proof fixtures.
+# Deterministic local compiler for ReconstructKit proof fixtures.
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then

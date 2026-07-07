@@ -6,15 +6,15 @@ mode: repo-grounded
 run_id: 302a41b9
 ---
 
-# Ideation: Mizuchi Open (Surprise-Me)
+# Ideation: ReconstructKit Open (Surprise-Me)
 
 ## Grounding Context
 
-**Codebase context:** Python `mizuchi_re` package plus 50+ bash scripts; 46 KOTOR prompt folders; dual orchestration (bash CLI + Python vacuum/scorer); AgentDecompile/Ghidra recently disabled; vacuum/scorer Cycle 3; recover pipeline; STRATEGY.md tracks acquisition → compiler forensics → matching. Recent commits focus on recovery/CLI/verifier hardening.
+**Codebase context:** Python recovery runtime with neutral entrypoint layer (`recovery_runtime`) plus 50+ bash scripts; 46 KOTOR prompt folders; dual orchestration (bash CLI + Python vacuum/scorer); AgentDecompile/Ghidra recently disabled; vacuum/scorer Cycle 3; recover pipeline; STRATEGY.md tracks acquisition → compiler forensics → matching. Recent commits focus on recovery/CLI/verifier hardening.
 
 **Past learnings:** No `docs/solutions/` yet; rich material in `docs/knowledgebase/`, STRATEGY.md, vacuum docs, playbook, evidence caveats (objdiff 0 gate).
 
-**External context:** Mizuchi/macabeus ~74% match benchmark; Chris Lewis vacuum pattern; objdiff as proof oracle; KOTOR exe matching largely unclaimed; anti-patterns include re-exec metrics, unattended quota burn, permuter-as-progress.
+**External context:** ReconstructKit/macabeus ~74% match benchmark; Chris Lewis vacuum pattern; objdiff as proof oracle; KOTOR exe matching largely unclaimed; anti-patterns include re-exec metrics, unattended quota burn, permuter-as-progress.
 
 **Topic axes:** Decomposition skipped — surprise-me mode
 
@@ -40,7 +40,7 @@ run_id: 302a41b9
 
 ### 3. Auto-Ingest objdiff-0 Matches into Decomp Atlas
 **Description:** When objdiff reports 0 diffs, automatically promote the function into Decomp Atlas as a matched example (prompt slice, C seed, proof manifest)—no manual `/decomp-atlas` step.
-**Basis:** `direct:` AGENTS.md intent for Atlas as institutional memory; `external:` Mizuchi/macabeus flywheel pattern for matched examples improving prompts.
+**Basis:** `direct:` AGENTS.md intent for Atlas as institutional memory; `external:` ReconstructKit/macabeus flywheel pattern for matched examples improving prompts.
 **Rationale:** Each verified match compounds prompt quality for the next functions; closes the loop the pipeline already implies.
 **Downsides:** Bad matches poison Atlas; needs strict gate (objdiff 0 only, no close enough).
 **Confidence:** 85%
@@ -75,7 +75,7 @@ run_id: 302a41b9
 **Status:** Unexplored
 
 ### 7. Public BYO-Binary Verifier Image
-**Description:** Ship a container/CI image where users drop their .o + candidate C; Mizuchi scripts run compile + objdiff and return a signed receipt—without needing the full prompt queue or proprietary game assets.
+**Description:** Ship a container/CI image where users drop their .o + candidate C; ReconstructKit scripts run compile + objdiff and return a signed receipt—without needing the full prompt queue or proprietary game assets.
 **Basis:** `reasoned:` distribution moat for a matching toolkit; `external:` decomp.me-style scratch verification; aligns with recover/BYO-binary direction in strategy.
 **Rationale:** Expands who can contribute proofs; separates verifier from full decomp factory.
 **Downsides:** Support burden; must not leak copyrighted binaries; scope creep into product company.

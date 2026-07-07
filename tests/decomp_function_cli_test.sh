@@ -54,14 +54,14 @@ write_prompt "$matched" "value * 3 + 7"
 mkdir -p "$matched/build"
 cat >"$matched/build/ai-phase.json" <<'JSON'
 {
-  "schema": "mizuchi.ai-phase.v1",
+  "schema": "reconkit.ai-phase.v1",
   "status": "manual-required",
   "runner": "cursor-native"
 }
 JSON
-MIZUCHI_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function matched >"$TMP_DIR/matched.out" 2>"$TMP_DIR/matched.err"
+RECONKIT_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function matched >"$TMP_DIR/matched.out" 2>"$TMP_DIR/matched.err"
 jq -e '
-  .schema == "mizuchi.decomp-function.v1" and
+  .schema == "reconkit.decomp-function.v1" and
   .status == "matched" and
   .exitCode == 0 and
   .terminalPhase == "programmatic" and
@@ -73,7 +73,7 @@ jq -e '
 mismatch="$prompts_dir/mismatch"
 write_prompt "$mismatch" "value * 3 + 8"
 set +e
-PATH="/usr/bin:/bin" MIZUCHI_PROMPTS_DIR="$prompts_dir" MIZUCHI_IMAGE="localhost/mizuchi-missing:never" "$SCRIPT" decomp-function mismatch >"$TMP_DIR/mismatch.out" 2>"$TMP_DIR/mismatch.err"
+PATH="/usr/bin:/bin" RECONKIT_PROMPTS_DIR="$prompts_dir" RECONKIT_IMAGE="localhost/reconkit-missing:never" "$SCRIPT" decomp-function mismatch >"$TMP_DIR/mismatch.out" 2>"$TMP_DIR/mismatch.err"
 mismatch_rc=$?
 set -e
 [[ "$mismatch_rc" -eq 3 ]] || {
@@ -83,7 +83,7 @@ set -e
 }
 grep -q "entering AI phase" "$TMP_DIR/mismatch.err"
 jq -e '
-  .schema == "mizuchi.decomp-function.v1" and
+  .schema == "reconkit.decomp-function.v1" and
   .status == "manual-required" and
   .exitCode == 3 and
   .terminalPhase == "ai" and
@@ -95,40 +95,40 @@ jq -e '
 ai_success="$prompts_dir/ai_success"
 write_prompt "$ai_success" "value * 3 + 8"
 mkdir -p "$TMP_DIR/bin"
-cat >"$TMP_DIR/bin/mizuchi" <<'SH'
+cat >"$TMP_DIR/bin/reconkit" <<'SH'
 #!/usr/bin/env bash
 [[ "$1" == "run" && "$2" == "--config" ]] || exit 2
 exit 0
 SH
-chmod +x "$TMP_DIR/bin/mizuchi"
-PATH="$TMP_DIR/bin:/usr/bin:/bin" MIZUCHI_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function ai_success >"$TMP_DIR/ai_success.out" 2>"$TMP_DIR/ai_success.err"
-grep -q "AI phase via native mizuchi run" "$TMP_DIR/ai_success.err"
+chmod +x "$TMP_DIR/bin/reconkit"
+PATH="$TMP_DIR/bin:/usr/bin:/bin" RECONKIT_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function ai_success >"$TMP_DIR/ai_success.out" 2>"$TMP_DIR/ai_success.err"
+grep -q "AI phase via native reconkit run" "$TMP_DIR/ai_success.err"
 jq -e '
-  .schema == "mizuchi.ai-phase.v1" and
+  .schema == "reconkit.ai-phase.v1" and
   .status == "matched" and
-  .runner == "native-mizuchi" and
+  .runner == "native-reconkit" and
   .exitCode == 0
 ' "$ai_success/build/ai-phase.json" >/dev/null
 jq -e '
-  .schema == "mizuchi.decomp-function.v1" and
+  .schema == "reconkit.decomp-function.v1" and
   .status == "matched" and
   .exitCode == 0 and
   .terminalPhase == "ai" and
   .programmaticStatus == "no-match" and
   .aiStatus == "matched" and
-  .aiRunner == "native-mizuchi"
+  .aiRunner == "native-reconkit"
 ' "$ai_success/build/decomp-function.json" >/dev/null
 
 ai_failure="$prompts_dir/ai_failure"
 write_prompt "$ai_failure" "value * 3 + 8"
-cat >"$TMP_DIR/bin/mizuchi" <<'SH'
+cat >"$TMP_DIR/bin/reconkit" <<'SH'
 #!/usr/bin/env bash
 [[ "$1" == "run" && "$2" == "--config" ]] || exit 2
 exit 7
 SH
-chmod +x "$TMP_DIR/bin/mizuchi"
+chmod +x "$TMP_DIR/bin/reconkit"
 set +e
-PATH="$TMP_DIR/bin:/usr/bin:/bin" MIZUCHI_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function ai_failure >"$TMP_DIR/ai_failure.out" 2>"$TMP_DIR/ai_failure.err"
+PATH="$TMP_DIR/bin:/usr/bin:/bin" RECONKIT_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function ai_failure >"$TMP_DIR/ai_failure.out" 2>"$TMP_DIR/ai_failure.err"
 ai_failure_rc=$?
 set -e
 [[ "$ai_failure_rc" -eq 7 ]] || {
@@ -137,19 +137,19 @@ set -e
   exit 1
 }
 jq -e '
-  .schema == "mizuchi.ai-phase.v1" and
+  .schema == "reconkit.ai-phase.v1" and
   .status == "failed" and
-  .runner == "native-mizuchi" and
+  .runner == "native-reconkit" and
   .exitCode == 7
 ' "$ai_failure/build/ai-phase.json" >/dev/null
 jq -e '
-  .schema == "mizuchi.decomp-function.v1" and
+  .schema == "reconkit.decomp-function.v1" and
   .status == "failed" and
   .exitCode == 7 and
   .terminalPhase == "ai" and
   .programmaticStatus == "no-match" and
   .aiStatus == "failed" and
-  .aiRunner == "native-mizuchi"
+  .aiRunner == "native-reconkit"
 ' "$ai_failure/build/decomp-function.json" >/dev/null
 
 blocked="$prompts_dir/blocked"
@@ -157,13 +157,13 @@ write_prompt "$blocked" "value * 3 + 7" "blocked" "fixture blocked"
 mkdir -p "$blocked/build"
 cat >"$blocked/build/ai-phase.json" <<'JSON'
 {
-  "schema": "mizuchi.ai-phase.v1",
+  "schema": "reconkit.ai-phase.v1",
   "status": "blocked",
   "runner": null
 }
 JSON
 set +e
-MIZUCHI_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function blocked >"$TMP_DIR/blocked.out" 2>"$TMP_DIR/blocked.err"
+RECONKIT_PROMPTS_DIR="$prompts_dir" "$SCRIPT" decomp-function blocked >"$TMP_DIR/blocked.out" 2>"$TMP_DIR/blocked.err"
 blocked_rc=$?
 set -e
 [[ "$blocked_rc" -eq 3 ]] || {
@@ -176,7 +176,7 @@ if grep -q "entering AI phase" "$TMP_DIR/blocked.err"; then
   exit 1
 fi
 jq -e '
-  .schema == "mizuchi.decomp-function.v1" and
+  .schema == "reconkit.decomp-function.v1" and
   .status == "blocked" and
   .exitCode == 3 and
   .terminalPhase == "programmatic" and
@@ -185,7 +185,7 @@ jq -e '
   .aiStatus == null
 ' "$blocked/build/decomp-function.json" >/dev/null
 
-context="$(MIZUCHI_PROMPTS_DIR="$prompts_dir" "$ROOT/scripts/get-workspace-context.sh")"
+context="$(RECONKIT_PROMPTS_DIR="$prompts_dir" "$ROOT/scripts/get-workspace-context.sh")"
 printf '%s\n' "$context" | jq -e '
   .build_artifacts[]
   | select(.prompt == "matched")

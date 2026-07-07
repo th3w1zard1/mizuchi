@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run m2c on assembly from settings.yaml; writes candidate C for programmatic phase.
 #
-# Requires Mizuchi vendor/m2c or env M2C_DIR + M2C_PYTHON.
+# Requires ReconstructKit vendor/m2c or env M2C_DIR + M2C_PYTHON.
 #
 # Usage:
 #   run-m2c.sh --prompt prompts/<name>/ [--output prompts/<name>/build/m2c.c]
@@ -10,8 +10,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/prompt-settings.sh
 . "$ROOT/scripts/lib/prompt-settings.sh"
-# shellcheck source=scripts/lib/mizuchi-config.sh
-. "$ROOT/scripts/lib/mizuchi-config.sh"
+# shellcheck source=scripts/lib/reconkit-config.sh
+. "$ROOT/scripts/lib/reconkit-config.sh"
 
 prompt_dir=""
 output=""
@@ -37,7 +37,7 @@ fi
 
 prompt_settings_require_dir "$prompt_dir" || exit $?
 
-enable="$(mizuchi_config_get plugins.m2c.enable optional)"
+enable="$(recovery_config_get plugins.m2c.enable optional)"
 if [[ "$enable" == "false" ]]; then
   echo "run-m2c: plugins.m2c.enable is false — skip" >&2
   exit 3
@@ -57,10 +57,10 @@ if [[ -z "$context_file" ]]; then
   fi
 fi
 
-platform="$(mizuchi_config_get global.target optional)"
+platform="$(recovery_config_get global.target optional)"
 m2c_target="${M2C_TARGET:-}"
 if [[ -z "$m2c_target" ]]; then
-  m2c_target="$(mizuchi_m2c_target_for_platform "$platform")"
+  m2c_target="$(recovery_m2c_target_for_platform "$platform")"
 fi
 
 if [[ -z "$m2c_target" ]]; then
@@ -73,12 +73,15 @@ M2C_DIR="${M2C_DIR:-}"
 if [[ -z "$M2C_DIR" && -d "$ROOT/vendor/m2c" ]]; then
   M2C_DIR="$ROOT/vendor/m2c"
 fi
-if [[ -z "$M2C_DIR" && -n "${MIZUCHI_ROOT:-}" && -d "$MIZUCHI_ROOT/vendor/m2c" ]]; then
-  M2C_DIR="$MIZUCHI_ROOT/vendor/m2c"
+if [[ -z "$M2C_DIR" ]]; then
+  root_hint="$(reconkit_root_dir)"
+  if [[ -n "$root_hint" && -d "$root_hint/vendor/m2c" ]]; then
+    M2C_DIR="$root_hint/vendor/m2c"
+  fi
 fi
 
 if [[ -z "$M2C_DIR" || ! -f "$M2C_DIR/m2c.py" ]]; then
-  echo "run-m2c: m2c not found. Set M2C_DIR to Mizuchi vendor/m2c or clone github.com/macabeus/mizuchi" >&2
+  echo "run-m2c: m2c not found. Set M2C_DIR to ReconstructKit vendor/m2c or clone github.com/macabeus/reconkit" >&2
   exit 1
 fi
 

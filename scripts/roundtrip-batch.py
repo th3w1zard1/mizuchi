@@ -48,17 +48,17 @@ def discover(roots: list[Path], only_exe: bool) -> list[Path]:
 
 def roundtrip_one(binary: Path, timeout: int) -> dict:
     rec: dict = {"path": str(binary), "size": binary.stat().st_size}
-    tmp = Path(tempfile.mkdtemp(prefix="mizuchi-rt-", dir="/tmp"))
+    tmp = Path(tempfile.mkdtemp(prefix="reconkit-rt-", dir="/tmp"))
     try:
         src = tmp / "full-binary.S"
         obj = tmp / "full-binary.o"
         reb = tmp / "rebuilt.bin"
         src.write_text(
-            '.section .mizuchi_image,"a"\n'
-            ".global mizuchi_full_binary_start\n"
-            "mizuchi_full_binary_start:\n"
+            '.section .reconkit_image,"a"\n'
+            ".global reconkit_full_binary_start\n"
+            "reconkit_full_binary_start:\n"
             f"  .incbin {json.dumps(str(binary.resolve()))}\n"
-            "mizuchi_full_binary_end:\n"
+            "reconkit_full_binary_end:\n"
         )
         rec["originalSha256"] = sha256_file(binary)
         cp = subprocess.run(["gcc", "-x", "assembler-with-cpp", "-c", src.name, "-o", obj.name],
@@ -66,7 +66,7 @@ def roundtrip_one(binary: Path, timeout: int) -> dict:
         rec["compileRc"] = cp.returncode
         if cp.returncode != 0:
             rec["status"] = "compile-failed"; rec["error"] = cp.stderr[-600:]; return rec
-        oc = subprocess.run(["objcopy", "-O", "binary", "-j", ".mizuchi_image", obj.name, reb.name],
+        oc = subprocess.run(["objcopy", "-O", "binary", "-j", ".reconkit_image", obj.name, reb.name],
                             cwd=tmp, capture_output=True, text=True, timeout=timeout)
         rec["objcopyRc"] = oc.returncode
         if oc.returncode != 0:
@@ -113,7 +113,7 @@ def main() -> int:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
     failures = [r for r in results if r["status"] != "matched"]
     manifest = {
-        "schema": "mizuchi.roundtrip-batch.v1",
+        "schema": "reconkit.roundtrip-batch.v1",
         "roots": [str(r) for r in args.root],
         "onlyExe": args.only_exe,
         "total": len(results),

@@ -22,7 +22,7 @@ EOF
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/target/swkotor-compiler-profile"
 VC71_ROOT="${VC71_ROOT:-$ROOT/target/toolchain-acquire/vctoolkit2003/msitools-extract/Program Files/Microsoft Visual C++ Toolkit 2003}"
-VC80_ROOT="${VC80_ROOT:-/run/media/brunner56/MyBook/MizuchiSource/toolchains/msvc8.0-main}"
+VC80_ROOT="${VC80_ROOT:-/run/media/brunner56/MyBook/ReconstructKitSource/toolchains/msvc8.0-main}"
 WINEPREFIX="${WINEPREFIX:-$ROOT/target/toolchain-acquire/vctoolkit2003/wineprefix}"
 
 cases=()
@@ -115,7 +115,7 @@ for case_name in "${cases[@]}"; do
 
   if [[ ! -f "$candidate" || ! -f "$target" ]]; then
     emit_json \
-      --arg schema "mizuchi.swkotor-compiler-profile.v1" \
+      --arg schema "reconkit.swkotor-compiler-profile.v1" \
       --arg case "$case_name" \
       --arg status "missing-input" \
       --arg candidate "$candidate" \
@@ -161,7 +161,7 @@ for case_name in "${cases[@]}"; do
 
       if [[ "$compile_exit" -ne 0 ]]; then
         emit_json \
-          --arg schema "mizuchi.swkotor-compiler-profile.v1" \
+          --arg schema "reconkit.swkotor-compiler-profile.v1" \
           --arg case "$case_name" \
           --arg profile "$profile_id" \
           --arg flagSet "$flag_id" \
@@ -203,7 +203,7 @@ for case_name in "${cases[@]}"; do
       [[ "$match_percent" != "null" ]] || match_percent=""
 
       emit_json \
-        --arg schema "mizuchi.swkotor-compiler-profile.v1" \
+        --arg schema "reconkit.swkotor-compiler-profile.v1" \
         --arg case "$case_name" \
         --arg profile "$profile_id" \
         --arg flagSet "$flag_id" \

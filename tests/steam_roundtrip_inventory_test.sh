@@ -29,7 +29,7 @@ REPORT="$TMP_DIR/report.json"
 WORKSPACES="$TMP_DIR/workspaces"
 out="$("$SCRIPT" --steamapps "$STEAMAPPS" --out "$REPORT" --emit-workspaces "$WORKSPACES" --json)"
 
-printf '%s\n' "$out" | jq -e '.schema == "mizuchi.steam-roundtrip-inventory.v1"' >/dev/null
+printf '%s\n' "$out" | jq -e '.schema == "reconkit.steam-roundtrip-inventory.v1"' >/dev/null
 printf '%s\n' "$out" | jq -e '.app_count == 1' >/dev/null
 printf '%s\n' "$out" | jq -e '.matched_count == 0' >/dev/null
 printf '%s\n' "$out" | jq -e '.all_byte_identical == false' >/dev/null

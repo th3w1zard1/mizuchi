@@ -46,7 +46,7 @@ The important constraint is that compiler identity and verification already
 exist. The agent improves throughput by producing source hypotheses, not by
 recovering a whole application or certifying matches itself.
 
-## Comparison To Current Mizuchi/SWKOTOR Work
+## Comparison To Current ReconstructKit/SWKOTOR Work
 
 | Dimension | Article workflow | Current SWKOTOR state | Gap |
 | --- | --- | --- | --- |

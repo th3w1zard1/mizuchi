@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${MIZUCHI_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
+TARGET="${RECONKIT_KOTOR_BINK_DLL:-/run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/binkw32.dll}"
 
 if [[ ! -f "$TARGET" ]]; then
   echo "skip: KOTOR binkw32.dll not found at $TARGET"
@@ -13,9 +13,9 @@ PYTHONPATH="$ROOT/src" python3 - "$TARGET" <<'PY'
 import sys
 from pathlib import Path
 
-from mizuchi_re.functions import discover_function_candidates
-from mizuchi_re.inventory import build_binary_inventory
-from mizuchi_re.targets import identify_binary
+from reconkit_re.functions import discover_function_candidates
+from reconkit_re.inventory import build_binary_inventory
+from reconkit_re.targets import identify_binary
 
 target = identify_binary(Path(sys.argv[1]))
 inventory = build_binary_inventory(target)

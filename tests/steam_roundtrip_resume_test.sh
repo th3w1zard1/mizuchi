@@ -36,7 +36,7 @@ ASSET_SIZE="$(stat -c '%s' "$APP_DIR/asset.dat")"
 
 cat >"$WORKSPACE/source-roundtrip-manifest.json" <<JSON
 {
-  "schema": "mizuchi.app-source-roundtrip-manifest.v1",
+  "schema": "reconkit.app-source-roundtrip-manifest.v1",
   "app": "Resume Game",
   "appid": "456",
   "workspace": "$WORKSPACE",

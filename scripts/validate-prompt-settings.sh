@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate Mizuchi prompt folder: settings.yaml has exactly functionName, targetObjectPath, asm.
+# Validate ReconstructKit prompt folder: settings.yaml has exactly functionName, targetObjectPath, asm.
 set -euo pipefail
 
 dir="${1:-}"
@@ -31,7 +31,7 @@ keys = data.keys.map(&:to_s)
 extra = keys - allowed
 missing = allowed - keys
 unless extra.empty?
-  warn "unexpected keys (Mizuchi allows only 3): #{extra.sort.join(', ')}"
+  warn "unexpected keys (ReconstructKit allows only 3): #{extra.sort.join(', ')}"
   exit 1
 end
 unless missing.empty?
@@ -75,7 +75,7 @@ extra = keys - allowed
 missing = allowed - keys
 
 if extra:
-    print(f"unexpected keys (Mizuchi allows only 3): {sorted(extra)}", file=sys.stderr)
+    print(f"unexpected keys (ReconstructKit allows only 3): {sorted(extra)}", file=sys.stderr)
     sys.exit(1)
 if missing:
     print(f"missing keys: {sorted(missing)}", file=sys.stderr)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild a PE executable's code sections from verified Mizuchi task candidates.
+"""Rebuild a PE executable's code sections from verified ReconstructKit task candidates.
 
 This is intentionally a code-section parity tool, not a full semantic recovery
 claim. It copies the original PE container, patches verified candidate bytes
@@ -239,7 +239,7 @@ def main() -> int:
     covered = union_size(intervals)
     code_identical = all(section["byteIdentical"] for section in section_reports)
     report = {
-        "schema": "mizuchi.pe-code-roundtrip.v1",
+        "schema": "reconkit.pe-code-roundtrip.v1",
         "status": "matched" if code_identical else "mismatched",
         "binary": str(binary),
         "package": str(package),

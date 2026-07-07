@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Machine-readable gate for the Mizuchi source-parity Ralph loop.
+# Machine-readable gate for the ReconstructKit source-parity Ralph loop.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -96,9 +96,9 @@ core_scripts = [
     "scripts/run-programmatic-phase.sh",
     "scripts/source-parity-synthesize.py",
     "scripts/ghidra/ExportFunctionInventory.java",
-    "src/mizuchi_re/source_parity_one_shot.py",
-    "src/mizuchi_re/source_parity_synthesize.py",
-    "src/mizuchi_re/package_verify.py",
+    "src/recovery_runtime/source_parity_one_shot.py",
+    "src/recovery_runtime/source_parity_synthesize.py",
+    "src/recovery_runtime/package_verify.py",
 ]
 missing = [rel for rel in core_scripts if not (root / rel).exists()]
 add("core-surfaces", not missing, {"missing": missing})
@@ -112,7 +112,7 @@ bridges = {
 add("workspace-bridges", all(bridges.values()), bridges)
 
 upstream = subprocess.run(
-    [sys.executable, "-m", "mizuchi_re.mizuchi_cli", "upstream-status", "--json"],
+    [sys.executable, "-m", "recovery_runtime.reconkit_cli", "upstream-status", "--json"],
     cwd=root,
     text=True,
     capture_output=True,
@@ -135,7 +135,7 @@ add("upstream-cli-bridge", upstream_ok, upstream_detail)
 
 complete = all(row["ok"] for row in checks)
 report = {
-    "schema": "mizuchi.ralph-verify.v1",
+    "schema": "reconkit.ralph-verify.v1",
     "complete": complete,
     "checks": checks,
     "completionPromise": "SOURCE_PARITY_LOOP_COMPLETE",

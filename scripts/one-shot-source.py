@@ -35,15 +35,15 @@ def load_module(name: str, path: Path):
     return module
 
 
-binary_source = load_module("mizuchi_binary_source_roundtrip", BINARY_SOURCE_TOOL)
-authority = load_module("mizuchi_source_authority_report", AUTHORITY_TOOL)
-proof_mod = load_module("mizuchi_one_shot_source_proof", ROOT / "scripts" / "one-shot-source-proof.py")
+binary_source = load_module("reconkit_binary_source_roundtrip", BINARY_SOURCE_TOOL)
+authority = load_module("reconkit_source_authority_report", AUTHORITY_TOOL)
+proof_mod = load_module("reconkit_one_shot_source_proof", ROOT / "scripts" / "one-shot-source-proof.py")
 archive_verify_mod = load_module(
-    "mizuchi_one_shot_source_archive_verify",
+    "reconkit_one_shot_source_archive_verify",
     ROOT / "scripts" / "one-shot-source-archive-verify.py",
 )
 deliverable_verify_mod = load_module(
-    "mizuchi_one_shot_source_deliverable_verify",
+    "reconkit_one_shot_source_deliverable_verify",
     ROOT / "scripts" / "one-shot-source-deliverable-verify.py",
 )
 
@@ -316,7 +316,7 @@ def write_binary_evidence(out_dir: Path, binary: Path, timeout: int) -> dict[str
         }
     function_source = "readelf-symbol-table" if is_elf else ("radare2-aflj" if is_pe else None)
     doc = {
-        "schema": "mizuchi.one-shot-source-binary-evidence.v1",
+        "schema": "reconkit.one-shot-source-binary-evidence.v1",
         "status": "recorded",
         "original": {
             "path": "original.bin" if evidence_binary.parent == out_dir else str(binary),
@@ -391,7 +391,7 @@ def write_function_boundary_candidates(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-function-boundary-candidates.v1",
+        "schema": "reconkit.one-shot-source-function-boundary-candidates.v1",
         "status": "hints-present" if candidates else "absent",
         "source": "BINARY_EVIDENCE.json",
         "binaryEvidenceSha256": sha256_file(out_dir / "BINARY_EVIDENCE.json") if (out_dir / "BINARY_EVIDENCE.json").exists() else None,
@@ -490,7 +490,7 @@ def write_function_byte_slices(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-function-byte-slices.v1",
+        "schema": "reconkit.one-shot-source-function-byte-slices.v1",
         "status": "slices-present" if slices else "absent",
         "source": "FUNCTION_BOUNDARY_CANDIDATES.json",
         "binaryEvidenceSha256": sha256_file(out_dir / "BINARY_EVIDENCE.json") if (out_dir / "BINARY_EVIDENCE.json").exists() else None,
@@ -545,12 +545,12 @@ def write_function_slice_sources(out_dir: Path) -> dict[str, Any]:
                 "#include <stdint.h>",
                 "#include <stdio.h>",
                 "",
-                f"static const uint8_t mizuchi_function_slice[{len(data)}] = {{",
+                f"static const uint8_t reconkit_function_slice[{len(data)}] = {{",
                 c_byte_literal(data),
                 "};",
                 "",
                 "int main(void) {",
-                "    return fwrite(mizuchi_function_slice, 1, sizeof(mizuchi_function_slice), stdout) == sizeof(mizuchi_function_slice) ? 0 : 1;",
+                "    return fwrite(reconkit_function_slice, 1, sizeof(reconkit_function_slice), stdout) == sizeof(reconkit_function_slice) ? 0 : 1;",
                 "}",
                 "",
             ]
@@ -572,7 +572,7 @@ def write_function_slice_sources(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-function-slice-sources.v1",
+        "schema": "reconkit.one-shot-source-function-slice-sources.v1",
         "status": "sources-present" if sources else "absent",
         "source": "FUNCTION_BYTE_SLICES.json",
         "functionByteSlicesSha256": sha256_file(out_dir / "FUNCTION_BYTE_SLICES.json")
@@ -702,7 +702,7 @@ def write_function_reconstruction_tasks(out_dir: Path) -> dict[str, Any]:
         prompt_path = out_dir / prompt_rel
         prompt_path.write_text(prompt)
         task_json = {
-            "schema": "mizuchi.one-shot-source-function-reconstruction-task.v1",
+            "schema": "reconkit.one-shot-source-function-reconstruction-task.v1",
             "name": item.get("name"),
             "status": "ready-for-semantic-source-attempt",
             "semanticDecompilation": False,
@@ -777,7 +777,7 @@ def write_function_reconstruction_tasks(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-function-reconstruction-tasks.v1",
+        "schema": "reconkit.one-shot-source-function-reconstruction-tasks.v1",
         "status": "tasks-present" if tasks else "absent",
         "source": "FUNCTION_SLICE_SOURCES.json",
         "functionByteSlicesSha256": sha256_file(out_dir / "FUNCTION_BYTE_SLICES.json")
@@ -903,7 +903,7 @@ def main() -> int:
     else:
         status = "no-candidates"
     report = {
-        "schema": "mizuchi.one-shot-source-function-reconstruction-candidate-replay.v1",
+        "schema": "reconkit.one-shot-source-function-reconstruction-candidate-replay.v1",
         "status": status,
         "source": "FUNCTION_RECONSTRUCTION_TASKS.json",
         "functionReconstructionTasksSha256": sha256_file(ROOT / "FUNCTION_RECONSTRUCTION_TASKS.json"),
@@ -1034,7 +1034,7 @@ def main() -> int:
         else ("imported-with-extra" if imported and extras else ("imported" if imported else "no-candidates"))
     )
     report = {
-        "schema": "mizuchi.one-shot-source-reconstruction-candidate-import.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-candidate-import.v1",
         "status": import_status,
         "sourceDir": str(source_dir),
         "importedCount": len(imported),
@@ -1167,7 +1167,7 @@ def candidate_build_map(response: dict[str, Any], allow_build_command: bool) -> 
 
 def response_contract_errors(response: dict[str, Any], supplied: dict[str, str]) -> list[str]:
     errors: list[str] = []
-    if response.get("schema") not in (None, "mizuchi.one-shot-source-reconstruction-response.v1"):
+    if response.get("schema") not in (None, "reconkit.one-shot-source-reconstruction-response.v1"):
         errors.append("response schema mismatch")
     if response.get("semanticDecompilation") not in (None, False):
         errors.append("response claims semantic decompilation")
@@ -1284,7 +1284,7 @@ def main() -> int:
         else ("imported-with-extra" if imported and extras else ("imported" if imported else "no-candidates"))
     )
     report = {
-        "schema": "mizuchi.one-shot-source-reconstruction-json-import.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-json-import.v1",
         "status": import_status,
         "responseJson": str(response_path),
         "responseSha256": hashlib.sha256(response_path.read_bytes()).hexdigest(),
@@ -1412,7 +1412,7 @@ def candidate_build_map(response: dict[str, Any], allow_build_command: bool) -> 
 
 def response_contract_errors(response: dict[str, Any], supplied: dict[str, str]) -> list[str]:
     errors: list[str] = []
-    if response.get("schema") not in (None, "mizuchi.one-shot-source-reconstruction-response.v1"):
+    if response.get("schema") not in (None, "reconkit.one-shot-source-reconstruction-response.v1"):
         errors.append("response schema mismatch")
     if response.get("semanticDecompilation") not in (None, False):
         errors.append("response claims semantic decompilation")
@@ -1479,7 +1479,7 @@ def main() -> int:
     ]
     preflight_status = "invalid" if errors else ("partial" if missing else ("valid-with-extra" if extras else "valid"))
     report = {
-        "schema": "mizuchi.one-shot-source-reconstruction-json-preflight.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-json-preflight.v1",
         "status": preflight_status,
         "responseJson": str(response_path),
         "responseSha256": hashlib.sha256(response_path.read_bytes()).hexdigest(),
@@ -1728,7 +1728,7 @@ def write_content_manifest() -> dict[str, Any]:
     extend_tree_manifest(rows, digest, ROOT / "function-slice-sources", "function-slice-sources")
     extend_tree_manifest(rows, digest, ROOT / "function-reconstruction-tasks", "function-reconstruction-tasks")
     doc = {
-        "schema": "mizuchi.one-shot-source-content-manifest.v1",
+        "schema": "reconkit.one-shot-source-content-manifest.v1",
         "contentIdentity": digest.hexdigest(),
         "identityScope": (
             "Stable package source content only: original bytes, generated assembler/C byte-source, "
@@ -1749,7 +1749,7 @@ def write_package_manifest() -> dict[str, Any]:
             rows.append({"path": name, "size": path.stat().st_size, "sha256": sha256_file(path)})
     for rel_root in ("candidate-source-tree", "function-slice-sources", "function-reconstruction-tasks"):
         rows.extend(tree_file_rows(ROOT / rel_root, rel_root))
-    doc = {"schema": "mizuchi.one-shot-source-package-manifest.v1", "files": rows}
+    doc = {"schema": "reconkit.one-shot-source-package-manifest.v1", "files": rows}
     (ROOT / "package-manifest.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
     return doc
 
@@ -1795,7 +1795,7 @@ def write_authority_summary(content: dict[str, Any], claims: dict[str, Any], gat
     candidates = read_json(ROOT / "VERIFIED_SOURCE_CANDIDATES.json")
     summary = {
         **read_json(ROOT / "AUTHORITY_SUMMARY.json"),
-        "schema": "mizuchi.one-shot-source-authority-summary.v1",
+        "schema": "reconkit.one-shot-source-authority-summary.v1",
         "status": claims.get("status"),
         "authorityClass": claims.get("authorityClass"),
         "accuracyClass": claims.get("accuracyClass"),
@@ -1863,7 +1863,7 @@ def refresh() -> dict[str, Any]:
     (ROOT / "PACKAGE_PROOF.json").write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n")
     package_manifest = write_package_manifest()
     return {
-        "schema": "mizuchi.one-shot-source-reconstruction-receipt-refresh.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-receipt-refresh.v1",
         "status": "refreshed",
         "contentIdentity": content.get("contentIdentity"),
         "packageManifestFileCount": len(package_manifest.get("files", [])),
@@ -1910,7 +1910,7 @@ def write_reconstruction_candidate_results(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-function-reconstruction-candidate-replay.v1",
+        "schema": "reconkit.one-shot-source-function-reconstruction-candidate-replay.v1",
         "status": "no-candidates",
         "source": "FUNCTION_RECONSTRUCTION_TASKS.json",
         "functionReconstructionTasksSha256": sha256_file(out_dir / "FUNCTION_RECONSTRUCTION_TASKS.json")
@@ -2016,16 +2016,16 @@ def write_one_shot_reconstruction_request_json(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-reconstruction-request.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-request.v1",
         "status": "candidate-source-request",
         "taskCount": len(request_tasks),
         "tasks": request_tasks,
         "preferredResponse": {
-            "schema": "mizuchi.one-shot-source-reconstruction-response.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-response.v1",
             "format": "json-object",
             "shape": template_doc.get("jsonResponseShape")
             or {
-                "schema": "mizuchi.one-shot-source-reconstruction-response.v1",
+                "schema": "reconkit.one-shot-source-reconstruction-response.v1",
                 "files": {
                     "function-reconstruction-tasks/<task>/candidate.c": "C source text"
                 },
@@ -2145,7 +2145,7 @@ def write_one_shot_reconstruction_bundle(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-reconstruction-request-bundle.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-request-bundle.v1",
         "status": "candidate-source-request-bundle",
         "taskCount": len(bundle_tasks),
         "tasks": bundle_tasks,
@@ -2288,7 +2288,7 @@ def main() -> int:
         expected.append(row)
     shutil.copy2(ROOT / "ONE_SHOT_RECONSTRUCTION_REQUEST.md", out / "ONE_SHOT_RECONSTRUCTION_REQUEST.md")
     manifest = {
-        "schema": "mizuchi.one-shot-source-response-skeleton.v1",
+        "schema": "reconkit.one-shot-source-response-skeleton.v1",
         "status": "empty",
         "taskCount": tasks_doc.get("taskCount"),
         "expectedCandidates": expected,
@@ -2383,7 +2383,7 @@ def main() -> int:
             raise SystemExit(f"unsafe candidate path in bundle: {path}")
         files[path] = candidate_source(task)
     response = {
-        "schema": "mizuchi.one-shot-source-reconstruction-response.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-response.v1",
         "status": "byte-accurate-candidate-source",
         "source": "ONE_SHOT_RECONSTRUCTION_BUNDLE.json",
         "sourceSha256": hashlib.sha256((ROOT / "ONE_SHOT_RECONSTRUCTION_BUNDLE.json").read_bytes()).hexdigest(),
@@ -2446,7 +2446,7 @@ def main() -> int:
     parser.add_argument("--keep-workdir", action="store_true")
     args = parser.parse_args()
 
-    with tempfile.TemporaryDirectory(prefix="mizuchi-byte-accurate-response-proof-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-byte-accurate-response-proof-") as tmp:
         work = Path(tmp) / ROOT.name
         shutil.copytree(
             ROOT,
@@ -2496,7 +2496,7 @@ def main() -> int:
             and skipped == 0
         )
         report = {
-            "schema": "mizuchi.one-shot-source-byte-accurate-response-proof.v1",
+            "schema": "reconkit.one-shot-source-byte-accurate-response-proof.v1",
             "status": "matched" if ok else "failed",
             "ok": ok,
             "sourcePackage": str(ROOT),
@@ -2575,7 +2575,7 @@ def write_reconstruction_response_template(out_dir: Path) -> dict[str, Any]:
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-reconstruction-response-template.v1",
+        "schema": "reconkit.one-shot-source-reconstruction-response-template.v1",
         "status": "empty-template",
         "taskCount": len(expected),
         "expectedCandidates": expected,
@@ -2610,13 +2610,13 @@ def write_reconstruction_response_template(out_dir: Path) -> dict[str, Any]:
         "jsonValidateCommandWithBuildCommand": "./VALIDATE_RECONSTRUCTION_RESPONSE_JSON.py --response-json <response.json> --allow-build-command",
         "receiptRefreshCommand": "./REFRESH_RECONSTRUCTION_RECEIPTS.py",
         "jsonResponseShape": {
-            "schema": "mizuchi.one-shot-source-reconstruction-response.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-response.v1",
             "files": {
                 "function-reconstruction-tasks/<task>/candidate.c": "C source text"
             },
         },
         "jsonStructuredResponseShape": {
-            "schema": "mizuchi.one-shot-source-reconstruction-response.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-response.v1",
             "candidates": [
                 {
                     "path": "function-reconstruction-tasks/<task>/candidate.c",
@@ -2632,14 +2632,14 @@ def write_reconstruction_response_template(out_dir: Path) -> dict[str, Any]:
         },
         "jsonReplayReportShapes": {
             "preflight": {
-                "schema": "mizuchi.one-shot-source-reconstruction-json-preflight.v1",
+                "schema": "reconkit.one-shot-source-reconstruction-json-preflight.v1",
                 "buildOverrideCount": "number of response candidate paths with build overrides",
                 "buildOverridePaths": ["all response candidate paths with build overrides"],
                 "buildOverrideExpectedPaths": ["expected candidate paths with build overrides"],
                 "buildOverrideExtraPaths": ["extra candidate paths with build overrides"],
             },
             "import": {
-                "schema": "mizuchi.one-shot-source-reconstruction-json-import.v1",
+                "schema": "reconkit.one-shot-source-reconstruction-json-import.v1",
                 "buildOverrideCount": "number of response candidate paths with build overrides, including extras",
                 "buildOverridePaths": ["all response candidate paths with build overrides"],
                 "buildOverrideExpectedPaths": ["importable expected candidate paths with build overrides"],
@@ -2728,7 +2728,7 @@ def package_file_manifest(out_dir: Path) -> dict[str, Any]:
     if reconstruction_tasks.exists():
         files.extend(tree_file_rows(reconstruction_tasks, "function-reconstruction-tasks"))
     manifest = {
-        "schema": "mizuchi.one-shot-source-package-manifest.v1",
+        "schema": "reconkit.one-shot-source-package-manifest.v1",
         "files": files,
     }
     (out_dir / "package-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -2801,7 +2801,7 @@ def content_manifest(out_dir: Path) -> dict[str, Any]:
     extend_tree_manifest(files, digest, out_dir / "function-slice-sources", "function-slice-sources")
     extend_tree_manifest(files, digest, out_dir / "function-reconstruction-tasks", "function-reconstruction-tasks")
     manifest = {
-        "schema": "mizuchi.one-shot-source-content-manifest.v1",
+        "schema": "reconkit.one-shot-source-content-manifest.v1",
         "contentIdentity": digest.hexdigest(),
         "identityScope": (
             "Stable package source content only: original bytes, generated assembler/C byte-source, "
@@ -2870,7 +2870,7 @@ def write_sha256sums(out_dir: Path) -> None:
 def write_claims(out_dir: Path, receipt: dict[str, Any], content: dict[str, Any]) -> dict[str, Any]:
     source_accuracy = receipt.get("sourceAccuracy") if isinstance(receipt.get("sourceAccuracy"), dict) else {}
     claims = {
-        "schema": "mizuchi.one-shot-source-claims.v1",
+        "schema": "reconkit.one-shot-source-claims.v1",
         "status": receipt.get("status"),
         "authorityClass": receipt.get("authorityClass"),
         "accuracyClass": receipt.get("accuracyClass"),
@@ -2966,7 +2966,7 @@ def write_authority_gates(
         },
     ]
     ledger = {
-        "schema": "mizuchi.one-shot-source-authority-gates.v1",
+        "schema": "reconkit.one-shot-source-authority-gates.v1",
         "status": "passed" if all(gate["status"] == "passed" for gate in gates) else "failed",
         "contentIdentity": content.get("contentIdentity"),
         "originalSha256": receipt.get("originalSha256"),
@@ -2990,7 +2990,7 @@ def write_authority_summary(out_dir: Path, receipt: dict[str, Any]) -> dict[str,
     )
     proof = json.loads((out_dir / "PACKAGE_PROOF.json").read_text()) if (out_dir / "PACKAGE_PROOF.json").exists() else {}
     summary = {
-        "schema": "mizuchi.one-shot-source-authority-summary.v1",
+        "schema": "reconkit.one-shot-source-authority-summary.v1",
         "status": receipt.get("status"),
         "authorityClass": receipt.get("authorityClass"),
         "accuracyClass": receipt.get("accuracyClass"),
@@ -3019,7 +3019,7 @@ def write_source_index(out_dir: Path, receipt: dict[str, Any]) -> dict[str, Any]
             "rebuild": {
                 "commands": [
                     "gcc -x assembler-with-cpp -c full-binary.S -o verify-standalone-asm.o",
-                    "objcopy -O binary -j .mizuchi_image verify-standalone-asm.o verify-standalone-asm.bin",
+                    "objcopy -O binary -j .reconkit_image verify-standalone-asm.o verify-standalone-asm.bin",
                 ],
                 "output": "verify-standalone-asm.bin",
                 "expectedSha256": receipt.get("originalSha256"),
@@ -3062,7 +3062,7 @@ def write_source_index(out_dir: Path, receipt: dict[str, Any]) -> dict[str, Any]
             }
         )
     index = {
-        "schema": "mizuchi.one-shot-source-index.v1",
+        "schema": "reconkit.one-shot-source-index.v1",
         "status": receipt.get("status"),
         "authorityClass": receipt.get("authorityClass"),
         "accuracyClass": receipt.get("accuracyClass"),
@@ -3126,7 +3126,7 @@ def write_source_roles(out_dir: Path, receipt: dict[str, Any]) -> dict[str, Any]
             }
         )
     doc = {
-        "schema": "mizuchi.one-shot-source-roles.v1",
+        "schema": "reconkit.one-shot-source-roles.v1",
         "status": receipt.get("status"),
         "authorityClass": receipt.get("authorityClass"),
         "accuracyClass": receipt.get("accuracyClass"),
@@ -3209,7 +3209,7 @@ def write_semantic_readiness(out_dir: Path, receipt: dict[str, Any]) -> dict[str
     function_hints = binary_evidence.get("functionBoundaryHints") if isinstance(binary_evidence.get("functionBoundaryHints"), dict) else {}
     ready = verified_semantic_bundles > 0
     doc = {
-        "schema": "mizuchi.one-shot-source-semantic-readiness.v1",
+        "schema": "reconkit.one-shot-source-semantic-readiness.v1",
         "status": "ready" if ready else "not-ready",
         "authorityClass": receipt.get("authorityClass"),
         "accuracyClass": receipt.get("accuracyClass"),
@@ -3396,7 +3396,7 @@ def evaluate(root: Path) -> dict[str, Any]:
         )
     ready = all_candidates_matched and readiness.get("status") == "ready" and not missing
     return {
-        "schema": "mizuchi.one-shot-source-semantic-authority-evaluation.v1",
+        "schema": "reconkit.one-shot-source-semantic-authority-evaluation.v1",
         "status": "ready" if ready else "not-ready",
         "semanticDecompilation": False,
         "currentClaim": "byte-exact-reproduction",
@@ -3515,7 +3515,7 @@ def write_semantic_source_authority_evaluation(out_dir: Path) -> dict[str, Any]:
         )
     ready = all_candidates_matched and readiness.get("status") == "ready" and not missing
     doc = {
-        "schema": "mizuchi.one-shot-source-semantic-authority-evaluation.v1",
+        "schema": "reconkit.one-shot-source-semantic-authority-evaluation.v1",
         "status": "ready" if ready else "not-ready",
         "semanticDecompilation": False,
         "currentClaim": "byte-exact-reproduction",
@@ -3608,7 +3608,7 @@ def write_verified_source_candidates(out_dir: Path, receipt: dict[str, Any]) -> 
             }
         )
     manifest = {
-        "schema": "mizuchi.verified-source-candidates.v1",
+        "schema": "reconkit.verified-source-candidates.v1",
         "status": "authoritative"
         if all(candidate["byteIdentical"] is True for candidate in candidates)
         else "incomplete",
@@ -3635,7 +3635,7 @@ def write_candidate_build_recipe(out_dir: Path, receipt: dict[str, Any]) -> dict
     if not (receipt.get("candidateSource") or receipt.get("candidateSourceDir")):
         return None
     recipe = {
-        "schema": "mizuchi.candidate-build-recipe.v1",
+        "schema": "reconkit.candidate-build-recipe.v1",
         "status": "authoritative" if receipt.get("candidateSourceByteIdentical") is True else "incomplete",
         "candidatePath": receipt.get("candidateSourcePath"),
         "verificationMode": receipt.get("candidateVerificationMode"),
@@ -3702,7 +3702,7 @@ def write_candidate_replay_script(out_dir: Path, receipt: dict[str, Any]) -> Non
 
 def write_proof_commands_script(out_dir: Path, receipt: dict[str, Any]) -> None:
     metadata = {
-        "schema": "mizuchi.one-shot-source-proof-commands.v1",
+        "schema": "reconkit.one-shot-source-proof-commands.v1",
         "status": receipt.get("status"),
         "authorityClass": receipt.get("authorityClass"),
         "accuracyClass": receipt.get("accuracyClass"),
@@ -3732,13 +3732,13 @@ def write_proof_commands_script(out_dir: Path, receipt: dict[str, Any]) -> None:
             "responseJsonImportWithBuildCommand": [
                 "python3 IMPORT_RECONSTRUCTION_RESPONSE_JSON.py --response-json response.json --allow-build-command"
             ],
-            "helper": ["MIZUCHI_WORKSPACE=/path/to/Mizuchi ./PROOF_COMMANDS.sh"],
+            "helper": ["RECONKIT_WORKSPACE=/path/to/ReconstructKit ./PROOF_COMMANDS.sh"],
         },
         "artifactLayers": ["package-directory", "source-archive", "deliverable-bundle"],
         "prerequisites": {
             "packageLocal": ["python3", "gcc", "objcopy"],
-            "workspaceReplay": ["MIZUCHI_WORKSPACE", "scripts/decomp-cli.sh"],
-            "optionalOverrides": ["MIZUCHI_ARCHIVE_PATH", "MIZUCHI_BUNDLE_PATH"],
+            "workspaceReplay": ["RECONKIT_WORKSPACE", "scripts/decomp-cli.sh"],
+            "optionalOverrides": ["RECONKIT_ARCHIVE_PATH", "RECONKIT_BUNDLE_PATH"],
         },
         "expectedSuccess": {
             "packageLocal": "ONE_SHOT_SOURCE_PACKAGE_OK",
@@ -3762,34 +3762,34 @@ def write_proof_commands_script(out_dir: Path, receipt: dict[str, Any]) -> None:
             "set -euo pipefail",
             "",
             "PACKAGE_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
-            "ARCHIVE_PATH=\"${MIZUCHI_ARCHIVE_PATH:-${PACKAGE_DIR}.tar.gz}\"",
-            "BUNDLE_PATH=\"${MIZUCHI_BUNDLE_PATH:-${PACKAGE_DIR}.deliverable.tar.gz}\"",
+            "ARCHIVE_PATH=\"${RECONKIT_ARCHIVE_PATH:-${PACKAGE_DIR}.tar.gz}\"",
+            "BUNDLE_PATH=\"${RECONKIT_BUNDLE_PATH:-${PACKAGE_DIR}.deliverable.tar.gz}\"",
             "",
             "cd \"$PACKAGE_DIR\"",
             "echo \"# Package-local verification\"",
             "python3 VERIFY.py",
             "",
-            "if [[ -n \"${MIZUCHI_WORKSPACE:-}\" ]]; then",
+            "if [[ -n \"${RECONKIT_WORKSPACE:-}\" ]]; then",
             "  echo",
             "  echo \"# Strict package-side complete validation\"",
-            "  \"$MIZUCHI_WORKSPACE/scripts/decomp-cli.sh\" one-shot-source-validate --package \"$PACKAGE_DIR\" --require-complete --markdown",
+            "  \"$RECONKIT_WORKSPACE/scripts/decomp-cli.sh\" one-shot-source-validate --package \"$PACKAGE_DIR\" --require-complete --markdown",
             "  if [[ -f \"$ARCHIVE_PATH\" ]]; then",
             "    echo",
             "    echo \"# Source archive validation\"",
             "    echo \"Source archives validate the source package; complete-mode receipts are proven by the portable bundle.\"",
-            "    \"$MIZUCHI_WORKSPACE/scripts/decomp-cli.sh\" one-shot-source-validate --archive \"$ARCHIVE_PATH\" --require-complete --markdown",
+            "    \"$RECONKIT_WORKSPACE/scripts/decomp-cli.sh\" one-shot-source-validate --archive \"$ARCHIVE_PATH\" --require-complete --markdown",
             "  fi",
             "  if [[ -f \"$BUNDLE_PATH\" ]]; then",
             "    echo",
             "    echo \"# Portable bundle replay\"",
             "    echo \"The bundled deliverable is expected to report deliverablePhase=pre-bundle-index; package-side strict validation above checks the final-package-index receipt.\"",
-            "    \"$MIZUCHI_WORKSPACE/scripts/decomp-cli.sh\" one-shot-source-deliverable-verify --bundle \"$BUNDLE_PATH\" --markdown",
+            "    \"$RECONKIT_WORKSPACE/scripts/decomp-cli.sh\" one-shot-source-deliverable-verify --bundle \"$BUNDLE_PATH\" --markdown",
             "  fi",
             "  echo",
             "  echo \"# Byte-accurate one-shot response proof\"",
             "  python3 PROVE_BYTE_ACCURATE_RECONSTRUCTION_RESPONSE.py",
             "else",
-            "  echo \"Set MIZUCHI_WORKSPACE to run strict validation and bundle replay.\"",
+            "  echo \"Set RECONKIT_WORKSPACE to run strict validation and bundle replay.\"",
             "fi",
             "",
         ]
@@ -3952,7 +3952,7 @@ def write_package_proof(out_dir: Path, receipt: dict[str, Any]) -> dict[str, Any
         else None
     )
     proof = {
-        "schema": "mizuchi.one-shot-source-package-proof.v1",
+        "schema": "reconkit.one-shot-source-package-proof.v1",
         "status": receipt.get("status"),
         "contentIdentity": content.get("contentIdentity") or receipt.get("contentIdentity"),
         "authorityClass": receipt.get("authorityClass"),
@@ -4022,7 +4022,7 @@ def write_package_proof(out_dir: Path, receipt: dict[str, Any]) -> dict[str, Any
 
 def write_toolchain_provenance(out_dir: Path, receipt: dict[str, Any]) -> dict[str, Any]:
     provenance = {
-        "schema": "mizuchi.toolchain-provenance.v1",
+        "schema": "reconkit.toolchain-provenance.v1",
         "status": "recorded",
         "platform": {
             "python": sys.version.split()[0],
@@ -4040,7 +4040,7 @@ def write_toolchain_provenance(out_dir: Path, receipt: dict[str, Any]) -> dict[s
         "replayEnvironment": {
             "CCACHE_DISABLE": "1",
             "CCACHE_DIR": ".ccache",
-            "MIZUCHI_VERIFY_TIMEOUT": "optional seconds override for package-local VERIFY.py",
+            "RECONKIT_VERIFY_TIMEOUT": "optional seconds override for package-local VERIFY.py",
         },
         "proofEntrypoints": {
             "fullPackage": ["make verify", "./VERIFY.sh", "python3 VERIFY.py"],
@@ -4111,7 +4111,7 @@ def write_package_readme(out_dir: Path, receipt: dict[str, Any], claims: dict[st
         "- `CLAIMS.json`: compact machine-readable proof contract.",
         "- `CONTENT_MANIFEST.json`: stable content identity for source content.",
         "- `PACKAGE_PROOF.json`: aggregate package-local proof summary.",
-        "- `PROOF_COMMANDS.sh`: local proof entrypoint; set `MIZUCHI_WORKSPACE` to run strict validation and bundle replay.",
+        "- `PROOF_COMMANDS.sh`: local proof entrypoint; set `RECONKIT_WORKSPACE` to run strict validation and bundle replay.",
         "- `PROOF_COMMANDS.json`: machine-readable proof entrypoint, prerequisite, and expected-success inventory.",
         "- `ONE_SHOT_RECONSTRUCTION_REQUEST.json`: canonical machine-readable one-shot source request.",
         "- `ONE_SHOT_RECONSTRUCTION_BUNDLE.json`: self-contained machine-readable request bundle with embedded prompt text and response contract.",
@@ -4177,7 +4177,7 @@ def write_package_readme(out_dir: Path, receipt: dict[str, Any], claims: dict[st
         "",
         "The custom command is recorded in `candidate-build.env` as `CANDIDATE_BUILD_COMMAND` and remains subject to the task-local byte comparison gate.",
         "",
-        "From the Mizuchi workspace, validate the full complete-mode package with:",
+        "From the ReconstructKit workspace, validate the full complete-mode package with:",
         "",
         "```sh",
         "./scripts/decomp-cli.sh one-shot-source-validate --package path/to/one-shot-source --require-complete",
@@ -4192,7 +4192,7 @@ def write_package_readme(out_dir: Path, receipt: dict[str, Any], claims: dict[st
         "Or run the packaged proof helper:",
         "",
         "```sh",
-        "MIZUCHI_WORKSPACE=/path/to/Mizuchi ./PROOF_COMMANDS.sh",
+        "RECONKIT_WORKSPACE=/path/to/ReconstructKit ./PROOF_COMMANDS.sh",
         "```",
         "",
         "## Not proven",
@@ -4216,7 +4216,7 @@ def shell_single_quote(value: object) -> str:
 
 def write_standalone_verifier(out_dir: Path, receipt: dict[str, Any]) -> None:
     py_script = r'''#!/usr/bin/env python3
-"""Standalone verifier for a Mizuchi one-shot source package."""
+"""Standalone verifier for a ReconstructKit one-shot source package."""
 
 from __future__ import annotations
 
@@ -4229,7 +4229,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
-VERIFY_TIMEOUT = int(os.environ.get("MIZUCHI_VERIFY_TIMEOUT", "60"))
+    VERIFY_TIMEOUT = int(os.environ.get("RECONKIT_VERIFY_TIMEOUT", os.environ.get("RECONKIT_VERIFY_TIMEOUT", "60")))
 
 
 def sha256_file(path: Path) -> str:
@@ -4251,14 +4251,14 @@ def read_json(path: Path) -> dict:
 def expected_json_replay_report_shapes() -> dict:
     return {
         "preflight": {
-            "schema": "mizuchi.one-shot-source-reconstruction-json-preflight.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-json-preflight.v1",
             "buildOverrideCount": "number of response candidate paths with build overrides",
             "buildOverridePaths": ["all response candidate paths with build overrides"],
             "buildOverrideExpectedPaths": ["expected candidate paths with build overrides"],
             "buildOverrideExtraPaths": ["extra candidate paths with build overrides"],
         },
         "import": {
-            "schema": "mizuchi.one-shot-source-reconstruction-json-import.v1",
+            "schema": "reconkit.one-shot-source-reconstruction-json-import.v1",
             "buildOverrideCount": "number of response candidate paths with build overrides, including extras",
             "buildOverridePaths": ["all response candidate paths with build overrides"],
             "buildOverrideExpectedPaths": ["importable expected candidate paths with build overrides"],
@@ -4467,7 +4467,7 @@ def verify_verified_source_candidates() -> None:
 def verify_source_roles() -> None:
     roles_doc = read_json(ROOT / "SOURCE_ROLES.json")
     receipt = read_json(ROOT / "one-shot-source-receipt.json")
-    if roles_doc.get("schema") != "mizuchi.one-shot-source-roles.v1":
+    if roles_doc.get("schema") != "reconkit.one-shot-source-roles.v1":
         raise SystemExit("SOURCE_ROLES.json schema mismatch")
     if roles_doc.get("status") != receipt.get("status"):
         raise SystemExit("SOURCE_ROLES.json status mismatch")
@@ -4502,7 +4502,7 @@ def verify_source_roles() -> None:
 def verify_binary_evidence() -> None:
     evidence = read_json(ROOT / "BINARY_EVIDENCE.json")
     receipt = read_json(ROOT / "one-shot-source-receipt.json")
-    if evidence.get("schema") != "mizuchi.one-shot-source-binary-evidence.v1":
+    if evidence.get("schema") != "reconkit.one-shot-source-binary-evidence.v1":
         raise SystemExit("BINARY_EVIDENCE.json schema mismatch")
     if evidence.get("status") != "recorded":
         raise SystemExit("BINARY_EVIDENCE.json status mismatch")
@@ -4523,7 +4523,7 @@ def verify_binary_evidence() -> None:
 
 def verify_function_boundary_candidates() -> None:
     candidates_doc = read_json(ROOT / "FUNCTION_BOUNDARY_CANDIDATES.json")
-    if candidates_doc.get("schema") != "mizuchi.one-shot-source-function-boundary-candidates.v1":
+    if candidates_doc.get("schema") != "reconkit.one-shot-source-function-boundary-candidates.v1":
         raise SystemExit("FUNCTION_BOUNDARY_CANDIDATES.json schema mismatch")
     if candidates_doc.get("status") not in ("hints-present", "absent"):
         raise SystemExit("FUNCTION_BOUNDARY_CANDIDATES.json status mismatch")
@@ -4545,7 +4545,7 @@ def verify_function_boundary_candidates() -> None:
 
 def verify_function_byte_slices() -> None:
     slices_doc = read_json(ROOT / "FUNCTION_BYTE_SLICES.json")
-    if slices_doc.get("schema") != "mizuchi.one-shot-source-function-byte-slices.v1":
+    if slices_doc.get("schema") != "reconkit.one-shot-source-function-byte-slices.v1":
         raise SystemExit("FUNCTION_BYTE_SLICES.json schema mismatch")
     if slices_doc.get("status") not in ("slices-present", "absent"):
         raise SystemExit("FUNCTION_BYTE_SLICES.json status mismatch")
@@ -4578,7 +4578,7 @@ def verify_function_byte_slices() -> None:
 
 def verify_function_slice_sources() -> None:
     sources_doc = read_json(ROOT / "FUNCTION_SLICE_SOURCES.json")
-    if sources_doc.get("schema") != "mizuchi.one-shot-source-function-slice-sources.v1":
+    if sources_doc.get("schema") != "reconkit.one-shot-source-function-slice-sources.v1":
         raise SystemExit("FUNCTION_SLICE_SOURCES.json schema mismatch")
     if sources_doc.get("status") not in ("sources-present", "absent"):
         raise SystemExit("FUNCTION_SLICE_SOURCES.json status mismatch")
@@ -4608,7 +4608,7 @@ def verify_function_slice_sources() -> None:
 
 def verify_function_reconstruction_tasks() -> None:
     tasks_doc = read_json(ROOT / "FUNCTION_RECONSTRUCTION_TASKS.json")
-    if tasks_doc.get("schema") != "mizuchi.one-shot-source-function-reconstruction-tasks.v1":
+    if tasks_doc.get("schema") != "reconkit.one-shot-source-function-reconstruction-tasks.v1":
         raise SystemExit("FUNCTION_RECONSTRUCTION_TASKS.json schema mismatch")
     if tasks_doc.get("status") not in ("tasks-present", "absent"):
         raise SystemExit("FUNCTION_RECONSTRUCTION_TASKS.json status mismatch")
@@ -4651,7 +4651,7 @@ def verify_one_shot_response_contract() -> None:
     bundle = read_json(ROOT / "ONE_SHOT_RECONSTRUCTION_BUNDLE.json")
     tasks = read_json(ROOT / "FUNCTION_RECONSTRUCTION_TASKS.json")
     task_rows = tasks.get("tasks")
-    if template.get("schema") != "mizuchi.one-shot-source-reconstruction-response-template.v1":
+    if template.get("schema") != "reconkit.one-shot-source-reconstruction-response-template.v1":
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json schema mismatch")
     if template.get("status") != "empty-template":
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json status mismatch")
@@ -4665,12 +4665,12 @@ def verify_one_shot_response_contract() -> None:
     if template_paths != expected_paths:
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json expected candidate paths mismatch")
     response_shape = template.get("jsonResponseShape")
-    if not isinstance(response_shape, dict) or response_shape.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+    if not isinstance(response_shape, dict) or response_shape.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json JSON response shape mismatch")
     if "candidates" in response_shape or not isinstance(response_shape.get("files"), dict):
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json JSON response shape must use files only")
     structured_shape = template.get("jsonStructuredResponseShape")
-    if not isinstance(structured_shape, dict) or structured_shape.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+    if not isinstance(structured_shape, dict) or structured_shape.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json structured JSON response shape mismatch")
     structured_candidates = structured_shape.get("candidates")
     if not isinstance(structured_candidates, list) or not structured_candidates:
@@ -4680,10 +4680,10 @@ def verify_one_shot_response_contract() -> None:
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json structured JSON response build command mismatch")
     if template.get("jsonReplayReportShapes") != expected_json_replay_report_shapes():
         raise SystemExit("RECONSTRUCTION_RESPONSE_TEMPLATE.json JSON replay report shapes mismatch")
-    if request.get("schema") != "mizuchi.one-shot-source-reconstruction-request.v1":
+    if request.get("schema") != "reconkit.one-shot-source-reconstruction-request.v1":
         raise SystemExit("ONE_SHOT_RECONSTRUCTION_REQUEST.json schema mismatch")
     preferred = request.get("preferredResponse")
-    if not isinstance(preferred, dict) or preferred.get("schema") != "mizuchi.one-shot-source-reconstruction-response.v1":
+    if not isinstance(preferred, dict) or preferred.get("schema") != "reconkit.one-shot-source-reconstruction-response.v1":
         raise SystemExit("ONE_SHOT_RECONSTRUCTION_REQUEST.json preferred response mismatch")
     if preferred.get("structuredShape") != structured_shape:
         raise SystemExit("ONE_SHOT_RECONSTRUCTION_REQUEST.json structured preferred response mismatch")
@@ -4710,7 +4710,7 @@ def verify_semantic_readiness() -> None:
     function_slice_sources = read_json(ROOT / "FUNCTION_SLICE_SOURCES.json")
     reconstruction_tasks = read_json(ROOT / "FUNCTION_RECONSTRUCTION_TASKS.json")
     receipt = read_json(ROOT / "one-shot-source-receipt.json")
-    if readiness.get("schema") != "mizuchi.one-shot-source-semantic-readiness.v1":
+    if readiness.get("schema") != "reconkit.one-shot-source-semantic-readiness.v1":
         raise SystemExit("SEMANTIC_READINESS.json schema mismatch")
     expected_status = "ready" if int(receipt.get("semanticSourceBundlesVerified") or 0) > 0 else "not-ready"
     if readiness.get("status") != expected_status:
@@ -4758,7 +4758,7 @@ def verify_authority_summary() -> None:
     candidates = read_json(ROOT / "VERIFIED_SOURCE_CANDIDATES.json")
     proof = read_json(ROOT / "PACKAGE_PROOF.json")
     expected = {
-        "schema": "mizuchi.one-shot-source-authority-summary.v1",
+        "schema": "reconkit.one-shot-source-authority-summary.v1",
         "status": claims.get("status"),
         "authorityClass": claims.get("authorityClass"),
         "accuracyClass": claims.get("accuracyClass"),
@@ -4778,7 +4778,7 @@ def verify_authority_summary() -> None:
 def verify_proof_commands() -> None:
     metadata = read_json(ROOT / "PROOF_COMMANDS.json")
     claims = read_json(ROOT / "CLAIMS.json")
-    if metadata.get("schema") != "mizuchi.one-shot-source-proof-commands.v1":
+    if metadata.get("schema") != "reconkit.one-shot-source-proof-commands.v1":
         raise SystemExit("PROOF_COMMANDS.json schema mismatch")
     if metadata.get("status") != claims.get("status"):
         raise SystemExit("PROOF_COMMANDS.json status mismatch")
@@ -4793,8 +4793,8 @@ def verify_proof_commands() -> None:
     prerequisites = metadata.get("prerequisites")
     expected_prerequisites = {
         "packageLocal": ["python3", "gcc", "objcopy"],
-        "workspaceReplay": ["MIZUCHI_WORKSPACE", "scripts/decomp-cli.sh"],
-        "optionalOverrides": ["MIZUCHI_ARCHIVE_PATH", "MIZUCHI_BUNDLE_PATH"],
+        "workspaceReplay": ["RECONKIT_WORKSPACE", "scripts/decomp-cli.sh"],
+        "optionalOverrides": ["RECONKIT_ARCHIVE_PATH", "RECONKIT_BUNDLE_PATH"],
     }
     if prerequisites != expected_prerequisites:
         raise SystemExit("PROOF_COMMANDS.json prerequisites mismatch")
@@ -4894,7 +4894,7 @@ def main() -> int:
     proc = run(["gcc", "-x", "assembler-with-cpp", "-c", "full-binary.S", "-o", asm_obj.name])
     if proc.returncode != 0:
         raise SystemExit(proc.stderr or proc.stdout or "assembler compile failed")
-    proc = run(["objcopy", "-O", "binary", "-j", ".mizuchi_image", asm_obj.name, asm_bin.name])
+    proc = run(["objcopy", "-O", "binary", "-j", ".reconkit_image", asm_obj.name, asm_bin.name])
     if proc.returncode != 0:
         raise SystemExit(proc.stderr or proc.stdout or "objcopy failed")
     require_hash(asm_bin, expected_binary)
@@ -5011,7 +5011,7 @@ if __name__ == "__main__":
             "require_hash original.bin \"$EXPECTED_BINARY_SHA\"",
             "",
             "gcc -x assembler-with-cpp -c full-binary.S -o verify-standalone-asm.o",
-            "objcopy -O binary -j .mizuchi_image verify-standalone-asm.o verify-standalone-asm.bin",
+            "objcopy -O binary -j .reconkit_image verify-standalone-asm.o verify-standalone-asm.bin",
             "require_hash verify-standalone-asm.bin \"$EXPECTED_BINARY_SHA\"",
             "",
             "gcc -O2 full-binary.c -o verify-standalone-c-emitter",
@@ -5049,7 +5049,7 @@ def write_makefile(out_dir: Path, receipt: dict[str, Any]) -> None:
             "",
             "verify-standalone-asm.bin: full-binary.S",
             "\tgcc -x assembler-with-cpp -c full-binary.S -o verify-standalone-asm.o",
-            "\tobjcopy -O binary -j .mizuchi_image verify-standalone-asm.o verify-standalone-asm.bin",
+            "\tobjcopy -O binary -j .reconkit_image verify-standalone-asm.o verify-standalone-asm.bin",
             "",
             "c: verify-standalone-c.bin",
             "",
@@ -5203,7 +5203,7 @@ def create_deliverable_bundle(out_dir: Path, archive_path: Path, receipt_dir: Pa
                 }
             )
     bundle_manifest = {
-        "schema": "mizuchi.one-shot-source-deliverable-bundle-manifest.v1",
+        "schema": "reconkit.one-shot-source-deliverable-bundle-manifest.v1",
         "layout": {
             "archive": archive_member_path,
             "receipts": f"{root_name}/receipts/",
@@ -5255,7 +5255,7 @@ def create_deliverable_bundle(out_dir: Path, archive_path: Path, receipt_dir: Pa
 
 
 def verify_archive(archive_path: Path, package_name: str, timeout: int) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="mizuchi-one-shot-archive-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="reconkit-one-shot-archive-") as tmp:
         tmp_dir = Path(tmp)
         try:
             with tarfile.open(archive_path, "r:gz") as archive:
@@ -5317,12 +5317,12 @@ def write_c_source_roundtrip(out_dir: Path, binary: Path, timeout: int) -> dict[
             "#include <stdio.h>",
             "#include <stdint.h>",
             "",
-            f"static const uint8_t mizuchi_image[{len(data)}] = {{",
+            f"static const uint8_t reconkit_image[{len(data)}] = {{",
             c_byte_literal(data),
             "};",
             "",
             "int main(void) {",
-            "    return fwrite(mizuchi_image, 1, sizeof(mizuchi_image), stdout) == sizeof(mizuchi_image) ? 0 : 1;",
+            "    return fwrite(reconkit_image, 1, sizeof(reconkit_image), stdout) == sizeof(reconkit_image) ? 0 : 1;",
             "}",
             "",
         ]
@@ -5338,7 +5338,7 @@ def write_c_source_roundtrip(out_dir: Path, binary: Path, timeout: int) -> dict[
         )
     except subprocess.TimeoutExpired:
         report = {
-            "schema": "mizuchi.c-source-roundtrip.v1",
+            "schema": "reconkit.c-source-roundtrip.v1",
             "source": str(source_path),
             "status": "failed",
             "byteIdentical": False,
@@ -5365,7 +5365,7 @@ def write_c_source_roundtrip(out_dir: Path, binary: Path, timeout: int) -> dict[
     emitted_sha = sha256_file(emitted_path) if emitted_path.exists() else ""
     byte_identical = compile_proc.returncode == 0 and run_proc.returncode == 0 and emitted_sha == original_sha
     report = {
-        "schema": "mizuchi.c-source-roundtrip.v1",
+        "schema": "reconkit.c-source-roundtrip.v1",
         "source": str(source_path),
         "sourceSha256": sha256_file(source_path),
         "emitter": str(emitter_path),
@@ -5443,7 +5443,7 @@ def write_supplied_candidate_roundtrip(
             )
         except subprocess.TimeoutExpired:
             report = {
-                "schema": "mizuchi.supplied-source-candidate-roundtrip.v1",
+                "schema": "reconkit.supplied-source-candidate-roundtrip.v1",
                 "source": str(packaged_source) if candidate_source is not None else None,
                 "sourceDir": str(packaged_source_dir) if candidate_source_dir is not None else None,
                 "status": "failed",
@@ -5471,7 +5471,7 @@ def write_supplied_candidate_roundtrip(
             )
         except subprocess.TimeoutExpired:
             report = {
-                "schema": "mizuchi.supplied-source-candidate-roundtrip.v1",
+                "schema": "reconkit.supplied-source-candidate-roundtrip.v1",
                 "source": str(packaged_source),
                 "sourceDir": None,
                 "status": "failed",
@@ -5502,7 +5502,7 @@ def write_supplied_candidate_roundtrip(
     emitted_sha = sha256_file(emitted_path) if emitted_path.exists() else ""
     byte_identical = compile_proc.returncode == 0 and run_proc.returncode == 0 and emitted_sha == original_sha
     report = {
-        "schema": "mizuchi.supplied-source-candidate-roundtrip.v1",
+        "schema": "reconkit.supplied-source-candidate-roundtrip.v1",
         "source": str(packaged_source) if candidate_source is not None else None,
         "sourceSha256": sha256_file(packaged_source) if candidate_source is not None else None,
         "sourceDir": str(packaged_source_dir) if candidate_source_dir is not None else None,
@@ -5592,7 +5592,7 @@ def write_receipt(
         },
     }
     receipt = {
-        "schema": "mizuchi.one-shot-source-receipt.v1",
+        "schema": "reconkit.one-shot-source-receipt.v1",
         "generatedAt": _datetime.datetime.now(_datetime.UTC).isoformat(),
         "binary": str(binary),
         "status": "authoritative" if byte_authoritative else "incomplete",
@@ -5972,7 +5972,7 @@ def main() -> int:
             json.loads(args.response_proof_out.read_text())
             if args.response_proof_out.exists()
             else {
-                "schema": "mizuchi.one-shot-source-byte-accurate-response-proof.v1",
+                "schema": "reconkit.one-shot-source-byte-accurate-response-proof.v1",
                 "status": "failed",
                 "ok": False,
             }
@@ -5994,11 +5994,11 @@ def main() -> int:
         if archive_with_paths is not None and archive_path is not None:
             archive_with_paths["relativePath"] = relpath_or_none(archive_path, deliverable_base)
         deliverable = {
-            "schema": "mizuchi.one-shot-source-deliverable.v1",
+            "schema": "reconkit.one-shot-source-deliverable.v1",
             "status": "authoritative" if receipt["status"] == "authoritative" and standalone["ok"] and archive_ok else "failed",
             "deliverablePhase": "pre-bundle-index",
             "authoritySummary": {
-                "schema": "mizuchi.one-shot-source-authority-summary.v1",
+                "schema": "reconkit.one-shot-source-authority-summary.v1",
                 "status": receipt.get("status"),
                 "authorityClass": receipt.get("authorityClass"),
                 "accuracyClass": receipt.get("accuracyClass"),

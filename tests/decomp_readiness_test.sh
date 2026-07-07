@@ -122,7 +122,7 @@ summary_json="$(PATH="$fake_bin:$PATH" "$SCRIPT" --all --prompts-dir "$prompts_d
 summary_rc=$?
 set -e
 [[ "$summary_rc" -eq 1 ]]
-jq -e '.schema == "mizuchi.decomp-readiness-summary.v1"' <<<"$summary_json" >/dev/null
+jq -e '.schema == "reconkit.decomp-readiness-summary.v1"' <<<"$summary_json" >/dev/null
 jq -e '.status == "not-ready" and .total == 2 and .ready == 1 and .notReady == 1' <<<"$summary_json" >/dev/null
 jq -e '.blockerSummary | has("case.yaml status is blocked: fixture blocker")' <<<"$summary_json" >/dev/null
 

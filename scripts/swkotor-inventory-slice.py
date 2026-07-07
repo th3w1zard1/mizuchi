@@ -98,7 +98,7 @@ def main() -> int:
         raise SystemExit("assembled target .text does not match inventory bytes")
 
     meta = {
-        "schema": "mizuchi.swkotor-inventory-slice.v1",
+        "schema": "reconkit.swkotor-inventory-slice.v1",
         "inventory": str(args.inventory),
         "name": record.get("name"),
         "entry": record.get("entry"),

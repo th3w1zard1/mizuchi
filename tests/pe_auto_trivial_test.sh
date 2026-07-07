@@ -26,7 +26,7 @@ fast_report="$("$ROOT/scripts/pe-auto-trivial.py" \
   --max-size 24 \
   --pe-rebuild-mode never)"
 
-printf '%s\n' "$report" | jq -e '.schema == "mizuchi.pe-auto-trivial.v1"' >/dev/null
+printf '%s\n' "$report" | jq -e '.schema == "reconkit.pe-auto-trivial.v1"' >/dev/null
 printf '%s\n' "$report" | jq -e '.architecture == "i386"' >/dev/null
 printf '%s\n' "$report" | jq -e '.compilerArchFlags == ["-m32"]' >/dev/null
 printf '%s\n' "$report" | jq -e '.matchedCount >= 3' >/dev/null
@@ -49,7 +49,7 @@ MATCH_DIR="$(printf '%s\n' "$report" | jq -r --arg sym "$SYMBOL" '.matches[] | s
 [[ -f "$MATCH_DIR/target.bin" ]]
 [[ -f "$MATCH_DIR/verify.json" ]]
 jq -e '.byteIdentical == true' "$MATCH_DIR/verify.json" >/dev/null
-jq -e '.schema == "mizuchi.pe-export-slice-verify.v1"' "$MATCH_DIR/verify.json" >/dev/null
+jq -e '.schema == "reconkit.pe-export-slice-verify.v1"' "$MATCH_DIR/verify.json" >/dev/null
 jq -e '.candidateObjectFormat == "coff"' "$MATCH_DIR/verify.json" >/dev/null
 AGG_DIR="$TMP_DIR/functions/source-roundtrip"
 [[ -f "$AGG_DIR/exports.S" ]]

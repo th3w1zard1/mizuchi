@@ -26,7 +26,7 @@ cat >"$PROMPT/prompt.md" <<'MD'
 MD
 
 set +e
-PATH="/usr/bin:/bin" MIZUCHI_IMAGE="localhost/mizuchi-missing:never" "$SCRIPT" --prompt "$PROMPT" >"$TMP_DIR/manual.out" 2>"$TMP_DIR/manual.err"
+PATH="/usr/bin:/bin" RECONKIT_IMAGE="localhost/reconkit-missing:never" "$SCRIPT" --prompt "$PROMPT" >"$TMP_DIR/manual.out" 2>"$TMP_DIR/manual.err"
 manual_rc=$?
 set -e
 [[ "$manual_rc" -eq 3 ]] || {
@@ -34,54 +34,54 @@ set -e
   cat "$TMP_DIR/manual.err" >&2 || true
   exit 1
 }
-grep -q "No mizuchi runner found" "$TMP_DIR/manual.err"
+grep -q "No reconkit runner found" "$TMP_DIR/manual.err"
 jq -e '
-  .schema == "mizuchi.ai-phase.v1" and
+  .schema == "reconkit.ai-phase.v1" and
   .status == "manual-required" and
   .exitCode == 3 and
   .runner == "cursor-native" and
-  .reason == "no mizuchi runner found" and
+  .reason == "no reconkit runner found" and
   .anthropicApiKeyPresent == false
 ' "$PROMPT/build/ai-phase.json" >/dev/null
 
 mkdir -p "$TMP_DIR/bin"
-cat >"$TMP_DIR/bin/mizuchi" <<'SH'
+cat >"$TMP_DIR/bin/reconkit" <<'SH'
 #!/usr/bin/env bash
 [[ "$1" == "run" && "$2" == "--config" ]] || exit 2
 exit 0
 SH
-chmod +x "$TMP_DIR/bin/mizuchi"
+chmod +x "$TMP_DIR/bin/reconkit"
 PATH="$TMP_DIR/bin:/usr/bin:/bin" "$SCRIPT" --prompt "$PROMPT" >"$TMP_DIR/native.out" 2>"$TMP_DIR/native.err"
-grep -q "AI phase via native mizuchi run" "$TMP_DIR/native.err"
+grep -q "AI phase via native reconkit run" "$TMP_DIR/native.err"
 jq -e '
-  .schema == "mizuchi.ai-phase.v1" and
+  .schema == "reconkit.ai-phase.v1" and
   .status == "matched" and
   .exitCode == 0 and
-  .runner == "native-mizuchi" and
-  .reason == "mizuchi run completed with objdiff 0"
+  .runner == "native-reconkit" and
+  .reason == "reconkit run completed with objdiff 0"
 ' "$PROMPT/build/ai-phase.json" >/dev/null
 
-cat >"$TMP_DIR/bin/mizuchi" <<'SH'
+cat >"$TMP_DIR/bin/reconkit" <<'SH'
 #!/usr/bin/env bash
 [[ "$1" == "run" && "$2" == "--config" ]] || exit 2
 exit 7
 SH
-chmod +x "$TMP_DIR/bin/mizuchi"
+chmod +x "$TMP_DIR/bin/reconkit"
 set +e
 PATH="$TMP_DIR/bin:/usr/bin:/bin" "$SCRIPT" --prompt "$PROMPT" >"$TMP_DIR/native-fail.out" 2>"$TMP_DIR/native-fail.err"
 native_fail_rc=$?
 set -e
 [[ "$native_fail_rc" -eq 7 ]] || {
-  echo "expected native mizuchi failure exit 7, got $native_fail_rc" >&2
+  echo "expected native reconkit failure exit 7, got $native_fail_rc" >&2
   cat "$TMP_DIR/native-fail.err" >&2 || true
   exit 1
 }
 jq -e '
-  .schema == "mizuchi.ai-phase.v1" and
+  .schema == "reconkit.ai-phase.v1" and
   .status == "failed" and
   .exitCode == 7 and
-  .runner == "native-mizuchi" and
-  .reason == "mizuchi run failed"
+  .runner == "native-reconkit" and
+  .reason == "reconkit run failed"
 ' "$PROMPT/build/ai-phase.json" >/dev/null
 
 MATCH_PROMPT="$TMP_DIR/prompts/match_fn"
@@ -127,12 +127,12 @@ int match_fn(int value) {
 ```
 TXT
 PATH="/usr/bin:/bin" \
-  MIZUCHI_IMAGE="localhost/mizuchi-missing:never" \
-  MIZUCHI_MATCHER_COMMAND="cp '$TMP_DIR/matcher-response.txt' '{{responseFile}}'" \
+  RECONKIT_IMAGE="localhost/reconkit-missing:never" \
+  RECONKIT_MATCHER_COMMAND="cp '$TMP_DIR/matcher-response.txt' '{{responseFile}}'" \
   "$SCRIPT" --prompt "$MATCH_PROMPT" >"$TMP_DIR/matcher.out" 2>"$TMP_DIR/matcher.err"
 grep -q "AI phase via one-shot matcher command" "$TMP_DIR/matcher.err"
 jq -e '
-  .schema == "mizuchi.ai-phase.v1" and
+  .schema == "reconkit.ai-phase.v1" and
   .status == "matched" and
   .exitCode == 0 and
   .runner == "one-shot-matcher" and
@@ -172,7 +172,7 @@ set -e
   exit 1
 }
 jq -e '
-  .schema == "mizuchi.ai-phase.v1" and
+  .schema == "reconkit.ai-phase.v1" and
   .status == "blocked" and
   .exitCode == 3 and
   .reason == "fixture blocked"

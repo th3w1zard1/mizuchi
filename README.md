@@ -1,16 +1,16 @@
-# Mizuchi workspace
+# ReconstructKit workspace
 
 Cursor workspace for **matching decompilation** on reverse-engineered game binaries (KOTOR / Odyssey). The goal is C that recompiles to **byte-identical** object code — verified with **objdiff 0 differences**, not readable pseudocode alone.
 
 ## Quick start
 
 0. Install/run the package entry point directly:
-   - `uvx --from git+https://<repo_url> mizuchi-cli <folder-or-binary>`
-   - Local checkout equivalent: `uvx --from . mizuchi-cli <folder-or-binary>`
-   - Check install/package assets: `uvx --from . mizuchi-cli self-check --json`
-   - See upstream surface mapping: `uvx --from . mizuchi-cli upstream-status`
+   - `uvx --from git+https://<repo_url> reconkit-cli <folder-or-binary>`
+   - Local checkout equivalent: `uvx --from . reconkit-cli <folder-or-binary>`
+   - Check install/package assets: `uvx --from . reconkit-cli self-check --json`
+   - See upstream surface mapping: `uvx --from . reconkit-cli upstream-status`
    - This runs the generic recovery orchestrator with byte-authority packaging enabled, source-task generation enabled, and the upstream-style plugin synthesis engine selected by default.
-   - Outputs land under `target/mizuchi-cli/<target-id>/`: `report.json`, `byte-authority/`, `source-generation/`, `source-synthesis/`, and run-root `recovered-source/` when verified source slices exist.
+   - Outputs land under `target/reconkit-cli/<target-id>/`: `report.json`, `byte-authority/`, `source-generation/`, `source-synthesis/`, and run-root `recovered-source/` when verified source slices exist.
    - Use `--stop-after plan-strategy` for a quick planning/package-setup pass, `--source-synthesis none` to skip compiler/object gates, or `--source-synthesis msvc --source-synthesis-vc-root <vc-root>` for MSVC-gated source matching.
 1. Enable plugin **matching-decompilation-re** in Cursor → Settings → Plugins  
    Path: `~/.cursor/plugins/local/matching-decompilation-re/`
@@ -23,7 +23,7 @@ Cursor workspace for **matching decompilation** on reverse-engineered game binar
    - Compile failures keep the full log and write a capped `build-and-verify.compile.summary.txt`; objdiff results use `scripts/lib/verify-objdiff.sh` so CLI, MCP, and integration gates parse the same proof format.
 6. Generate one fixed one-shot trial from a response or headless runner:
    - `./scripts/decomp-cli.sh matcher fun_00148020 --response-file /tmp/response.txt`
-   - Or set `MIZUCHI_MATCHER_COMMAND='your-runner {{promptFile}} {{responseFile}}'`; `run-ai-phase.sh` will parse `trial.c` and verify it through `build-and-verify.sh`.
+- Or set `RECONKIT_MATCHER_COMMAND='your-runner {{promptFile}} {{responseFile}}'`; `run-ai-phase.sh` will parse `trial.c` and verify it through `build-and-verify.sh`.
 7. Initialize or inspect the autonomous matching queue:
    - `./scripts/decomp-cli.sh import-one-shot-tasks --package target/<app>/one-shot-source --prompts-dir prompts`
    - `./scripts/decomp-cli.sh one-shot-task-coverage --package target/<app>/one-shot-source --prompts-dir prompts --queue state/queue.json`
@@ -52,8 +52,9 @@ Cursor workspace for **matching decompilation** on reverse-engineered game binar
    - `./scripts/decomp-cli.sh recover <folder-or-binary> --stop-after plan-strategy`
    - `./scripts/decomp-cli.sh recover <folder-or-binary> --function-facts-jsonl target/<app>/function-facts.jsonl --stop-after plan-strategy`
    - `./scripts/decomp-cli.sh recover <folder-or-binary> --snapshot-existing-recovery rev1`
-   - `PYTHONPATH=src python3 -m mizuchi_re.cli inspect <folder-or-binary>`
-   - This is the migration path away from hardcoded shell-script orchestration. It records target identity, local capabilities, PE/ELF binary inventory, strategy lanes, resumable state, events, and reports under `target/mizuchi-recover/<target-id>/`.
+   - `./scripts/decomp-cli.sh inspect <folder-or-binary>`
+- Neutral direct module entrypoint is `python3 -m recovery_runtime.cli`; direct access to the compatibility module remains available at `python3 -m reconkit_re.cli`.
+   - This is the migration path away from hardcoded shell-script orchestration. It records target identity, local capabilities, PE/ELF binary inventory, strategy lanes, resumable state, events, and reports under `target/reconkit-recover/<target-id>/`.
    - It automatically queues source-candidate tasks from discovered function boundaries. If machine-generated function facts are supplied, it can emit external source candidates under `source-generation/`; generated candidates remain unverified until compiler and objdiff gates accept them.
    - It never asks the operator to hand-write C/C++ as a recovery input. Missing decompiler/model/programmatic source output is recorded as `needs-automatic-source-generation`, not papered over with manual source.
    - If verified recovery artifacts already exist for the same binary, `--snapshot-existing-recovery rev1` copies them into a labeled backup with a manifest.
@@ -197,13 +198,13 @@ Layered docs under `docs/knowledgebase/`:
 
 Plugin reference: `~/.cursor/plugins/local/matching-decompilation-re/docs/`
 
-## Upstream Mizuchi
+## Upstream ReconstructKit
 
-Full daemon pipeline: [github.com/macabeus/mizuchi](https://github.com/macabeus/mizuchi)
+Full daemon pipeline: [github.com/macabeus/reconkit](https://github.com/macabeus/reconkit)
 
-- `mizuchi.example.yaml` at workspace root (copy to `mizuchi.yaml` in your decomp project)
+- `reconkit.example.yaml` at workspace root (copy to `reconkit.yaml` in your decomp project)
 - Prompt folders: `prompts/<name>/` with `prompt.md` + strict `settings.yaml` (`functionName`, `targetObjectPath`, `asm`)
-- Case metadata: `case.yaml` records proof target, target family, optional local target/candidate sources, and compiler command without violating Mizuchi's strict `settings.yaml`
+- Case metadata: `case.yaml` records proof target, target family, optional local target/candidate sources, and compiler command without violating ReconstructKit's strict `settings.yaml`
 - Example scaffold: `prompts/fun_00148020/` (12-byte Xbox getter from assembly)
 - Local proof fixture: `prompts/roundtrip_identity/` rebuilds target and candidate objects and verifies byte identity on this host
 - AI verification tool: `compile_and_view_assembly`

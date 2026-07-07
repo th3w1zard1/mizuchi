@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$root_dir/scripts/lib/reconkit-config.sh"
+
 usage() {
   cat <<'EOF'
 Usage: ./scripts/decomp-cli.sh <command> [args]
@@ -51,8 +54,7 @@ Commands:
 EOF
 }
 
-root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-prompt_root="${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}"
+prompt_root="$(reconkit_default_prompts_dir "$root_dir")"
 cmd="${1:-}"
 
 json_field() {
@@ -89,7 +91,7 @@ write_decomp_function_report() {
   fi
 
   jq -n \
-    --arg schema "mizuchi.decomp-function.v1" \
+    --arg schema "reconkit.decomp-function.v1" \
     --arg status "$status" \
     --arg prompt "$prompt_name" \
     --arg prompt_dir "$prompt_dir" \
@@ -207,7 +209,7 @@ case "$cmd" in
     prompt_dir="$prompt_root/$prompt_name"
     # Guide pipeline order: phase 1-2 programmatic (get-context -> m2c ->
     # compile/objdiff -> permuter); if that does not reach objdiff 0, fall
-    # through to phase 3 (AI Claude loop). Matches the Macabeus/Mizuchi article.
+    # through to phase 3 (AI Claude loop). Matches the Macabeus/ReconstructKit article.
     if "$root_dir/scripts/run-programmatic-phase.sh" --prompt "$prompt_dir"; then
       write_decomp_function_report "$prompt_dir" "matched" 0 "programmatic"
       exit 0
@@ -263,7 +265,7 @@ case "$cmd" in
     fi
 
     PYTHONPATH="$root_dir/src${PYTHONPATH:+:$PYTHONPATH}" \
-      python3 -m mizuchi_re.cli export-context "$input" "$@"
+      python3 -m recovery_runtime.cli export-context "$input" "$@"
     ;;
   export-context-batch)
     input="${1:-}"
@@ -278,7 +280,7 @@ case "$cmd" in
     fi
 
     PYTHONPATH="$root_dir/src${PYTHONPATH:+:$PYTHONPATH}" \
-      python3 -m mizuchi_re.cli export-context-batch "$input" "$@"
+      python3 -m recovery_runtime.cli export-context-batch "$input" "$@"
     ;;
   commit-verified-match)
     "$root_dir/scripts/commit-verified-match.sh" "$@"
@@ -329,10 +331,10 @@ case "$cmd" in
     "$root_dir/scripts/pe-segmented-code-source-roundtrip.py" "$@"
     ;;
   source-parity-one-shot)
-    PYTHONPATH="$root_dir/src" python3 -m mizuchi_re.source_parity_one_shot "$@"
+    PYTHONPATH="$root_dir/src" python3 -m recovery_runtime.source_parity_one_shot "$@"
     ;;
   recover)
-    PYTHONPATH="$root_dir/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.cli recover "$@"
+    PYTHONPATH="$root_dir/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m recovery_runtime.cli recover "$@"
     ;;
   source-parity-feature-index)
     "$root_dir/scripts/source-parity-feature-index.py" "$@"

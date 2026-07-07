@@ -58,7 +58,7 @@ Current verify snapshot: ${SUMMARY}
 
 Priorities each iteration:
 1. Advance SWKOTOR one-shot coverage toward >=90% verified matched functions (objdiff 0 is the bar for claims).
-2. Keep upstream Mizuchi bridges intact (vacuum, decomp-cli, source-parity-one-shot orchestrator, synthesis).
+2. Keep upstream ReconstructKit bridges intact (vacuum, decomp-cli, source-parity-one-shot orchestrator, synthesis).
 3. Bootstrap Jedi Academy pipeline (discover→inventory→matching) until >=90% verified coverage.
 4. Run highest-leverage stage next: ./scripts/decomp-cli.sh source-parity-one-shot <binary> --resume --stop-after synthesize-candidates OR vacuum start for prompt queue.
 
