@@ -37,6 +37,17 @@ def load_matched(paths: list[Path]) -> dict[tuple[str, str], dict]:
     return matched
 
 
+def load_manifest_matched(paths: list[Path]) -> dict[tuple[str, str], dict]:
+    matched: dict[tuple[str, str], dict] = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        manifest = read_json(path)
+        for row in manifest.get("functions") or []:
+            matched[match_key(row)] = row
+    return matched
+
+
 def has_call_or_jump(data: bytes) -> bool:
     if data.startswith(b"\xe9") or data.startswith(b"\xe8"):
         return True
@@ -93,14 +104,23 @@ def main() -> int:
         "--summary",
         type=Path,
         action="append",
-        default=[
-            ROOT / "target/swkotor-trivial-matches/summary.jsonl",
-            ROOT / "target/swkotor-reloc-wrapper-matches/summary.jsonl",
-        ],
+        default=None,
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        action="append",
+        default=[],
+        help="Recovered-source manifest whose functions should be treated as already verified/exported.",
     )
     args = parser.parse_args()
 
-    matched = load_matched(args.summary)
+    summary_paths = args.summary or [
+        ROOT / "target/swkotor-trivial-matches/summary.jsonl",
+        ROOT / "target/swkotor-reloc-wrapper-matches/summary.jsonl",
+    ]
+    matched = load_matched(summary_paths)
+    matched.update(load_manifest_matched(args.manifest))
     entries = []
     total = 0
     for row in iter_jsonl(args.inventory):

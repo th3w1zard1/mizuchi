@@ -37,7 +37,7 @@ Commands:
   pe-code-roundtrip --package <one-shot-source-dir> --out-dir <dir> [--prompts-dir prompts]
   pe-code-source-roundtrip --binary <game-exe> --out-dir <dir>
   pe-segmented-code-source-roundtrip --binary <game-exe> --package <one-shot-source-dir> --prompts-dir prompts --out-dir <dir>
-  source-parity-one-shot <folder-or-binary> [--resume] [--stop-after <stage>] [--synthesis-limit N] [--synthesis-max-attempts-per-function N] [--synthesis-max-attempts-per-function-policy uniform|adaptive]
+  source-parity-one-shot <folder-or-binary> [--resume] [--stop-after <stage>] [--queue-limit N] [--synthesis-limit N] [--synthesis-max-attempts-per-function N] [--synthesis-max-attempts-per-function-policy uniform|adaptive]
   recover <folder-or-binary> [--resume] [--stop-after <stage>] [--function-analysis auto|none|objdump] [--function-facts-jsonl <facts.jsonl>] [--source-synthesis clang|clang-cl|dry-run|msvc|none] [--source-synthesis-semantic-only] [--source-synthesis-skip-boundary-suspect] [--snapshot-existing-recovery <label>]
   source-parity-feature-index [--out-dir <dir>]
   source-parity-profile-corpus [--max-cases N]

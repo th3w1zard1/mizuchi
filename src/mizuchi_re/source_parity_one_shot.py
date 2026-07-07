@@ -648,12 +648,16 @@ def stage_derive_coverage(profile: ProfileConfig, state: dict[str, Any]) -> None
             or 0
         )
     manifest_path = profile.recovered_dir / "simple_matches.manifest.json"
+    manifest_count = 0
     if manifest_path.exists():
         manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest_count = int(manifest_data.get("functionCount") or len(manifest_data.get("functions") or []))
-        # Do not treat the full export manifest as verified while compile is still partial.
-        if compile_attempted == 0 or compile_attempted >= manifest_count:
+        # Only trust manifest count before compile has run; after compile, compiled rows are authoritative.
+        if compile_attempted == 0:
             verified = max(verified, manifest_count)
+    if compile_attempted > 0 and profile.compile_summary.exists():
+        summary = json.loads(profile.compile_summary.read_text(encoding="utf-8"))
+        verified = int(summary.get("compiled") or verified)
     if verified == 0 and profile.trivial_summary.exists():
         trivial = json.loads(profile.trivial_summary.read_text(encoding="utf-8"))
         verified = int(trivial.get("matchedCount") or trivial.get("matched") or 0)
@@ -684,7 +688,7 @@ def stage_derive_coverage(profile: ProfileConfig, state: dict[str, Any]) -> None
     )
 
 
-def stage_queue(profile: ProfileConfig, state: dict[str, Any]) -> None:
+def stage_queue(profile: ProfileConfig, state: dict[str, Any], *, queue_limit: int = 250) -> None:
     out_dir = profile.queue_jsonl.parent
     args = [
         "--inventory",
@@ -693,13 +697,18 @@ def stage_queue(profile: ProfileConfig, state: dict[str, Any]) -> None:
         str(out_dir),
         "--text-section",
         profile.text_section,
+        "--limit",
+        str(queue_limit),
     ]
     if profile.trivial_out_jsonl.exists():
         args.extend(["--summary", str(profile.trivial_out_jsonl)])
     if profile.reloc_out_jsonl.exists():
         args.extend(["--summary", str(profile.reloc_out_jsonl)])
+    manifest_path = profile.recovered_dir / "simple_matches.manifest.json"
+    if manifest_path.is_file():
+        args.extend(["--manifest", str(manifest_path)])
     result = run_script("swkotor-recovery-queue.py", *args)
-    mark_stage(state, "queue", "complete", returncode=result.returncode)
+    mark_stage(state, "queue", "complete", returncode=result.returncode, queueLimit=queue_limit)
     if result.returncode != 0:
         raise RuntimeError(result.stderr or "queue failed")
 
@@ -794,7 +803,11 @@ def _register_runners() -> None:
             "export-source": lambda ctx: stage_export_source(ctx["profile"], ctx["state"]),
             "compile-source": lambda ctx: stage_compile_source(ctx["profile"], ctx["state"]),
             "derive-coverage": lambda ctx: stage_derive_coverage(ctx["profile"], ctx["state"]),
-            "queue": lambda ctx: stage_queue(ctx["profile"], ctx["state"]),
+            "queue": lambda ctx: stage_queue(
+                ctx["profile"],
+                ctx["state"],
+                queue_limit=int(ctx.get("queue_limit") or 250),
+            ),
             "index-examples": lambda ctx: stage_index_examples(ctx["profile"], ctx["state"]),
             "profile-corpus": lambda ctx: stage_profile_corpus(ctx["profile"], ctx["state"]),
             "synthesize-candidates": lambda ctx: stage_synthesize(
@@ -844,6 +857,7 @@ def run_pipeline(
     synthesis_limit: int = 25,
     synthesis_max_attempts_per_function: int = 0,
     synthesis_max_attempts_per_function_policy: str = "uniform",
+    queue_limit: int = 250,
 ) -> dict[str, Any]:
     _register_runners()
     slug = profile_slug or detect_profile(input_path)
@@ -861,6 +875,7 @@ def run_pipeline(
         "synthesis_limit": synthesis_limit,
         "synthesis_max_attempts_per_function": synthesis_max_attempts_per_function,
         "synthesis_max_attempts_per_function_policy": synthesis_max_attempts_per_function_policy,
+        "queue_limit": queue_limit,
         "force_export_downstream": False,
     }
     stop_idx = stage_index(stop_after) if stop_after else len(STAGES) - 1
@@ -919,21 +934,23 @@ def run_pipeline(
             != synthesis_max_attempts_per_function_policy
         ):
             force_stage = True
+        queue_stage = (state.get("stages") or {}).get("queue") or {}
+        if name == "queue" and int(queue_stage.get("queueLimit") or 0) != int(queue_limit):
+            force_stage = True
         if ctx.get("force_export_downstream") and name in {"compile-source", "derive-coverage"}:
             force_stage = True
         if name == "compile-source":
             if int(export_stage.get("vacuumMatchCount") or 0) > int(compile_stage.get("vacuumMatchCount") or 0):
                 force_stage = True
         if name == "derive-coverage":
-            manifest_path = profile.recovered_dir / "simple_matches.manifest.json"
-            if manifest_path.is_file():
-                manifest_count = int(
-                    json.loads(manifest_path.read_text(encoding="utf-8")).get("functionCount") or 0
-                )
+            if profile.compile_summary.is_file():
+                compiled_now = int(json.loads(profile.compile_summary.read_text(encoding="utf-8")).get("compiled") or 0)
                 derive_stage = (state.get("stages") or {}).get("derive-coverage") or {}
                 coverage_verified = int(derive_stage.get("verifiedMatchedFunctionCount") or 0)
-                if manifest_count > coverage_verified:
+                if compiled_now > coverage_verified:
                     force_stage = True
+            elif ctx.get("force_export_downstream"):
+                force_stage = True
         if not should_run_stage(state, name, resume) and not force_stage:
             continue
         mark_stage(state, name, "running")
@@ -984,6 +1001,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--refresh-prepare", action="store_true")
     parser.add_argument("--synthesis-limit", type=int, default=25)
     parser.add_argument(
+        "--queue-limit",
+        type=int,
+        default=250,
+        help="Maximum recovery-queue rows to generate for synthesis (default 250).",
+    )
+    parser.add_argument(
         "--synthesis-max-attempts-per-function",
         type=int,
         default=0,
@@ -1017,6 +1040,7 @@ def main(argv: list[str] | None = None) -> int:
             synthesis_limit=args.synthesis_limit,
             synthesis_max_attempts_per_function=args.synthesis_max_attempts_per_function,
             synthesis_max_attempts_per_function_policy=args.synthesis_max_attempts_per_function_policy,
+            queue_limit=args.queue_limit,
         )
     except Exception as exc:
         print(f"source-parity-one-shot failed: {exc}", file=sys.stderr)
