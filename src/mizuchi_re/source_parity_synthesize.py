@@ -5240,6 +5240,104 @@ def three_stack_args_commutative_op_stdcall(row: dict[str, Any], c_name: str, da
     ]
 
 
+I386_STACK_OFFSET_ARG: dict[int, str] = {4: "a", 8: "b", 12: "c"}
+
+
+def decode_three_stack_args_mul_add(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x0c\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 13 or core[:3] != b"\x8b\x44\x24" or core[4:8] != b"\x0f\xaf\x44\x24" or core[9:12] != b"\x03\x44\x24":
+        return None
+    mov_offset = core[3]
+    mul_offset = core[8]
+    add_offset = core[12]
+    offsets = {mov_offset, mul_offset, add_offset}
+    if offsets != {4, 8, 12}:
+        return None
+    left = I386_STACK_OFFSET_ARG[mov_offset]
+    right = I386_STACK_OFFSET_ARG[mul_offset]
+    addend = I386_STACK_OFFSET_ARG[add_offset]
+    expression = f"{left} * {right} + {addend}"
+    return {
+        "expression": expression,
+        "multiplyArgs": [left, right],
+        "addArg": addend,
+        "operandOrder": f"mov-{left}-imul-{right}-add-{addend}",
+        "pattern": "mov-eax-stackX-imul-eax-stackY-add-eax-stackZ",
+        "stackBytes": 12 if stdcall else 0,
+    }
+
+
+def three_stack_args_mul_add(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_three_stack_args_mul_add(data, stdcall=False)
+    if decoded is None:
+        return []
+    source = header("three-stack-args-mul-add-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="three-stack-args-mul-add-cdecl",
+            variant=f"cdecl-o2-three-arg-{decoded['operandOrder']}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "*+",
+                "expression": decoded["expression"],
+                "multiplyArgs": decoded["multiplyArgs"],
+                "addArg": decoded["addArg"],
+                "operandOrder": decoded["operandOrder"],
+            },
+        )
+    ]
+
+
+def three_stack_args_mul_add_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_three_stack_args_mul_add(data, stdcall=True)
+    if decoded is None:
+        return []
+    source = header("three-stack-args-mul-add-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="three-stack-args-mul-add-stdcall",
+            variant=f"stdcall12-o2-three-arg-{decoded['operandOrder']}",
+            c_name=c_name,
+            symbol=f"_{c_name}@12",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "*+",
+                "expression": decoded["expression"],
+                "multiplyArgs": decoded["multiplyArgs"],
+                "addArg": decoded["addArg"],
+                "operandOrder": decoded["operandOrder"],
+                "stackBytes": 12,
+            },
+        )
+    ]
+
+
 I386_TWO_STACK_ARG_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str]] = {
     0x42: ("uint-min", "<", "unsigned int", "cmovb"),
     0x47: ("uint-max", ">", "unsigned int", "cmova"),
@@ -18129,6 +18227,8 @@ GENERATORS = [
     two_stack_args_affine_stdcall,
     three_stack_args_commutative_op,
     three_stack_args_commutative_op_stdcall,
+    three_stack_args_mul_add,
+    three_stack_args_mul_add_stdcall,
     two_stack_args_min_max,
     two_stack_args_min_max_stdcall,
     two_stack_args_unsigned_compare,

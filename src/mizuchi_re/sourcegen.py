@@ -1794,6 +1794,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         two_stack_args_affine_stdcall_candidate,
         three_stack_args_commutative_op_candidate,
         three_stack_args_commutative_op_stdcall_candidate,
+        three_stack_args_mul_add_candidate,
+        three_stack_args_mul_add_stdcall_candidate,
         two_stack_args_min_max_candidate,
         two_stack_args_min_max_stdcall_candidate,
         two_stack_args_unsigned_compare_candidate,
@@ -8547,6 +8549,116 @@ def three_stack_args_commutative_op_stdcall_candidate(task: dict[str, Any], data
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             f"stdcall three-argument {suffix} is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+I386_STACK_OFFSET_ARG: dict[int, str] = {4: "a", 8: "b", 12: "c"}
+
+
+def decode_three_stack_args_mul_add(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x0c\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 13 or core[:3] != b"\x8b\x44\x24" or core[4:8] != b"\x0f\xaf\x44\x24" or core[9:12] != b"\x03\x44\x24":
+        return None
+    mov_offset = core[3]
+    mul_offset = core[8]
+    add_offset = core[12]
+    offsets = {mov_offset, mul_offset, add_offset}
+    if offsets != {4, 8, 12}:
+        return None
+    left = I386_STACK_OFFSET_ARG[mov_offset]
+    right = I386_STACK_OFFSET_ARG[mul_offset]
+    addend = I386_STACK_OFFSET_ARG[add_offset]
+    expression = f"{left} * {right} + {addend}"
+    return {
+        "expression": expression,
+        "multiplyArgs": [left, right],
+        "addArg": addend,
+        "operandOrder": f"mov-{left}-imul-{right}-add-{addend}",
+        "pattern": "mov-eax-stackX-imul-eax-stackY-add-eax-stackZ",
+        "stackBytes": 12 if stdcall else 0,
+    }
+
+
+def three_stack_args_mul_add_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_three_stack_args_mul_add(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 three-argument multiply-add pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "three-stack-args-mul-add-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "*+",
+            "expression": decoded["expression"],
+            "multiplyArgs": decoded["multiplyArgs"],
+            "addArg": decoded["addArg"],
+            "operandOrder": decoded["operandOrder"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "three-argument multiply-add is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def three_stack_args_mul_add_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_three_stack_args_mul_add(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall three-argument multiply-add pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "three-stack-args-mul-add-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "*+",
+            "expression": decoded["expression"],
+            "multiplyArgs": decoded["multiplyArgs"],
+            "addArg": decoded["addArg"],
+            "operandOrder": decoded["operandOrder"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 12,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall three-argument multiply-add is a canonical clang i386 O2 leaf pattern"
         ),
     }
 
