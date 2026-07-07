@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .source_export import collect_vacuum_prompt_matches, count_vacuum_matched_prompts
-from .state import atomic_write_json
+from .state import atomic_write_json, read_json
 from .targets import is_pe_binary, resolve_target, sha256_file
 
 ROOT = Path(__file__).resolve().parents[2]

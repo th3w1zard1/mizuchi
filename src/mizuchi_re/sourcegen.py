@@ -1798,6 +1798,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         stack_arg_sdiv_pow2_stdcall_candidate,
         stack_arg_srem_pow2_candidate,
         stack_arg_srem_pow2_stdcall_candidate,
+        stack_arg_udiv_magic_candidate,
+        stack_arg_udiv_magic_stdcall_candidate,
         stack_arg_udiv_pow2_candidate,
         stack_arg_udiv_pow2_stdcall_candidate,
         stack_arg_urem_pow2_candidate,
@@ -8711,6 +8713,122 @@ def stack_arg_srem_pow2_stdcall_candidate(task: dict[str, Any], data: bytes) -> 
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             "stdcall signed stack argument power-of-two remainder is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+I386_STACK_ARG_UDIV_MAGIC_OPS: dict[tuple[int, int], tuple[int, str]] = {
+    (0xAAAAAAAB, 1): (3, "mov-eax-magic-mul-stack4-mov-eax-edx-shr-eax-one"),
+    (0xCCCCCCCD, 2): (5, "mov-eax-magic-mul-stack4-mov-eax-edx-shr-eax-2"),
+    (0xCCCCCCCD, 3): (10, "mov-eax-magic-mul-stack4-mov-eax-edx-shr-eax-3"),
+}
+
+
+def decode_stack_arg_udiv_magic(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) < 13 or core[:1] != b"\xb8" or core[5:11] != b"\xf7\x64\x24\x04\x89\xd0":
+        return None
+    multiplier = int.from_bytes(core[1:5], "little", signed=False)
+    if core[11:13] == b"\xd1\xe8":
+        shift = 1
+        if len(core) != 13:
+            return None
+    elif len(core) == 14 and core[11:13] == b"\xc1\xe8":
+        shift = core[13]
+    else:
+        return None
+    decoded = I386_STACK_ARG_UDIV_MAGIC_OPS.get((multiplier, shift))
+    if decoded is None:
+        return None
+    divisor, pattern = decoded
+    return {
+        "divisor": divisor,
+        "multiplier": multiplier,
+        "shift": shift,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_udiv_magic_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_udiv_magic(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stack-argument unsigned magic-multiply division pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value / {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-udiv-magic-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "/",
+            "divisor": divisor,
+            "multiplier": f"0x{int(decoded['multiplier']):08x}",
+            "shift": int(decoded["shift"]),
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "unsigned stack argument magic-multiply division is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_udiv_magic_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_udiv_magic(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall stack-argument unsigned magic-multiply division pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value / {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-udiv-magic-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "/",
+            "divisor": divisor,
+            "multiplier": f"0x{int(decoded['multiplier']):08x}",
+            "shift": int(decoded["shift"]),
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall unsigned stack argument magic-multiply division is a canonical clang i386 O2 leaf pattern"
         ),
     }
 

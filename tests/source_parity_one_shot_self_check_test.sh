@@ -10,20 +10,22 @@ echo "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get(
 python3 - <<'PY'
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path("src").resolve()))
 from mizuchi_re.source_parity_one_shot import load_state, should_run_stage
 
-state_path = Path("target/source-parity-one-shot/swkotor/state.json")
-if not state_path.exists():
-    print("skip: no swkotor state fixture")
-    sys.exit(0)
-
-state = load_state(state_path)
-stages = state.get("stages", {})
-assert stages.get("match-reloc-wrappers", {}).get("status") == "complete", stages.get("match-reloc-wrappers")
-assert should_run_stage(state, "match-reloc-wrappers", resume=True) is False
+with tempfile.TemporaryDirectory() as td:
+    state_path = Path(td) / "state.json"
+    state_path.write_text(
+        json.dumps({"stages": {"match-reloc": {"status": "complete", "artifact": "legacy"}}}),
+        encoding="utf-8",
+    )
+    state = load_state(state_path)
+    stages = state.get("stages", {})
+    assert stages.get("match-reloc-wrappers", {}).get("status") == "complete", stages.get("match-reloc-wrappers")
+    assert should_run_stage(state, "match-reloc-wrappers", resume=True) is False
 print("legacy stage migration ok")
 PY
 
