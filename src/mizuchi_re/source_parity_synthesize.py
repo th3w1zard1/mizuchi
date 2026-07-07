@@ -3524,6 +3524,51 @@ def x86_64_arg_zero(row: dict[str, Any], c_name: str, data: bytes) -> list[Gener
     ]
 
 
+X86_64_ARG64_ZERO_NONZERO_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x31\xc0\x48\x85\xff\x0f\x95\xc0\xc3": ("nonzero", "!=", "setne"),
+    b"\x31\xc0\x48\x85\xff\x0f\x94\xc0\xc3": ("zero", "==", "sete"),
+}
+
+
+def x86_64_arg64_zero_nonzero(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG64_ZERO_NONZERO_OPS.get(body)
+    if decoded is None:
+        return []
+    suffix, operator, setcc = decoded
+    source = header(f"x86-64-arg64-{suffix}-bool-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(unsigned long long value) {{",
+            f"    return value {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg64-{suffix}-bool-cdecl",
+            variant=f"sysv-o2-arg64-{suffix}-bool",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": f"xor-eax-test-rdi-{setcc}-al-ret",
+                "registerArg": "rdi",
+                "operator": operator,
+                "predicate": f"value {operator} 0",
+                "setcc": setcc,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def x86_64_framed_return_first_arg(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
     body = strip_alignment_padding(data)
     if body != b"\x55\x48\x89\xe5\x89\xf8\x5d\xc3":
@@ -15411,6 +15456,7 @@ GENERATORS = [
     x86_64_arg64_sign_extend,
     x86_64_arg64_rotate,
     x86_64_arg64_shift_imm8,
+    x86_64_arg64_zero_nonzero,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
     byte_field_and_stack_byte,

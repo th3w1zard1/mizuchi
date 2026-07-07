@@ -1756,6 +1756,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_nonzero_const_select_candidate,
         x86_64_arg_nonzero_cmov_const_select_candidate,
         x86_64_arg_mask_candidate,
+        x86_64_arg64_zero_nonzero_candidate,
         x86_64_arg_nonzero_candidate,
         x86_64_arg_zero_candidate,
         x86_64_framed_zero_return_candidate,
@@ -6789,6 +6790,54 @@ def x86_64_arg_zero_candidate(task: dict[str, Any], data: bytes) -> dict[str, An
             "registerArg": "edi",
             "predicate": "value == 0",
             "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG64_ZERO_NONZERO_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x31\xc0\x48\x85\xff\x0f\x95\xc0\xc3": ("nonzero", "!=", "setne"),
+    b"\x31\xc0\x48\x85\xff\x0f\x94\xc0\xc3": ("zero", "==", "sete"),
+}
+
+
+def x86_64_arg64_zero_nonzero_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG64_ZERO_NONZERO_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, operator, setcc = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit argument {suffix} boolean return pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(unsigned long long value) {{",
+            f"    return value {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg64-{suffix}-bool-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "rdi",
+            "operator": operator,
+            "predicate": f"value {operator} 0",
+            "setcc": setcc,
+            "pattern": f"xor-eax-test-rdi-{setcc}-al-ret",
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
         },
         "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
     }
