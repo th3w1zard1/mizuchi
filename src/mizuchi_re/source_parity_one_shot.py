@@ -706,15 +706,26 @@ def stage_synthesize(
     if profile.slug not in {"jedi-academy", "jedi_academy"}:
         args.append("--semantic-only")
     result = run_script("source-parity-synthesize.py", *args)
+    summary = read_json(profile.synthesis_out_dir / "summary.json") if (profile.synthesis_out_dir / "summary.json").is_file() else {}
+    mark_kwargs = {
+        "returncode": result.returncode,
+        "synthesisLimit": limit,
+        "synthesisMaxAttemptsPerFunction": max_attempts_per_function,
+        "synthesisMaxAttemptsPerFunctionPolicy": max_attempts_per_function_policy,
+        "synthesisMatchCount": _synthesis_exportable_count(profile),
+    }
+    if isinstance(summary, dict):
+        if summary.get("attemptLimitPolicy") is not None:
+            mark_kwargs["synthesisAttemptLimitPolicy"] = summary.get("attemptLimitPolicy")
+        if summary.get("attemptLimitDistribution") is not None:
+            mark_kwargs["synthesisAttemptLimitDistribution"] = summary.get("attemptLimitDistribution")
+        if summary.get("attemptLimitReasonDistribution") is not None:
+            mark_kwargs["synthesisAttemptLimitReasonDistribution"] = summary.get("attemptLimitReasonDistribution")
     mark_stage(
         state,
         "synthesize-candidates",
         "complete",
-        returncode=result.returncode,
-        synthesisLimit=limit,
-        synthesisMaxAttemptsPerFunction=max_attempts_per_function,
-        synthesisMaxAttemptsPerFunctionPolicy=max_attempts_per_function_policy,
-        synthesisMatchCount=_synthesis_exportable_count(profile),
+        **mark_kwargs,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr or "synthesize-candidates failed")
