@@ -1728,6 +1728,9 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_three_args_arithmetic_candidate,
         x86_64_three_args_bitwise_candidate,
         x86_64_three_args_select_candidate,
+        x86_64_three_args_arithmetic64_candidate,
+        x86_64_three_args_bitwise64_candidate,
+        x86_64_three_args_select64_candidate,
         x86_64_two_args_affine_lea_candidate,
         x86_64_two_args_binary_op_candidate,
         x86_64_two_args_binary_op64_candidate,
@@ -4758,6 +4761,195 @@ def x86_64_three_args_select_candidate(task: dict[str, Any], data: bytes) -> dic
             "cmov": decoded["cmov"],
             "pattern": decoded["pattern"],
             "registerArgs": ["edi", "esi", "edx"],
+            "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_THREE_ARGS_ARITHMETIC64_PATTERNS: dict[bytes, tuple[str, str, str]] = {
+    b"\x48\x8d\x04\x37\x48\x01\xd0\xc3": ("add-add64", "a + b + c", "lea-rax-rdi-rsi-add-rax-rdx-ret"),
+    b"\x48\x29\xf7\x48\x8d\x04\x17\xc3": ("sub-add64", "a - b + c", "sub-rdi-rsi-lea-rax-rdi-rdx-ret"),
+    b"\x48\x89\xf8\x48\x01\xd6\x48\x29\xf0\xc3": ("sub-sum64", "a - b - c", "mov-rax-rdi-add-rsi-rdx-sub-rax-rsi-ret"),
+    b"\x48\x89\xd0\x48\x01\xf7\x48\x29\xf8\xc3": ("sub-sum-reversed64", "c - (a + b)", "mov-rax-rdx-add-rdi-rsi-sub-rax-rdi-ret"),
+    b"\x48\x0f\xaf\xfe\x48\x8d\x04\x17\xc3": ("mul-add64", "a * b + c", "imul-rdi-rsi-lea-rax-rdi-rdx-ret"),
+    b"\x48\x89\xf8\x48\x0f\xaf\xc6\x48\x29\xd0\xc3": ("mul-sub64", "a * b - c", "mov-rax-rdi-imul-rax-rsi-sub-rax-rdx-ret"),
+    b"\x48\x89\xd0\x48\x0f\xaf\xfe\x48\x29\xf8\xc3": ("sub-mul64", "c - a * b", "mov-rax-rdx-imul-rdi-rsi-sub-rax-rdi-ret"),
+}
+
+
+def decode_x86_64_three_args_arithmetic64(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_THREE_ARGS_ARITHMETIC64_PATTERNS.get(body)
+    if decoded is None:
+        return None
+    suffix, expression, pattern = decoded
+    return {"suffix": suffix, "expression": expression, "pattern": pattern}
+
+
+def x86_64_three_args_arithmetic64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_three_args_arithmetic64(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit three-argument {decoded['suffix']} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long a, unsigned long long b, unsigned long long c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-three-args-arithmetic64-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "expression": decoded["expression"],
+            "pattern": decoded["pattern"],
+            "registerArgs": ["rdi", "rsi", "rdx"],
+            "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_THREE_ARGS_BITWISE64_OPS: dict[bytes, tuple[str, str]] = {
+    b"\x48\x21\xf0": ("and", "&"),
+    b"\x48\x09\xf0": ("or", "|"),
+    b"\x48\x31\xf0": ("xor", "^"),
+}
+
+X86_64_THREE_ARGS_BITWISE64_OPS_SECOND: dict[bytes, tuple[str, str]] = {
+    b"\x48\x21\xd0": ("and", "&"),
+    b"\x48\x09\xd0": ("or", "|"),
+    b"\x48\x31\xd0": ("xor", "^"),
+}
+
+
+def decode_x86_64_three_args_bitwise64(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 10 or body[:3] != b"\x48\x89\xf8" or body[9:] != b"\xc3":
+        return None
+    first = X86_64_THREE_ARGS_BITWISE64_OPS.get(body[3:6])
+    second = X86_64_THREE_ARGS_BITWISE64_OPS_SECOND.get(body[6:9])
+    if first is None or second is None:
+        return None
+    expression = f"(a {first[1]} b) {second[1]} c"
+    return {
+        "suffix": f"{first[0]}-{second[0]}64",
+        "expression": expression,
+        "pattern": f"mov-rax-rdi-{first[0]}-rax-rsi-{second[0]}-rax-rdx-ret",
+    }
+
+
+def x86_64_three_args_bitwise64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_three_args_bitwise64(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit three-argument {decoded['suffix']} bitwise pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long a, unsigned long long b, unsigned long long c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-three-args-bitwise64-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "expression": decoded["expression"],
+            "pattern": decoded["pattern"],
+            "registerArgs": ["rdi", "rsi", "rdx"],
+            "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_THREE_ARGS_SELECT64_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x42\xc7\xc3": ("uint64-select-lt", "unsigned long long", "a < b ? a : c", "cmovb", "mov-rax-rdx-cmp-rdi-rsi-cmovb-rax-rdi-ret"),
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x43\xc7\xc3": ("uint64-select-ge", "unsigned long long", "a < b ? c : a", "cmovae", "mov-rax-rdx-cmp-rdi-rsi-cmovae-rax-rdi-ret"),
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x47\xc7\xc3": ("uint64-select-gt", "unsigned long long", "a > b ? a : c", "cmova", "mov-rax-rdx-cmp-rdi-rsi-cmova-rax-rdi-ret"),
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x46\xc7\xc3": ("uint64-select-le", "unsigned long long", "a > b ? c : a", "cmovbe", "mov-rax-rdx-cmp-rdi-rsi-cmovbe-rax-rdi-ret"),
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x4c\xc7\xc3": ("int64-select-lt", "long long", "a < b ? a : c", "cmovl", "mov-rax-rdx-cmp-rdi-rsi-cmovl-rax-rdi-ret"),
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x4d\xc7\xc3": ("int64-select-ge", "long long", "a < b ? c : a", "cmovge", "mov-rax-rdx-cmp-rdi-rsi-cmovge-rax-rdi-ret"),
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x4f\xc7\xc3": ("int64-select-gt", "long long", "a > b ? a : c", "cmovg", "mov-rax-rdx-cmp-rdi-rsi-cmovg-rax-rdi-ret"),
+    b"\x48\x89\xd0\x48\x39\xf7\x48\x0f\x4e\xc7\xc3": ("int64-select-le", "long long", "a > b ? c : a", "cmovle", "mov-rax-rdx-cmp-rdi-rsi-cmovle-rax-rdi-ret"),
+}
+
+
+def decode_x86_64_three_args_select64(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_THREE_ARGS_SELECT64_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, value_type, expression, cmov, pattern = decoded
+    return {
+        "suffix": suffix,
+        "valueType": value_type,
+        "expression": expression,
+        "cmov": cmov,
+        "pattern": pattern,
+    }
+
+
+def x86_64_three_args_select64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_three_args_select64(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit three-argument {decoded['suffix']} select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{decoded['valueType']} {c_name}({decoded['valueType']} a, {decoded['valueType']} b, {decoded['valueType']} c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-three-args-select64-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "valueType": decoded["valueType"],
+            "expression": decoded["expression"],
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+            "registerArgs": ["rdi", "rsi", "rdx"],
             "framePointer": False,
         },
         "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
