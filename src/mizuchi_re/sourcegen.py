@@ -1724,6 +1724,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_return_first_arg_candidate,
         x86_64_add_two_args_candidate,
         x86_64_two_args_binary_op_candidate,
+        x86_64_two_args_min_max_candidate,
         x86_64_arg_lea_multiply_candidate,
         x86_64_const_minus_arg_candidate,
         x86_64_arg_shift_imm8_candidate,
@@ -4465,6 +4466,56 @@ def x86_64_two_args_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
             "bodyBytes": len(body),
             "registerArgs": ["edi", "esi"],
             "operator": operator,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_TWO_ARG_MIN_MAX_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x89\xf0\x39\xf7\x0f\x42\xc7\xc3": ("uint-min", "<", "unsigned int", "cmovb", "mov-eax-esi-cmp-edi-esi-cmovb-eax-edi-ret"),
+    b"\x89\xf0\x39\xf7\x0f\x47\xc7\xc3": ("uint-max", ">", "unsigned int", "cmova", "mov-eax-esi-cmp-edi-esi-cmova-eax-edi-ret"),
+    b"\x89\xf0\x39\xf7\x0f\x4c\xc7\xc3": ("int-min", "<", "int", "cmovl", "mov-eax-esi-cmp-edi-esi-cmovl-eax-edi-ret"),
+    b"\x89\xf0\x39\xf7\x0f\x4f\xc7\xc3": ("int-max", ">", "int", "cmovg", "mov-eax-esi-cmp-edi-esi-cmovg-eax-edi-ret"),
+}
+
+
+def x86_64_two_args_min_max_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_TWO_ARG_MIN_MAX_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, operator, value_type, cmov, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 two-argument {suffix} cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{value_type} {c_name}({value_type} a, {value_type} b) {{",
+            f"    return a {operator} b ? a : b;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-{suffix}-two-args-cdecl",
+            "bodyBytes": len(body),
+            "registerArgs": ["edi", "esi"],
+            "operator": operator,
+            "valueType": value_type,
+            "cmov": cmov,
             "pattern": pattern,
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),

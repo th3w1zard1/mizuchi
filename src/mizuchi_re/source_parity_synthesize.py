@@ -1331,6 +1331,53 @@ def x86_64_two_args_binary_op(row: dict[str, Any], c_name: str, data: bytes) -> 
     ]
 
 
+X86_64_TWO_ARG_MIN_MAX_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x89\xf0\x39\xf7\x0f\x42\xc7\xc3": ("uint-min", "<", "unsigned int", "cmovb", "mov-eax-esi-cmp-edi-esi-cmovb-eax-edi-ret"),
+    b"\x89\xf0\x39\xf7\x0f\x47\xc7\xc3": ("uint-max", ">", "unsigned int", "cmova", "mov-eax-esi-cmp-edi-esi-cmova-eax-edi-ret"),
+    b"\x89\xf0\x39\xf7\x0f\x4c\xc7\xc3": ("int-min", "<", "int", "cmovl", "mov-eax-esi-cmp-edi-esi-cmovl-eax-edi-ret"),
+    b"\x89\xf0\x39\xf7\x0f\x4f\xc7\xc3": ("int-max", ">", "int", "cmovg", "mov-eax-esi-cmp-edi-esi-cmovg-eax-edi-ret"),
+}
+
+
+def x86_64_two_args_min_max(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_TWO_ARG_MIN_MAX_OPS.get(body)
+    if decoded is None:
+        return []
+    suffix, operator, value_type, cmov, pattern = decoded
+    source = header(f"x86-64-{suffix}-two-args-cdecl", row) + "\n".join(
+        [
+            f"{value_type} {c_name}({value_type} a, {value_type} b) {{",
+            f"    return a {operator} b ? a : b;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-{suffix}-two-args-cdecl",
+            variant=f"sysv-o2-register-args-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=value_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArgs": ["edi", "esi"],
+                "operator": operator,
+                "valueType": value_type,
+                "cmov": cmov,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_LEA_MULTIPLY_OPS: dict[bytes, tuple[int, str]] = {
     b"\x8d\x04\x3f\xc3": (2, "lea-eax-rdi-rdi-ret"),
     b"\x8d\x04\x7f\xc3": (3, "lea-eax-rdi-rdi2-ret"),
@@ -13924,6 +13971,7 @@ GENERATORS = [
     x86_64_return_first_arg,
     x86_64_add_two_args,
     x86_64_two_args_binary_op,
+    x86_64_two_args_min_max,
     x86_64_arg_lea_multiply,
     x86_64_const_minus_arg,
     x86_64_arg_shift_imm8,
