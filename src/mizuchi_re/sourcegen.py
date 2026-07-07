@@ -1739,6 +1739,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_signed_imm8_compare_candidate,
         x86_64_two_args_unsigned_compare_candidate,
         x86_64_two_args_signed_compare_candidate,
+        x86_64_arg_signed_zero_compare_candidate,
         x86_64_arg_nonzero_candidate,
         x86_64_arg_zero_candidate,
         x86_64_framed_zero_return_candidate,
@@ -5499,6 +5500,70 @@ def x86_64_two_args_signed_compare_candidate(task: dict[str, Any], data: bytes) 
             "registerArgs": ["edi", "esi"],
             "operator": operator,
             "setcc": decoded["setcc"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_SIGNED_ZERO_COMPARE_SETCC: dict[int, tuple[str, str, str]] = {
+    0x9E: ("le", "<=", "setle"),
+    0x9F: ("gt", ">", "setg"),
+}
+
+
+def decode_x86_64_arg_signed_zero_compare(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 8 or body[:4] != b"\x31\xc0\x85\xff" or body[4] != 0x0F or body[6:] != b"\xc0\xc3":
+        return None
+    decoded = X86_64_SIGNED_ZERO_COMPARE_SETCC.get(body[5])
+    if decoded is None:
+        return None
+    suffix, operator, setcc = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+        "pattern": "xor-eax-test-edi-edi-setcc-al-ret",
+    }
+
+
+def x86_64_arg_signed_zero_compare_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_signed_zero_compare(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 signed one-argument zero {suffix} comparison pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(int value) {{",
+            f"    return value {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-int-zero-{suffix}-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "operator": operator,
+            "immediate": 0,
+            "setcc": decoded["setcc"],
+            "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
         },

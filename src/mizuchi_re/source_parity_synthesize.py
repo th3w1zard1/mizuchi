@@ -2319,6 +2319,67 @@ def x86_64_two_args_signed_compare(row: dict[str, Any], c_name: str, data: bytes
     ]
 
 
+X86_64_SIGNED_ZERO_COMPARE_SETCC: dict[int, tuple[str, str, str]] = {
+    0x9E: ("le", "<=", "setle"),
+    0x9F: ("gt", ">", "setg"),
+}
+
+
+def decode_x86_64_arg_signed_zero_compare(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 8 or body[:4] != b"\x31\xc0\x85\xff" or body[4] != 0x0F or body[6:] != b"\xc0\xc3":
+        return None
+    decoded = X86_64_SIGNED_ZERO_COMPARE_SETCC.get(body[5])
+    if decoded is None:
+        return None
+    suffix, operator, setcc = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+        "pattern": "xor-eax-test-edi-edi-setcc-al-ret",
+    }
+
+
+def x86_64_arg_signed_zero_compare(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_signed_zero_compare(data)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"x86-64-int-zero-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return value {operator} 0;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-int-zero-{suffix}-cdecl",
+            variant=f"sysv-o2-register-arg-int-zero-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": operator,
+                "immediate": 0,
+                "setcc": decoded["setcc"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def x86_64_arg_nonzero(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
     body = strip_alignment_padding(data)
     if body != b"\x31\xc0\x85\xff\x0f\x95\xc0\xc3":
@@ -14304,6 +14365,7 @@ GENERATORS = [
     x86_64_arg_signed_imm8_compare,
     x86_64_two_args_unsigned_compare,
     x86_64_two_args_signed_compare,
+    x86_64_arg_signed_zero_compare,
     x86_64_arg_nonzero,
     x86_64_arg_zero,
     framed_zero_return,
