@@ -1916,6 +1916,49 @@ def x86_64_arg_udiv_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[
     ]
 
 
+def decode_x86_64_arg_bswap32(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x89\xf8\x0f\xc8\xc3":
+        return {"pattern": "mov-eax-edi-bswap-eax-ret"}
+    return None
+
+
+def x86_64_arg_bswap32(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_bswap32(data)
+    if decoded is None:
+        return []
+    expression = "((value & 0x000000ffu) << 24) | ((value & 0x0000ff00u) << 8) | ((value >> 8) & 0x0000ff00u) | (value >> 24)"
+    source = header("x86-64-arg-bswap32-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-bswap32-cdecl",
+            variant="sysv-o2-register-arg-bswap32",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operation": "bswap32",
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_rotate(data: bytes) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if len(body) == 5 and body[:2] == b"\x89\xf8" and body[2] == 0xD1 and body[4] == 0xC3:
@@ -15041,6 +15084,7 @@ GENERATORS = [
     x86_64_arg_sign_mask,
     x86_64_arg_bitmask_bool,
     x86_64_arg_udiv_pow2,
+    x86_64_arg_bswap32,
     x86_64_arg_rotate,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
