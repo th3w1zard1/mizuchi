@@ -1754,6 +1754,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_signed_imm8_compare_candidate,
         x86_64_two_args_unsigned_compare_candidate,
         x86_64_two_args_signed_compare_candidate,
+        x86_64_two_args_unsigned_compare64_candidate,
+        x86_64_two_args_signed_compare64_candidate,
         x86_64_arg_signed_zero_compare_candidate,
         x86_64_arg_nonzero_const_select_candidate,
         x86_64_arg_nonzero_cmov_const_select_candidate,
@@ -6571,6 +6573,101 @@ def x86_64_two_args_signed_compare_candidate(task: dict[str, Any], data: bytes) 
             "rule": f"x86-64-int-{suffix}-two-args-cdecl",
             "bodyBytes": len(strip_alignment_padding(data)),
             "registerArgs": ["edi", "esi"],
+            "operator": operator,
+            "setcc": decoded["setcc"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_two_args_compare64(data: bytes, rules: dict[int, tuple[str, str, str]]) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 9 or body[:5] != b"\x31\xc0\x48\x39\xf7" or body[5] != 0x0F or body[7:] != b"\xc0\xc3":
+        return None
+    decoded = rules.get(body[6])
+    if decoded is None:
+        return None
+    suffix, operator, setcc = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+    }
+
+
+def x86_64_two_args_unsigned_compare64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_two_args_compare64(data, X86_64_UNSIGNED_COMPARE_SETCC)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit two-argument unsigned {suffix} comparison pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(unsigned long long a, unsigned long long b) {{",
+            f"    return a {operator} b;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-uint64-{suffix}-two-args-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArgs": ["rdi", "rsi"],
+            "operator": operator,
+            "setcc": decoded["setcc"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def x86_64_two_args_signed_compare64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_two_args_compare64(data, X86_64_SIGNED_COMPARE_SETCC)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit two-argument signed {suffix} comparison pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(long long a, long long b) {{",
+            f"    return a {operator} b;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-int64-{suffix}-two-args-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArgs": ["rdi", "rsi"],
             "operator": operator,
             "setcc": decoded["setcc"],
             "framePointer": False,

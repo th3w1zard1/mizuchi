@@ -3332,6 +3332,97 @@ def x86_64_two_args_signed_compare(row: dict[str, Any], c_name: str, data: bytes
     ]
 
 
+def decode_x86_64_two_args_compare64(data: bytes, rules: dict[int, tuple[str, str, str]]) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 9 or body[:5] != b"\x31\xc0\x48\x39\xf7" or body[5] != 0x0F or body[7:] != b"\xc0\xc3":
+        return None
+    decoded = rules.get(body[6])
+    if decoded is None:
+        return None
+    suffix, operator, setcc = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+    }
+
+
+def x86_64_two_args_unsigned_compare64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_two_args_compare64(data, X86_64_UNSIGNED_COMPARE_SETCC)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"x86-64-uint64-{suffix}-two-args-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(unsigned long long a, unsigned long long b) {{",
+            f"    return a {operator} b;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-uint64-{suffix}-two-args-cdecl",
+            variant=f"sysv-o2-register-args-uint64-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": "xor-eax-cmp-rdi-rsi-setcc-al-ret",
+                "registerArgs": ["rdi", "rsi"],
+                "operator": operator,
+                "setcc": decoded["setcc"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
+def x86_64_two_args_signed_compare64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_two_args_compare64(data, X86_64_SIGNED_COMPARE_SETCC)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"x86-64-int64-{suffix}-two-args-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(long long a, long long b) {{",
+            f"    return a {operator} b;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-int64-{suffix}-two-args-cdecl",
+            variant=f"sysv-o2-register-args-int64-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": "xor-eax-cmp-rdi-rsi-setcc-al-ret",
+                "registerArgs": ["rdi", "rsi"],
+                "operator": operator,
+                "setcc": decoded["setcc"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_SIGNED_ZERO_COMPARE_SETCC: dict[int, tuple[str, str, str]] = {
     0x9E: ("le", "<=", "setle"),
     0x9F: ("gt", ">", "setg"),
@@ -15648,6 +15739,8 @@ GENERATORS = [
     x86_64_arg64_zero_nonzero,
     x86_64_arg64_bitmask_bool,
     x86_64_two_args_binary_op64,
+    x86_64_two_args_unsigned_compare64,
+    x86_64_two_args_signed_compare64,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
     byte_field_and_stack_byte,
