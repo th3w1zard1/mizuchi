@@ -1731,6 +1731,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_unary_op_candidate,
+        x86_64_arg_neg_cmov_candidate,
         x86_64_arg_cast_candidate,
         x86_64_arg_narrow_imm8_compare_candidate,
         x86_64_arg_narrow_movzx_imm8_compare_candidate,
@@ -4956,6 +4957,55 @@ def x86_64_arg_unary_op_candidate(task: dict[str, Any], data: bytes) -> dict[str
             "bodyBytes": len(body),
             "registerArg": "edi",
             "operator": operator,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG_NEG_CMOV_OPS: dict[bytes, tuple[str, str, str, str]] = {
+    b"\x89\xf8\xf7\xd8\x0f\x48\xc7\xc3": ("abs", "value < 0 ? -value : value", "cmovs", "mov-eax-edi-neg-eax-cmovs-eax-edi-ret"),
+    b"\x89\xf8\xf7\xd8\x0f\x49\xc7\xc3": ("neg-if-pos", "value > 0 ? -value : value", "cmovns", "mov-eax-edi-neg-eax-cmovns-eax-edi-ret"),
+}
+
+
+def x86_64_arg_neg_cmov_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_NEG_CMOV_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, expression, cmov, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 signed argument {suffix} neg/cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(int value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg-{suffix}-cmov-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "edi",
+            "valueType": "int",
+            "returnType": "int",
+            "expression": expression,
+            "cmov": cmov,
             "pattern": pattern,
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),

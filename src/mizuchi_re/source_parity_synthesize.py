@@ -1798,6 +1798,52 @@ def x86_64_arg_unary_op(row: dict[str, Any], c_name: str, data: bytes) -> list[G
     ]
 
 
+X86_64_ARG_NEG_CMOV_OPS: dict[bytes, tuple[str, str, str, str]] = {
+    b"\x89\xf8\xf7\xd8\x0f\x48\xc7\xc3": ("abs", "value < 0 ? -value : value", "cmovs", "mov-eax-edi-neg-eax-cmovs-eax-edi-ret"),
+    b"\x89\xf8\xf7\xd8\x0f\x49\xc7\xc3": ("neg-if-pos", "value > 0 ? -value : value", "cmovns", "mov-eax-edi-neg-eax-cmovns-eax-edi-ret"),
+}
+
+
+def x86_64_arg_neg_cmov(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_NEG_CMOV_OPS.get(body)
+    if decoded is None:
+        return []
+    suffix, expression, cmov, pattern = decoded
+    source = header(f"x86-64-arg-{suffix}-cmov-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg-{suffix}-cmov-cdecl",
+            variant=f"sysv-o2-register-arg-{suffix}-cmov",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "edi",
+                "valueType": "int",
+                "returnType": "int",
+                "expression": expression,
+                "cmov": cmov,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_CAST_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
     b"\x40\x0f\xb6\xc7\xc3": ("u8", "unsigned int", "unsigned int", "(unsigned char)value", "movzx-eax-dil-ret"),
     b"\x40\x0f\xbe\xc7\xc3": ("i8", "int", "int", "(signed char)value", "movsx-eax-dil-ret"),
@@ -14250,6 +14296,7 @@ GENERATORS = [
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,
+    x86_64_arg_neg_cmov,
     x86_64_arg_cast,
     x86_64_arg_narrow_imm8_compare,
     x86_64_arg_narrow_movzx_imm8_compare,
