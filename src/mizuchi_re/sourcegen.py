@@ -1790,6 +1790,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         add_two_stack_args_stdcall_candidate,
         two_stack_args_binary_op_candidate,
         two_stack_args_binary_op_stdcall_candidate,
+        two_stack_args_affine_candidate,
+        two_stack_args_affine_stdcall_candidate,
         two_stack_args_min_max_candidate,
         two_stack_args_min_max_stdcall_candidate,
         two_stack_args_unsigned_compare_candidate,
@@ -8284,6 +8286,153 @@ def two_stack_args_binary_op_stdcall_candidate(task: dict[str, Any], data: bytes
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             f"stdcall two-argument {suffix} is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def format_two_stack_args_affine_expression(scaled_arg: str, scale: int, immediate: int) -> str:
+    other_arg = "b" if scaled_arg == "a" else "a"
+    scaled_term = f"{scaled_arg} * {scale}u"
+    expression = f"{scaled_term} + {other_arg}" if scaled_arg == "a" else f"{other_arg} + {scaled_term}"
+    if immediate:
+        expression = f"{expression} + 0x{immediate:02x}u" if immediate <= 0xFF else f"{expression} + 0x{immediate:08x}u"
+    return expression
+
+
+def decode_two_stack_args_affine(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x08\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) in {10, 11} and core[:4] in {b"\x8b\x44\x24\x04", b"\x8b\x44\x24\x08"}:
+        scaled_arg = "a" if core[:4] == b"\x8b\x44\x24\x04" else "b"
+        other_stack = b"\x08" if scaled_arg == "a" else b"\x04"
+        if core[4:6] == b"\x01\xc0":
+            scale = 2
+            offset = 6
+            scale_pattern = "add-eax-eax"
+        elif core[4:7] in {b"\xc1\xe0\x02", b"\xc1\xe0\x03"}:
+            scale = 1 << core[6]
+            offset = 7
+            scale_pattern = f"shl-eax-{core[6]}"
+        else:
+            return None
+        if core[offset : offset + 3] != b"\x03\x44\x24" or core[offset + 3 : offset + 4] != other_stack or len(core) != offset + 4:
+            return None
+        return {
+            "scaledArg": scaled_arg,
+            "scale": scale,
+            "immediate": 0,
+            "expression": format_two_stack_args_affine_expression(scaled_arg, scale, 0),
+            "pattern": f"mov-eax-stack-{scaled_arg}-{scale_pattern}-add-eax-stack-other",
+            "stackBytes": 8 if stdcall else 0,
+        }
+    if len(core) in {14, 16} and core[:4] in {b"\x8b\x44\x24\x04", b"\x8b\x44\x24\x08"}:
+        scaled_arg = "a" if core[:4] == b"\x8b\x44\x24\x04" else "b"
+        other_mov = b"\x8b\x4c\x24\x08" if scaled_arg == "a" else b"\x8b\x4c\x24\x04"
+        if core[4:8] != other_mov or core[8:10] != b"\x8d\x04":
+            return None
+        sib = core[10]
+        if sib & 0x07 != 0x01 or ((sib >> 3) & 0x07) != 0x00:
+            return None
+        scale = 1 << ((sib >> 6) & 0x03)
+        if scale not in {2, 4, 8}:
+            return None
+        if len(core) == 14 and core[11:13] == b"\x83\xc0":
+            immediate = core[13]
+            imm_pattern = "add-eax-imm8"
+        elif len(core) == 16 and core[11] == 0x05:
+            immediate = int.from_bytes(core[12:16], "little", signed=False)
+            imm_pattern = "add-eax-imm32"
+        else:
+            return None
+        if immediate == 0:
+            return None
+        return {
+            "scaledArg": scaled_arg,
+            "scale": scale,
+            "immediate": immediate,
+            "expression": format_two_stack_args_affine_expression(scaled_arg, scale, immediate),
+            "pattern": f"mov-eax-stack-{scaled_arg}-mov-ecx-stack-other-lea-eax-ecx-plus-eax{scale}-{imm_pattern}",
+            "stackBytes": 8 if stdcall else 0,
+        }
+    return None
+
+
+def two_stack_args_affine_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_two_stack_args_affine(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 two-argument affine arithmetic pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int a, unsigned int b) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "two-stack-args-affine-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "scaledArg": decoded["scaledArg"],
+            "scale": int(decoded["scale"]),
+            "immediate": f"0x{int(decoded['immediate']):08x}",
+            "expression": decoded["expression"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "two-argument affine arithmetic is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def two_stack_args_affine_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_two_stack_args_affine(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall two-argument affine arithmetic pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int a, unsigned int b) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "two-stack-args-affine-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "scaledArg": decoded["scaledArg"],
+            "scale": int(decoded["scale"]),
+            "immediate": f"0x{int(decoded['immediate']):08x}",
+            "expression": decoded["expression"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 8,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall two-argument affine arithmetic is a canonical clang i386 O2 leaf pattern"
         ),
     }
 
