@@ -675,7 +675,9 @@ def stage_profile_corpus(profile: ProfileConfig, state: dict[str, Any]) -> None:
         raise RuntimeError(result.stderr or "profile-corpus failed")
 
 
-def stage_synthesize(profile: ProfileConfig, state: dict[str, Any], limit: int) -> None:
+def stage_synthesize(
+    profile: ProfileConfig, state: dict[str, Any], limit: int, max_attempts_per_function: int
+) -> None:
     args = [
         "--queue",
         str(profile.queue_jsonl),
@@ -690,6 +692,7 @@ def stage_synthesize(profile: ProfileConfig, state: dict[str, Any], limit: int) 
         "--limit",
         str(limit),
     ]
+    args.extend(["--max-attempts-per-function", str(max_attempts_per_function)])
     if profile.trivial_out_jsonl.exists():
         args.extend(["--matched-summary", str(profile.trivial_out_jsonl)])
     if profile.reloc_out_jsonl.exists():
@@ -704,6 +707,7 @@ def stage_synthesize(profile: ProfileConfig, state: dict[str, Any], limit: int) 
         "complete",
         returncode=result.returncode,
         synthesisLimit=limit,
+        synthesisMaxAttemptsPerFunction=max_attempts_per_function,
         synthesisMatchCount=_synthesis_exportable_count(profile),
     )
     if result.returncode != 0:
@@ -727,7 +731,10 @@ def _register_runners() -> None:
             "index-examples": lambda ctx: stage_index_examples(ctx["profile"], ctx["state"]),
             "profile-corpus": lambda ctx: stage_profile_corpus(ctx["profile"], ctx["state"]),
             "synthesize-candidates": lambda ctx: stage_synthesize(
-                ctx["profile"], ctx["state"], ctx["synthesis_limit"]
+                ctx["profile"],
+                ctx["state"],
+                ctx["synthesis_limit"],
+                ctx["synthesis_max_attempts_per_function"],
             ),
         }
     )
@@ -760,6 +767,7 @@ def run_pipeline(
     refresh_inventory: bool = False,
     refresh_prepare: bool = False,
     synthesis_limit: int = 25,
+    synthesis_max_attempts_per_function: int = 0,
 ) -> dict[str, Any]:
     _register_runners()
     slug = profile_slug or detect_profile(input_path)
@@ -775,6 +783,7 @@ def run_pipeline(
         "refresh_inventory": refresh_inventory,
         "refresh_prepare": refresh_prepare,
         "synthesis_limit": synthesis_limit,
+        "synthesis_max_attempts_per_function": synthesis_max_attempts_per_function,
         "force_export_downstream": False,
     }
     stop_idx = stage_index(stop_after) if stop_after else len(STAGES) - 1
@@ -819,6 +828,12 @@ def run_pipeline(
         if (
             name == "synthesize-candidates"
             and int(synth_stage.get("synthesisLimit") or 0) < int(synthesis_limit)
+        ):
+            force_stage = True
+        if (
+            name == "synthesize-candidates"
+            and int(synth_stage.get("synthesisMaxAttemptsPerFunction") or 0)
+            < int(synthesis_max_attempts_per_function)
         ):
             force_stage = True
         if ctx.get("force_export_downstream") and name in {"compile-source", "derive-coverage"}:
@@ -885,6 +900,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--refresh-inventory", action="store_true")
     parser.add_argument("--refresh-prepare", action="store_true")
     parser.add_argument("--synthesis-limit", type=int, default=25)
+    parser.add_argument(
+        "--synthesis-max-attempts-per-function",
+        type=int,
+        default=0,
+        help=(
+            "Maximum generated candidate attempts per synthesis function. "
+            "0 uses source-parity-synthesize's --max-variants-per-function fallback."
+        ),
+    )
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args(argv)
     if args.self_check:
@@ -902,6 +926,7 @@ def main(argv: list[str] | None = None) -> int:
             refresh_inventory=args.refresh_inventory,
             refresh_prepare=args.refresh_prepare,
             synthesis_limit=args.synthesis_limit,
+            synthesis_max_attempts_per_function=args.synthesis_max_attempts_per_function,
         )
     except Exception as exc:
         print(f"source-parity-one-shot failed: {exc}", file=sys.stderr)

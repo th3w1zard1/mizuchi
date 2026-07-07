@@ -159,6 +159,12 @@ def build_parser() -> argparse.ArgumentParser:
     windows.add_argument("--source-parity-limit", type=int, default=25, help="Maximum queued functions to inspect during source-parity synthesis.")
     windows.add_argument("--source-parity-offset", type=int, default=0, help="Eligible queued functions to skip before source-parity synthesis.")
     windows.add_argument("--source-parity-max-variants-per-function", type=int, default=8, help="Maximum generated source variants per queued function for source-parity synthesis.")
+    windows.add_argument(
+        "--source-parity-max-attempts-per-function",
+        type=int,
+        default=0,
+        help="Maximum candidate attempts per source-parity function. 0 uses --source-parity-max-variants-per-function.",
+    )
     windows.add_argument("--source-parity-strategies", help="Comma-separated strategy/tag filter for source-parity synthesis.")
     windows.add_argument(
         "--source-parity-compiler-profile",
@@ -210,6 +216,12 @@ def build_parser() -> argparse.ArgumentParser:
     synth.add_argument("--limit", type=int, default=25)
     synth.add_argument("--offset", type=int, default=0)
     synth.add_argument("--max-variants-per-function", type=int, default=8)
+    synth.add_argument(
+        "--max-attempts-per-function",
+        type=int,
+        default=0,
+        help="Maximum candidate attempts per function. 0 means --max-variants-per-function is used as the limit.",
+    )
     synth.add_argument("--strategies")
     synth.add_argument("--source-quality", action="append", default=[], help="Only verify generated candidates with this source quality. Repeat or comma-separate.")
     synth.add_argument("--compiler", choices=["msvc", "clang", "clang-cl"], default="msvc")
@@ -386,6 +398,7 @@ def run_recover_windows(args: argparse.Namespace) -> int:
         source_parity_limit=args.source_parity_limit,
         source_parity_offset=args.source_parity_offset,
         source_parity_max_variants_per_function=args.source_parity_max_variants_per_function,
+        source_parity_max_attempts_per_function=args.source_parity_max_attempts_per_function,
         source_parity_strategies=args.source_parity_strategies,
         source_parity_dry_run=args.source_parity_dry_run,
         source_parity_clean=args.source_parity_clean,
@@ -545,6 +558,8 @@ def run_source_parity_synthesize(args: argparse.Namespace) -> int:
         str(args.offset),
         "--max-variants-per-function",
         str(args.max_variants_per_function),
+        "--max-attempts-per-function",
+        str(args.max_attempts_per_function),
         "--compiler",
         args.compiler,
         "--clang",

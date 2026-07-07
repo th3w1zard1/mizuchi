@@ -95,6 +95,7 @@ Run the synthesis lane directly:
 | `--profile-select-only` | Select corpus cases without running the expensive compiler sweep. |
 | `--synthesis-limit N` | Number of queued functions to inspect for automatic source-candidate generation. |
 | `--synthesis-max-variants-per-function N` | Maximum generated source variants per inspected function. |
+| `--synthesis-max-attempts-per-function N` | Maximum candidate attempts per inspected function. `0` uses source-parity-synthesize’s `--max-variants-per-function` fallback. |
 | `--synthesis-strategies LIST` | Optional comma-separated strategy/tag filter for synthesis. |
 | `--synthesis-timeout SECONDS` | Timeout per synthesis compile/objdiff subprocess. |
 | `--synthesis-dry-run` | Emit generated candidates without compile/objdiff. |

@@ -16687,6 +16687,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=25, help="Maximum queued functions to inspect.")
     parser.add_argument("--offset", type=int, default=0, help="Eligible queued functions to skip before inspecting.")
     parser.add_argument("--max-variants-per-function", type=int, default=4)
+    parser.add_argument(
+        "--max-attempts-per-function",
+        type=int,
+        default=0,
+        help="Maximum candidate attempts per function. 0 means use --max-variants-per-function as the limit.",
+    )
     parser.add_argument("--strategies", help="Comma-separated strategy/tag filter, for example virtual-call-or-thiscall-model,compiler-profile-probe.")
     parser.add_argument("--compiler", choices=["msvc", "clang", "clang-cl"], default="msvc", help="Compiler backend for candidate verification. clang/clang-cl can objdiff against synthetic target objects built from source-task bytes.")
     parser.add_argument("--clang", default="clang")
@@ -16747,6 +16753,7 @@ def main(argv: list[str] | None = None) -> int:
     skipped_source_quality = 0
     skipped_nonsemantic = 0
     skipped_boundary_suspect = 0
+    skipped_by_attempt_limit = 0
     compile_failed = 0
     slice_failed = 0
     unsupported = 0
@@ -16859,6 +16866,13 @@ def main(argv: list[str] | None = None) -> int:
             }
             append_jsonl(attempts_path, record)
             continue
+        attempt_limit = args.max_attempts_per_function
+        if attempt_limit <= 0:
+            attempt_limit = args.max_variants_per_function
+        if attempt_limit > 0 and len(candidates) > attempt_limit:
+            skipped_by_attempt_limit += len(candidates) - attempt_limit
+            candidates = candidates[:attempt_limit]
+
         generated += len(candidates)
         semantic_generated += sum(1 for candidate in candidates if candidate.semantic_source)
         for candidate in candidates:
@@ -16970,6 +16984,9 @@ def main(argv: list[str] | None = None) -> int:
         "semanticGeneratedCandidates": semantic_generated,
         "nonSemanticBootstrapCandidates": max(0, generated - semantic_generated),
         "attemptedCandidates": attempted,
+        "maxAttemptsPerFunction": args.max_attempts_per_function,
+        "attemptLimitFallbackToMaxVariants": args.max_attempts_per_function <= 0,
+        "skippedByAttemptLimit": skipped_by_attempt_limit,
         "acceptedCandidates": matched_count,
         "codeSliceMatchedCandidates": code_slice_matched,
         "semanticCodeSliceMatchedCandidates": semantic_code_slice_matched,
