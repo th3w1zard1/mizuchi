@@ -2451,6 +2451,79 @@ def x86_64_arg_sdiv_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[
     ]
 
 
+def decode_x86_64_arg_srem_pow2(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x89\xf8\x89\xf9\xc1\xe9\x1f\x01\xf9\x83\xe1\xfe\x29\xc8\xc3":
+        return {
+            "shift": 1,
+            "divisor": 2,
+            "bias": 1,
+            "mask": "0xfffffffe",
+            "pattern": "mov-eax-edi-mov-ecx-edi-shr-ecx-31-add-ecx-edi-and-ecx-neg2-sub-eax-ecx-ret",
+        }
+    if len(body) == 16 and body[:2] == b"\x89\xf8" and body[2:4] == b"\x8d\x48" and body[5:10] == b"\x85\xff\x0f\x49\xcf" and body[10:12] == b"\x83\xe1" and body[13:] == b"\x29\xc8\xc3":
+        bias = body[4]
+        mask_byte = body[12]
+        if bias == 0:
+            return None
+        divisor = bias + 1
+        if divisor & (divisor - 1):
+            return None
+        shift = divisor.bit_length() - 1
+        if not 2 <= shift <= 7:
+            return None
+        if mask_byte != ((256 - divisor) & 0xFF):
+            return None
+        return {
+            "shift": shift,
+            "divisor": divisor,
+            "bias": bias,
+            "mask": f"0xffffff{mask_byte:02x}",
+            "pattern": "mov-eax-edi-lea-ecx-rax-bias-test-edi-edi-cmovns-ecx-edi-and-ecx-negdivisor-sub-eax-ecx-ret",
+        }
+    return None
+
+
+def x86_64_arg_srem_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_srem_pow2(data)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("x86-64-arg-srem-pow2-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return value % {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-srem-pow2-cdecl",
+            variant=f"sysv-o2-register-arg-srem-{divisor}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": "%",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "bias": int(decoded["bias"]),
+                "mask": decoded["mask"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_SDIV_MAGIC_OPS: dict[bytes, tuple[int, str, int, str]] = {
     bytes.fromhex("4863c74869c0565555554889c148c1e93f48c1e82001c8c3"): (3, "0x55555556", 32, "movsxd-rax-edi-imul-rax-rax-magic-mov-rcx-rax-shr-rcx-63-shr-rax-32-add-eax-ecx-ret"),
     bytes.fromhex("4863c74869c0676666664889c148c1e93f48c1f82101c8c3"): (5, "0x66666667", 33, "movsxd-rax-edi-imul-rax-rax-magic-mov-rcx-rax-shr-rcx-63-sar-rax-33-add-eax-ecx-ret"),
@@ -16250,6 +16323,7 @@ GENERATORS = [
     x86_64_arg_udiv_magic,
     x86_64_arg_urem_magic,
     x86_64_arg_sdiv_pow2,
+    x86_64_arg_srem_pow2,
     x86_64_arg_sdiv_magic,
     x86_64_arg_srem_magic,
     x86_64_return_first_arg64,
