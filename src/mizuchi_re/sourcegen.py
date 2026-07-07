@@ -1812,6 +1812,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         stack_arg_urem_pow2_stdcall_candidate,
         stack_arg_signed_zero_compare_candidate,
         stack_arg_signed_zero_compare_stdcall_candidate,
+        stack_arg_neg_cmov_candidate,
+        stack_arg_neg_cmov_stdcall_candidate,
         stack_arg_const_min_max_candidate,
         stack_arg_const_min_max_stdcall_candidate,
         stack_arg_signed_imm8_compare_candidate,
@@ -9468,6 +9470,107 @@ def stack_arg_signed_zero_compare_stdcall_candidate(task: dict[str, Any], data: 
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             "stdcall signed stack argument zero-comparison is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+I386_STACK_ARG_NEG_CMOV_OPS: dict[bytes, tuple[str, str, str, str]] = {
+    bytes.fromhex("8b4c240489c8f7d80f48c1"): ("abs", "value < 0 ? -value : value", "cmovs", "mov-ecx-stack4-mov-eax-ecx-neg-eax-cmovs-eax-ecx"),
+    bytes.fromhex("8b4c240489c8f7d80f49c1"): ("neg-if-pos", "value > 0 ? -value : value", "cmovns", "mov-ecx-stack4-mov-eax-ecx-neg-eax-cmovns-eax-ecx"),
+}
+
+
+def decode_stack_arg_neg_cmov(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    decoded = I386_STACK_ARG_NEG_CMOV_OPS.get(body[: -len(ret)])
+    if decoded is None:
+        return None
+    suffix, expression, cmov, pattern = decoded
+    return {
+        "suffix": suffix,
+        "expression": expression,
+        "cmov": cmov,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_neg_cmov_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_neg_cmov(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stack-argument signed {decoded['suffix']} neg/cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(int value) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{decoded['suffix']}-cmov-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "valueType": "int",
+            "returnType": "int",
+            "expression": decoded["expression"],
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stack argument {decoded['suffix']} neg/cmov is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_neg_cmov_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_neg_cmov(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stdcall stack-argument signed {decoded['suffix']} neg/cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int __stdcall {c_name}(int value) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{decoded['suffix']}-cmov-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "valueType": "int",
+            "returnType": "int",
+            "expression": decoded["expression"],
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stdcall stack argument {decoded['suffix']} neg/cmov is a canonical clang i386 O2 leaf pattern"
         ),
     }
 

@@ -6055,6 +6055,95 @@ def stack_arg_signed_zero_compare_stdcall(row: dict[str, Any], c_name: str, data
     ]
 
 
+I386_STACK_ARG_NEG_CMOV_OPS: dict[bytes, tuple[str, str, str, str]] = {
+    bytes.fromhex("8b4c240489c8f7d80f48c1"): ("abs", "value < 0 ? -value : value", "cmovs", "mov-ecx-stack4-mov-eax-ecx-neg-eax-cmovs-eax-ecx"),
+    bytes.fromhex("8b4c240489c8f7d80f49c1"): ("neg-if-pos", "value > 0 ? -value : value", "cmovns", "mov-ecx-stack4-mov-eax-ecx-neg-eax-cmovns-eax-ecx"),
+}
+
+
+def decode_stack_arg_neg_cmov(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    decoded = I386_STACK_ARG_NEG_CMOV_OPS.get(body[: -len(ret)])
+    if decoded is None:
+        return None
+    suffix, expression, cmov, pattern = decoded
+    return {
+        "suffix": suffix,
+        "expression": expression,
+        "cmov": cmov,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_neg_cmov(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_neg_cmov(data, stdcall=False)
+    if decoded is None:
+        return []
+    source = header(f"stack-arg-{decoded['suffix']}-cmov-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{decoded['suffix']}-cmov-cdecl",
+            variant=f"cdecl-o2-stack-arg-{decoded['suffix']}-cmov",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "valueType": "int",
+                "returnType": "int",
+                "expression": decoded["expression"],
+                "cmov": decoded["cmov"],
+            },
+        )
+    ]
+
+
+def stack_arg_neg_cmov_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_neg_cmov(data, stdcall=True)
+    if decoded is None:
+        return []
+    source = header(f"stack-arg-{decoded['suffix']}-cmov-stdcall", row) + "\n".join(
+        [
+            f"int __stdcall {c_name}(int value) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{decoded['suffix']}-cmov-stdcall",
+            variant=f"stdcall4-o2-stack-arg-{decoded['suffix']}-cmov",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "valueType": "int",
+                "returnType": "int",
+                "expression": decoded["expression"],
+                "cmov": decoded["cmov"],
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 I386_STACK_ARG_CONST_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str, bool]] = {
     0x42: ("uint-min", "<", "unsigned int", "cmovb", False),
     0x43: ("uint-max", ">", "unsigned int", "cmovae", True),
@@ -17503,6 +17592,8 @@ GENERATORS = [
     stack_arg_urem_pow2_stdcall,
     stack_arg_signed_zero_compare,
     stack_arg_signed_zero_compare_stdcall,
+    stack_arg_neg_cmov,
+    stack_arg_neg_cmov_stdcall,
     stack_arg_const_min_max,
     stack_arg_const_min_max_stdcall,
     stack_arg_signed_imm8_compare,
