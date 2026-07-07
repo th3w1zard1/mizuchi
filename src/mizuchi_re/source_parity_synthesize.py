@@ -6359,6 +6359,104 @@ I386_STACK_ARG_IMM8_BINARY_OPS: dict[int, tuple[str, str]] = {
 }
 
 
+I386_STACK_ARG_LEA_MULTIPLY_OPS: dict[bytes, tuple[int, str]] = {
+    bytes.fromhex("8b44240401c0"): (2, "mov-eax-stack4-add-eax-eax"),
+    bytes.fromhex("8b4424048d0440"): (3, "mov-eax-stack4-lea-eax-eax-eax2"),
+    bytes.fromhex("8b4424048d0480"): (5, "mov-eax-stack4-lea-eax-eax-eax4"),
+    bytes.fromhex("8b44240401c08d0440"): (6, "mov-eax-stack4-add-eax-eax-lea-eax-eax-eax2"),
+    bytes.fromhex("8b4c24048d04cd0000000029c8"): (7, "mov-ecx-stack4-lea-eax-ecx8-sub-eax-ecx"),
+    bytes.fromhex("8b4424048d04c0"): (9, "mov-eax-stack4-lea-eax-eax-eax8"),
+    bytes.fromhex("8b44240401c08d0480"): (10, "mov-eax-stack4-add-eax-eax-lea-eax-eax-eax4"),
+    bytes.fromhex("8b4424048d0c808d0448"): (11, "mov-eax-stack4-lea-ecx-eax-eax4-lea-eax-eax-ecx2"),
+    bytes.fromhex("8b442404c1e0028d0440"): (12, "mov-eax-stack4-shl-eax-2-lea-eax-eax-eax2"),
+    bytes.fromhex("8b4424048d0c408d0488"): (13, "mov-eax-stack4-lea-ecx-eax-eax2-lea-eax-eax-ecx4"),
+    bytes.fromhex("8b4424048d0c00c1e00429c8"): (14, "mov-eax-stack4-lea-ecx-eax-eax-shl-eax-4-sub-eax-ecx"),
+    bytes.fromhex("8b4424048d04808d0440"): (15, "mov-eax-stack4-lea-eax-eax-eax4-lea-eax-eax-eax2"),
+    bytes.fromhex("8b442404c1e0038d0440"): (24, "mov-eax-stack4-shl-eax-3-lea-eax-eax-eax2"),
+    bytes.fromhex("8b4c240489c8c1e00529c8"): (31, "mov-ecx-stack4-mov-eax-ecx-shl-eax-5-sub-eax-ecx"),
+    bytes.fromhex("8b4c240489c8c1e00501c8"): (33, "mov-ecx-stack4-mov-eax-ecx-shl-eax-5-add-eax-ecx"),
+}
+
+
+def decode_stack_arg_lea_multiply(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    decoded = I386_STACK_ARG_LEA_MULTIPLY_OPS.get(body[: -len(ret)])
+    if decoded is None:
+        return None
+    multiplier, pattern = decoded
+    return {
+        "multiplier": multiplier,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_lea_multiply(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_lea_multiply(data, stdcall=False)
+    if decoded is None:
+        return []
+    multiplier = int(decoded["multiplier"])
+    source = header("stack-arg-mul-lea-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value * {multiplier}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-mul-lea-cdecl",
+            variant=f"cdecl-o2-stack-arg-mul-lea-{multiplier}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": str(decoded["pattern"]),
+                "operator": "*",
+                "multiplier": multiplier,
+            },
+        )
+    ]
+
+
+def stack_arg_lea_multiply_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_lea_multiply(data, stdcall=True)
+    if decoded is None:
+        return []
+    multiplier = int(decoded["multiplier"])
+    source = header("stack-arg-mul-lea-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value * {multiplier}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-mul-lea-stdcall",
+            variant=f"stdcall4-o2-stack-arg-mul-lea-{multiplier}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": str(decoded["pattern"]),
+                "operator": "*",
+                "multiplier": multiplier,
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 def decode_stack_arg_imm8_binary_op(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
@@ -17266,6 +17364,8 @@ GENERATORS = [
     stack_arg_unsigned_imm8_compare_stdcall,
     stack_arg_bitmask_predicate,
     stack_arg_bitmask_predicate_stdcall,
+    stack_arg_lea_multiply,
+    stack_arg_lea_multiply_stdcall,
     stack_arg_imm8_binary_op,
     stack_arg_imm8_binary_op_stdcall,
     stack_arg_unary_op,
