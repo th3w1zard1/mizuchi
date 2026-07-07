@@ -1652,28 +1652,37 @@ def x86_64_arg_cast(row: dict[str, Any], c_name: str, data: bytes) -> list[Gener
 
 def decode_x86_64_arg_imm8_compare(data: bytes, *, signed: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
-    if (
-        len(body) != 9
-        or body[:2] != b"\x31\xc0"
-        or body[2:4] != b"\x83\xff"
-        or body[5] != 0x0F
-        or body[7] != 0xC0
-        or body[8] != 0xC3
-    ):
+    immediate_bits = 0
+    raw_immediate = 0
+    immediate = 0
+    setcc_offset = 0
+    if len(body) == 9 and body[:4] == b"\x31\xc0\x83\xff" and body[5] == 0x0F and body[7:] == b"\xc0\xc3":
+        immediate_bits = 8
+        raw_immediate = body[4]
+        immediate = raw_immediate if raw_immediate < 0x80 else (raw_immediate - 0x100 if signed else raw_immediate | 0xFFFFFF00)
+        setcc_offset = 6
+        pattern = "xor-eax-cmp-edi-imm8-setcc-al-ret"
+    elif len(body) == 12 and body[:4] == b"\x31\xc0\x81\xff" and body[8] == 0x0F and body[10:] == b"\xc0\xc3":
+        immediate_bits = 32
+        raw_immediate = int.from_bytes(body[4:8], "little", signed=False)
+        immediate = int.from_bytes(body[4:8], "little", signed=signed)
+        setcc_offset = 9
+        pattern = "xor-eax-cmp-edi-imm32-setcc-al-ret"
+    else:
         return None
     rules = X86_64_SIGNED_COMPARE_SETCC if signed else X86_64_UNSIGNED_COMPARE_SETCC
-    decoded = rules.get(body[6])
+    decoded = rules.get(body[setcc_offset])
     if decoded is None:
         return None
     suffix, operator, setcc = decoded
-    raw_immediate = body[4]
-    immediate = raw_immediate if raw_immediate < 0x80 else (raw_immediate - 0x100 if signed else raw_immediate | 0xFFFFFF00)
     return {
         "suffix": suffix,
         "operator": operator,
         "setcc": setcc,
         "immediate": immediate,
         "rawImmediate": raw_immediate,
+        "immediateBits": immediate_bits,
+        "pattern": pattern,
     }
 
 
@@ -1707,8 +1716,9 @@ def x86_64_arg_unsigned_imm8_compare(row: dict[str, Any], c_name: str, data: byt
     suffix = str(decoded["suffix"])
     operator = str(decoded["operator"])
     immediate = int(decoded["immediate"]) & 0xFFFFFFFF
+    immediate_bits = int(decoded.get("immediateBits") or 8)
     operator, immediate = normalize_x86_64_arg_imm8_compare_operator(operator, immediate, signed=False)
-    source = header(f"x86-64-uint-{suffix}-imm8-cdecl", row) + "\n".join(
+    source = header(f"x86-64-uint-{suffix}-imm{immediate_bits}-cdecl", row) + "\n".join(
         [
             f"int {c_name}(unsigned int value) {{",
             f"    return value {operator} 0x{immediate:08x}u;",
@@ -1718,8 +1728,8 @@ def x86_64_arg_unsigned_imm8_compare(row: dict[str, Any], c_name: str, data: byt
     )
     return [
         GeneratedCandidate(
-            rule=f"x86-64-uint-{suffix}-imm8-cdecl",
-            variant=f"sysv-o2-register-arg-uint-{suffix}-imm8",
+            rule=f"x86-64-uint-{suffix}-imm{immediate_bits}-cdecl",
+            variant=f"sysv-o2-register-arg-uint-{suffix}-imm{immediate_bits}",
             c_name=c_name,
             symbol=clang_c_symbol(row, c_name),
             source=source,
@@ -1727,10 +1737,11 @@ def x86_64_arg_unsigned_imm8_compare(row: dict[str, Any], c_name: str, data: byt
             return_type="int",
             extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
             evidence={
-                "pattern": "xor-eax-cmp-edi-imm8-setcc-al-ret",
+                "pattern": decoded["pattern"],
                 "registerArg": "edi",
                 "operator": operator,
                 "immediate": f"0x{immediate:08x}",
+                "immediateBits": immediate_bits,
                 "rawImmediate": int(decoded["rawImmediate"]),
                 "setcc": decoded["setcc"],
                 "framePointer": False,
@@ -1749,8 +1760,9 @@ def x86_64_arg_signed_imm8_compare(row: dict[str, Any], c_name: str, data: bytes
     suffix = str(decoded["suffix"])
     operator = str(decoded["operator"])
     immediate = int(decoded["immediate"])
+    immediate_bits = int(decoded.get("immediateBits") or 8)
     operator, immediate = normalize_x86_64_arg_imm8_compare_operator(operator, immediate, signed=True)
-    source = header(f"x86-64-int-{suffix}-imm8-cdecl", row) + "\n".join(
+    source = header(f"x86-64-int-{suffix}-imm{immediate_bits}-cdecl", row) + "\n".join(
         [
             f"int {c_name}(int value) {{",
             f"    return value {operator} ({immediate});",
@@ -1760,8 +1772,8 @@ def x86_64_arg_signed_imm8_compare(row: dict[str, Any], c_name: str, data: bytes
     )
     return [
         GeneratedCandidate(
-            rule=f"x86-64-int-{suffix}-imm8-cdecl",
-            variant=f"sysv-o2-register-arg-int-{suffix}-imm8",
+            rule=f"x86-64-int-{suffix}-imm{immediate_bits}-cdecl",
+            variant=f"sysv-o2-register-arg-int-{suffix}-imm{immediate_bits}",
             c_name=c_name,
             symbol=clang_c_symbol(row, c_name),
             source=source,
@@ -1769,10 +1781,11 @@ def x86_64_arg_signed_imm8_compare(row: dict[str, Any], c_name: str, data: bytes
             return_type="int",
             extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
             evidence={
-                "pattern": "xor-eax-cmp-edi-imm8-setcc-al-ret",
+                "pattern": decoded["pattern"],
                 "registerArg": "edi",
                 "operator": operator,
                 "immediate": f"0x{(immediate & 0xFFFFFFFF):08x}",
+                "immediateBits": immediate_bits,
                 "rawImmediate": int(decoded["rawImmediate"]),
                 "setcc": decoded["setcc"],
                 "framePointer": False,

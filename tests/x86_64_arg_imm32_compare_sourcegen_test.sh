@@ -24,16 +24,16 @@ from mizuchi_re.sourcegen import generated_candidate_from_target_bytes
 
 tmp = Path(sys.argv[1])
 base_patterns = [
-    ("uint_eq", "31c083ff050f94c0c3", "x86-64-uint-eq-imm8-cdecl", "unsigned int value", ("0x00000005u",)),
-    ("uint_ne", "31c083ff050f95c0c3", "x86-64-uint-ne-imm8-cdecl", "unsigned int value", ("0x00000005u",)),
-    ("uint_lt", "31c083ff050f92c0c3", "x86-64-uint-lt-imm8-cdecl", "unsigned int value", ("0x00000005u",)),
-    ("uint_ge", "31c083ff050f93c0c3", "x86-64-uint-ge-imm8-cdecl", "unsigned int value", ("0x00000005u",)),
-    ("uint_le_as_lt", "31c083ff060f92c0c3", "x86-64-uint-lt-imm8-cdecl", "unsigned int value", ("< 0x00000006u",)),
-    ("uint_gt_as_ge", "31c083ff060f93c0c3", "x86-64-uint-ge-imm8-cdecl", "unsigned int value", (">= 0x00000006u",)),
-    ("int_lt", "31c083ff050f9cc0c3", "x86-64-int-lt-imm8-cdecl", "int value", ("(5)",)),
-    ("int_ge", "31c083ff050f9dc0c3", "x86-64-int-ge-imm8-cdecl", "int value", ("(5)",)),
-    ("int_le_as_lt", "31c083ff060f9cc0c3", "x86-64-int-lt-imm8-cdecl", "int value", ("< (6)",)),
-    ("int_gt_as_ge", "31c083ff060f9dc0c3", "x86-64-int-ge-imm8-cdecl", "int value", (">= (6)",)),
+    ("uint_eq", "31c081ffff0000000f94c0c3", "x86-64-uint-eq-imm32-cdecl", "unsigned int value", ("== 0x000000ffu",)),
+    ("uint_ne", "31c081ffff0000000f95c0c3", "x86-64-uint-ne-imm32-cdecl", "unsigned int value", ("!= 0x000000ffu",)),
+    ("uint_lt", "31c081ff000100000f92c0c3", "x86-64-uint-lt-imm32-cdecl", "unsigned int value", ("< 0x00000100u",)),
+    ("uint_ge", "31c081ff000100000f93c0c3", "x86-64-uint-ge-imm32-cdecl", "unsigned int value", (">= 0x00000100u",)),
+    ("uint_le_as_lt", "31c081ff000100000f92c0c3", "x86-64-uint-lt-imm32-cdecl", "unsigned int value", ("< 0x00000100u",)),
+    ("uint_gt_as_ge", "31c081ff000100000f93c0c3", "x86-64-uint-ge-imm32-cdecl", "unsigned int value", (">= 0x00000100u",)),
+    ("int_lt", "31c081ff000001000f9cc0c3", "x86-64-int-lt-imm32-cdecl", "int value", ("< (65536)",)),
+    ("int_ge", "31c081ff000001000f9dc0c3", "x86-64-int-ge-imm32-cdecl", "int value", (">= (65536)",)),
+    ("int_le_as_lt", "31c081ff000100000f9cc0c3", "x86-64-int-lt-imm32-cdecl", "int value", ("< (256)",)),
+    ("int_gt_as_ge", "31c081ff000100000f9dc0c3", "x86-64-int-ge-imm32-cdecl", "int value", (">= (256)",)),
 ]
 
 tasks = []
@@ -45,15 +45,16 @@ for target_format in [None, "macho"]:
 
 for index, (name, hex_bytes, rule, signature_fragment, expression, target_format) in enumerate(patterns):
     data = bytes.fromhex(hex_bytes)
-    address = 0x540000 + index * 0x10
+    address = 0x580000 + index * 0x10
     task = {"name": name, "address": address, "architectureHint": "x86_64"}
     if target_format:
         task["targetFormat"] = target_format
+
     sourcegen_candidate = generated_candidate_from_target_bytes(task, data)
     assert sourcegen_candidate is not None, name
     assert sourcegen_candidate["generator"]["rule"] == rule, sourcegen_candidate
+    assert sourcegen_candidate["generator"]["immediateBits"] == 32, sourcegen_candidate
     assert sourcegen_candidate["language"] == "c", sourcegen_candidate
-    assert "unsigned int value" in sourcegen_candidate["source"] or "int value" in sourcegen_candidate["source"], sourcegen_candidate["source"]
     assert signature_fragment in sourcegen_candidate["source"], sourcegen_candidate["source"]
     assert any(candidate in sourcegen_candidate["source"] for candidate in expression), sourcegen_candidate["source"]
 
@@ -94,12 +95,12 @@ jq -e '.compiler == "clang" and .generatedCandidates == 20 and .attemptedCandida
 jq -s -e '
   length == 20 and
   ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 20 and
-  ([.[] | select(.rule == "x86-64-uint-eq-imm8-cdecl")] | length) == 2 and
-  ([.[] | select(.rule == "x86-64-uint-ne-imm8-cdecl")] | length) == 2 and
-  ([.[] | select(.rule == "x86-64-uint-lt-imm8-cdecl")] | length) == 4 and
-  ([.[] | select(.rule == "x86-64-uint-ge-imm8-cdecl")] | length) == 4 and
-  ([.[] | select(.rule == "x86-64-int-lt-imm8-cdecl")] | length) == 4 and
-  ([.[] | select(.rule == "x86-64-int-ge-imm8-cdecl")] | length) == 4
+  ([.[] | select(.rule == "x86-64-uint-eq-imm32-cdecl")] | length) == 2 and
+  ([.[] | select(.rule == "x86-64-uint-ne-imm32-cdecl")] | length) == 2 and
+  ([.[] | select(.rule == "x86-64-uint-lt-imm32-cdecl")] | length) == 4 and
+  ([.[] | select(.rule == "x86-64-uint-ge-imm32-cdecl")] | length) == 4 and
+  ([.[] | select(.rule == "x86-64-int-lt-imm32-cdecl")] | length) == 4 and
+  ([.[] | select(.rule == "x86-64-int-ge-imm32-cdecl")] | length) == 4
 ' "$TMP_DIR/out/attempts.jsonl" >/dev/null
 
 echo "ok"
