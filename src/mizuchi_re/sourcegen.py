@@ -1742,6 +1742,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_two_args_signed_compare_candidate,
         x86_64_arg_signed_zero_compare_candidate,
         x86_64_arg_nonzero_const_select_candidate,
+        x86_64_arg_nonzero_cmov_const_select_candidate,
         x86_64_arg_nonzero_candidate,
         x86_64_arg_zero_candidate,
         x86_64_framed_zero_return_candidate,
@@ -5689,6 +5690,76 @@ def x86_64_arg_nonzero_const_select_candidate(task: dict[str, Any], data: bytes)
             "baseValue": int(decoded["baseValue"]),
             "scale": int(decoded["scale"]),
             "setcc": decoded["setcc"],
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_nonzero_cmov_const_select(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 11 and body[:2] == b"\x85\xff" and body[2] == 0xB8 and body[7:10] == b"\x0f\x44\xc7" and body[10] == 0xC3:
+        immediate = int.from_bytes(body[3:7], "little", signed=False)
+        if immediate == 0:
+            return None
+        return {
+            "trueValue": immediate,
+            "falseValue": 0,
+            "immediate": immediate,
+            "cmov": "cmove",
+            "pattern": "test-edi-edi-mov-eax-imm32-cmove-eax-edi-ret",
+        }
+    if len(body) == 13 and body[:4] == b"\x31\xc9\x85\xff" and body[4] == 0xB8 and body[9:12] == b"\x0f\x45\xc1" and body[12] == 0xC3:
+        immediate = int.from_bytes(body[5:9], "little", signed=False)
+        if immediate == 0:
+            return None
+        return {
+            "trueValue": 0,
+            "falseValue": immediate,
+            "immediate": immediate,
+            "cmov": "cmovne",
+            "pattern": "xor-ecx-ecx-test-edi-edi-mov-eax-imm32-cmovne-eax-ecx-ret",
+        }
+    return None
+
+
+def x86_64_arg_nonzero_cmov_const_select_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_nonzero_cmov_const_select(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    true_value = int(decoded["trueValue"])
+    false_value = int(decoded["falseValue"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 nonzero cmov constant-select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value != 0 ? 0x{true_value:08x}u : 0x{false_value:08x}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-arg-nonzero-cmov-const-select-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "trueValue": f"0x{true_value:08x}",
+            "falseValue": f"0x{false_value:08x}",
+            "immediate": f"0x{int(decoded['immediate']):08x}",
+            "cmov": decoded["cmov"],
             "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),

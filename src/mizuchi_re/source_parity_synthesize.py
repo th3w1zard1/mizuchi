@@ -2498,6 +2498,73 @@ def x86_64_arg_nonzero_const_select(row: dict[str, Any], c_name: str, data: byte
     ]
 
 
+def decode_x86_64_arg_nonzero_cmov_const_select(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 11 and body[:2] == b"\x85\xff" and body[2] == 0xB8 and body[7:10] == b"\x0f\x44\xc7" and body[10] == 0xC3:
+        immediate = int.from_bytes(body[3:7], "little", signed=False)
+        if immediate == 0:
+            return None
+        return {
+            "trueValue": immediate,
+            "falseValue": 0,
+            "immediate": immediate,
+            "cmov": "cmove",
+            "pattern": "test-edi-edi-mov-eax-imm32-cmove-eax-edi-ret",
+        }
+    if len(body) == 13 and body[:4] == b"\x31\xc9\x85\xff" and body[4] == 0xB8 and body[9:12] == b"\x0f\x45\xc1" and body[12] == 0xC3:
+        immediate = int.from_bytes(body[5:9], "little", signed=False)
+        if immediate == 0:
+            return None
+        return {
+            "trueValue": 0,
+            "falseValue": immediate,
+            "immediate": immediate,
+            "cmov": "cmovne",
+            "pattern": "xor-ecx-ecx-test-edi-edi-mov-eax-imm32-cmovne-eax-ecx-ret",
+        }
+    return None
+
+
+def x86_64_arg_nonzero_cmov_const_select(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_nonzero_cmov_const_select(data)
+    if decoded is None:
+        return []
+    true_value = int(decoded["trueValue"])
+    false_value = int(decoded["falseValue"])
+    source = header("x86-64-arg-nonzero-cmov-const-select-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value != 0 ? 0x{true_value:08x}u : 0x{false_value:08x}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-nonzero-cmov-const-select-cdecl",
+            variant=f"sysv-o2-register-arg-nonzero-cmov-const-select-{decoded['cmov']}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "trueValue": f"0x{true_value:08x}",
+                "falseValue": f"0x{false_value:08x}",
+                "immediate": f"0x{int(decoded['immediate']):08x}",
+                "cmov": decoded["cmov"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def x86_64_arg_nonzero(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
     body = strip_alignment_padding(data)
     if body != b"\x31\xc0\x85\xff\x0f\x95\xc0\xc3":
@@ -14486,6 +14553,7 @@ GENERATORS = [
     x86_64_two_args_signed_compare,
     x86_64_arg_signed_zero_compare,
     x86_64_arg_nonzero_const_select,
+    x86_64_arg_nonzero_cmov_const_select,
     x86_64_arg_nonzero,
     x86_64_arg_zero,
     framed_zero_return,
