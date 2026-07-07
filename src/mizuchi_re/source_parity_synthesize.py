@@ -1471,6 +1471,71 @@ def x86_64_three_args_bitwise(row: dict[str, Any], c_name: str, data: bytes) -> 
     ]
 
 
+X86_64_THREE_ARGS_SELECT_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x89\xd0\x39\xf7\x0f\x42\xc7\xc3": ("uint-select-lt", "unsigned int", "a < b ? a : c", "cmovb", "mov-eax-edx-cmp-edi-esi-cmovb-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x43\xc7\xc3": ("uint-select-ge", "unsigned int", "a < b ? c : a", "cmovae", "mov-eax-edx-cmp-edi-esi-cmovae-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x47\xc7\xc3": ("uint-select-gt", "unsigned int", "a > b ? a : c", "cmova", "mov-eax-edx-cmp-edi-esi-cmova-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x46\xc7\xc3": ("uint-select-le", "unsigned int", "a > b ? c : a", "cmovbe", "mov-eax-edx-cmp-edi-esi-cmovbe-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4c\xc7\xc3": ("int-select-lt", "int", "a < b ? a : c", "cmovl", "mov-eax-edx-cmp-edi-esi-cmovl-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4d\xc7\xc3": ("int-select-ge", "int", "a < b ? c : a", "cmovge", "mov-eax-edx-cmp-edi-esi-cmovge-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4f\xc7\xc3": ("int-select-gt", "int", "a > b ? a : c", "cmovg", "mov-eax-edx-cmp-edi-esi-cmovg-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4e\xc7\xc3": ("int-select-le", "int", "a > b ? c : a", "cmovle", "mov-eax-edx-cmp-edi-esi-cmovle-eax-edi-ret"),
+}
+
+
+def decode_x86_64_three_args_select(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_THREE_ARGS_SELECT_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, value_type, expression, cmov, pattern = decoded
+    return {
+        "suffix": suffix,
+        "valueType": value_type,
+        "expression": expression,
+        "cmov": cmov,
+        "pattern": pattern,
+    }
+
+
+def x86_64_three_args_select(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_three_args_select(data)
+    if decoded is None:
+        return []
+    value_type = str(decoded["valueType"])
+    source = header("x86-64-three-args-select-cdecl", row) + "\n".join(
+        [
+            f"{value_type} {c_name}({value_type} a, {value_type} b, {value_type} c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-three-args-select-cdecl",
+            variant=f"sysv-o2-three-arg-{decoded['suffix']}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=value_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "valueType": value_type,
+                "pattern": decoded["pattern"],
+                "expression": decoded["expression"],
+                "cmov": decoded["cmov"],
+                "registerArgs": ["edi", "esi", "edx"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def format_x86_64_two_args_affine_expression(coeff_a: int, coeff_b: int, immediate: int) -> str:
     terms: list[str] = []
     if coeff_a == 1:
@@ -18402,6 +18467,7 @@ GENERATORS = [
     x86_64_add_two_args,
     x86_64_three_args_arithmetic,
     x86_64_three_args_bitwise,
+    x86_64_three_args_select,
     x86_64_two_args_affine_lea,
     x86_64_two_args_binary_op,
     x86_64_two_args_min_max,

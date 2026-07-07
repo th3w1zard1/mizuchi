@@ -1727,6 +1727,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_add_two_args_candidate,
         x86_64_three_args_arithmetic_candidate,
         x86_64_three_args_bitwise_candidate,
+        x86_64_three_args_select_candidate,
         x86_64_two_args_affine_lea_candidate,
         x86_64_two_args_binary_op_candidate,
         x86_64_two_args_binary_op64_candidate,
@@ -4689,6 +4690,72 @@ def x86_64_three_args_bitwise_candidate(task: dict[str, Any], data: bytes) -> di
             "rule": "x86-64-three-args-bitwise-cdecl",
             "bodyBytes": len(strip_alignment_padding(data)),
             "expression": decoded["expression"],
+            "pattern": decoded["pattern"],
+            "registerArgs": ["edi", "esi", "edx"],
+            "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_THREE_ARGS_SELECT_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x89\xd0\x39\xf7\x0f\x42\xc7\xc3": ("uint-select-lt", "unsigned int", "a < b ? a : c", "cmovb", "mov-eax-edx-cmp-edi-esi-cmovb-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x43\xc7\xc3": ("uint-select-ge", "unsigned int", "a < b ? c : a", "cmovae", "mov-eax-edx-cmp-edi-esi-cmovae-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x47\xc7\xc3": ("uint-select-gt", "unsigned int", "a > b ? a : c", "cmova", "mov-eax-edx-cmp-edi-esi-cmova-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x46\xc7\xc3": ("uint-select-le", "unsigned int", "a > b ? c : a", "cmovbe", "mov-eax-edx-cmp-edi-esi-cmovbe-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4c\xc7\xc3": ("int-select-lt", "int", "a < b ? a : c", "cmovl", "mov-eax-edx-cmp-edi-esi-cmovl-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4d\xc7\xc3": ("int-select-ge", "int", "a < b ? c : a", "cmovge", "mov-eax-edx-cmp-edi-esi-cmovge-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4f\xc7\xc3": ("int-select-gt", "int", "a > b ? a : c", "cmovg", "mov-eax-edx-cmp-edi-esi-cmovg-eax-edi-ret"),
+    b"\x89\xd0\x39\xf7\x0f\x4e\xc7\xc3": ("int-select-le", "int", "a > b ? c : a", "cmovle", "mov-eax-edx-cmp-edi-esi-cmovle-eax-edi-ret"),
+}
+
+
+def decode_x86_64_three_args_select(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_THREE_ARGS_SELECT_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, value_type, expression, cmov, pattern = decoded
+    return {
+        "suffix": suffix,
+        "valueType": value_type,
+        "expression": expression,
+        "cmov": cmov,
+        "pattern": pattern,
+    }
+
+
+def x86_64_three_args_select_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_three_args_select(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 three-argument {decoded['suffix']} select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{decoded['valueType']} {c_name}({decoded['valueType']} a, {decoded['valueType']} b, {decoded['valueType']} c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-three-args-select-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "valueType": decoded["valueType"],
+            "expression": decoded["expression"],
+            "cmov": decoded["cmov"],
             "pattern": decoded["pattern"],
             "registerArgs": ["edi", "esi", "edx"],
             "framePointer": False,
