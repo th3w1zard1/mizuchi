@@ -1733,6 +1733,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_sign_mask_candidate,
         x86_64_arg_bitmask_bool_candidate,
         x86_64_arg_udiv_pow2_candidate,
+        x86_64_arg_rotate_candidate,
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_unary_op_candidate,
@@ -5091,6 +5092,70 @@ def x86_64_arg_udiv_pow2_candidate(task: dict[str, Any], data: bytes) -> dict[st
             "operator": "/",
             "shift": int(decoded["shift"]),
             "divisor": divisor,
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_rotate(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 5 and body[:2] == b"\x89\xf8" and body[2] == 0xD1 and body[4] == 0xC3:
+        if body[3] == 0xC0:
+            return {"direction": "left", "count": 1, "encoding": "rol", "pattern": "mov-eax-edi-rol-eax-one-ret"}
+        if body[3] == 0xC8:
+            return {"direction": "right", "count": 1, "encoding": "ror", "pattern": "mov-eax-edi-ror-eax-one-ret"}
+    if len(body) == 6 and body[:2] == b"\x89\xf8" and body[2] == 0xC1 and body[3] == 0xC0 and body[5] == 0xC3:
+        count = body[4]
+        if not 1 <= count <= 31:
+            return None
+        if count > 16:
+            return {"direction": "right", "count": 32 - count, "encoding": "rol", "encodedCount": count, "pattern": "mov-eax-edi-rol-eax-imm8-ret"}
+        return {"direction": "left", "count": count, "encoding": "rol", "encodedCount": count, "pattern": "mov-eax-edi-rol-eax-imm8-ret"}
+    return None
+
+
+def x86_64_arg_rotate_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_rotate(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    direction = str(decoded["direction"])
+    count = int(decoded["count"])
+    if direction == "left":
+        expression = f"(value << {count}) | (value >> {32 - count})"
+    else:
+        expression = f"(value >> {count}) | (value << {32 - count})"
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 argument rotate-{direction} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg-rot{direction[0]}-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "direction": direction,
+            "count": count,
+            "encodedCount": decoded.get("encodedCount", count),
+            "encoding": decoded["encoding"],
             "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
