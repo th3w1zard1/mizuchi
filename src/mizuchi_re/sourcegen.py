@@ -1732,6 +1732,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_three_args_bitwise64_candidate,
         x86_64_three_args_select64_candidate,
         x86_64_two_args_affine_lea_candidate,
+        x86_64_two_args_affine_lea64_candidate,
         x86_64_two_args_binary_op_candidate,
         x86_64_two_args_binary_op64_candidate,
         x86_64_two_args_min_max_candidate,
@@ -5045,6 +5046,107 @@ def x86_64_two_args_affine_lea_candidate(task: dict[str, Any], data: bytes) -> d
             "rule": "x86-64-two-args-affine-lea-cdecl",
             "bodyBytes": len(strip_alignment_padding(data)),
             "registerArgs": ["edi", "esi"],
+            "coeffA": int(decoded["coeffA"]),
+            "coeffB": int(decoded["coeffB"]),
+            "immediate": int(decoded["immediate"]),
+            "expression": expression,
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def format_x86_64_two_args_affine_expression64(coeff_a: int, coeff_b: int, immediate: int) -> str:
+    terms: list[str] = []
+    if coeff_a == 1:
+        terms.append("a")
+    elif coeff_a > 1:
+        terms.append(f"{coeff_a}ull * a")
+    if coeff_b == 1:
+        terms.append("b")
+    elif coeff_b > 1:
+        terms.append(f"{coeff_b}ull * b")
+    if immediate:
+        terms.append(f"0x{immediate:02x}ull")
+    return " + ".join(terms)
+
+
+def decode_x86_64_two_args_affine_lea64(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) < 5 or body[:3] != b"\x48\x8d\x04":
+        return None
+    sib = body[3]
+    scale = 1 << ((sib >> 6) & 0x03)
+    index = (sib >> 3) & 0x07
+    base = sib & 0x07
+    register_names = {0x07: "a", 0x06: "b"}
+    if base not in register_names or index not in register_names:
+        return None
+    coeffs = {"a": 0, "b": 0}
+    coeffs[register_names[base]] += 1
+    coeffs[register_names[index]] += scale
+    immediate = 0
+    suffix = "scaled64"
+    if len(body) == 5 and body[4] == 0xC3:
+        pass
+    elif len(body) == 8 and body[4:8] == b"\x48\x01\xf8\xc3":
+        coeffs["a"] += 1
+        suffix = "scaled-add-a64"
+    elif len(body) == 9 and body[4:7] == b"\x48\x83\xc0" and body[8] == 0xC3:
+        immediate = body[7]
+        if immediate == 0:
+            return None
+        suffix = "scaled-add-imm8-64"
+    else:
+        return None
+    coeff_a = coeffs["a"]
+    coeff_b = coeffs["b"]
+    if coeff_a == 1 and coeff_b == 1 and immediate == 0:
+        return None
+    if coeff_a == 0 or coeff_b == 0:
+        return None
+    return {
+        "suffix": suffix,
+        "coeffA": coeff_a,
+        "coeffB": coeff_b,
+        "immediate": immediate,
+        "expression": format_x86_64_two_args_affine_expression64(coeff_a, coeff_b, immediate),
+        "pattern": f"lea-rax-sib-0x{sib:02x}{'-add-rax-rdi' if suffix == 'scaled-add-a64' else '-add-rax-imm8' if suffix == 'scaled-add-imm8-64' else ''}-ret",
+    }
+
+
+def x86_64_two_args_affine_lea64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_two_args_affine_lea64(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    expression = str(decoded["expression"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 64-bit two-argument affine LEA pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long a, unsigned long long b) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-two-args-affine-lea64-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArgs": ["rdi", "rsi"],
             "coeffA": int(decoded["coeffA"]),
             "coeffB": int(decoded["coeffB"]),
             "immediate": int(decoded["immediate"]),

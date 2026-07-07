@@ -172,6 +172,8 @@ def should_run_stage(state: dict[str, Any], name: str, resume: bool) -> bool:
         return True
     stages = state.get("stages", {})
     status = (stages.get(name) or {}).get("status")
+    if status == "failed":
+        return True
     if status == "complete":
         return False
     for legacy in LEGACY_STAGE_ALIASES.get(name, ()):
@@ -741,6 +743,9 @@ def stage_synthesize(
     max_attempts_per_function: int,
     max_attempts_per_function_policy: str,
 ) -> None:
+    synth_stage = (state.get("stages") or {}).get("synthesize-candidates") or {}
+    prior_limit = int(synth_stage.get("synthesisLimit") or 0)
+    incremental = prior_limit > 0 and limit > prior_limit
     args = [
         "--queue",
         str(profile.queue_jsonl),
@@ -753,14 +758,19 @@ def stage_synthesize(
         "--out-dir",
         str(profile.synthesis_out_dir),
         "--limit",
-        str(limit),
+        str(limit if not incremental else (limit - prior_limit)),
     ]
+    if incremental:
+        args.extend(["--offset", str(prior_limit)])
     args.extend(["--max-attempts-per-function", str(max_attempts_per_function)])
     args.extend(["--max-attempts-per-function-policy", max_attempts_per_function_policy])
     if profile.trivial_out_jsonl.exists():
         args.extend(["--matched-summary", str(profile.trivial_out_jsonl)])
     if profile.reloc_out_jsonl.exists():
         args.extend(["--matched-summary", str(profile.reloc_out_jsonl)])
+    code_slice_matches = profile.synthesis_out_dir / "code-slice-matches.jsonl"
+    if code_slice_matches.is_file():
+        args.extend(["--matched-summary", str(code_slice_matches)])
     # JKA inventory functions are mostly byte-pattern stubs; semantic-only skips all of them.
     if profile.slug not in {"jedi-academy", "jedi_academy"}:
         args.append("--semantic-only")

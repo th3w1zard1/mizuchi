@@ -1818,6 +1818,104 @@ def x86_64_two_args_affine_lea(row: dict[str, Any], c_name: str, data: bytes) ->
     ]
 
 
+def format_x86_64_two_args_affine_expression64(coeff_a: int, coeff_b: int, immediate: int) -> str:
+    terms: list[str] = []
+    if coeff_a == 1:
+        terms.append("a")
+    elif coeff_a > 1:
+        terms.append(f"{coeff_a}ull * a")
+    if coeff_b == 1:
+        terms.append("b")
+    elif coeff_b > 1:
+        terms.append(f"{coeff_b}ull * b")
+    if immediate:
+        terms.append(f"0x{immediate:02x}ull")
+    return " + ".join(terms)
+
+
+def decode_x86_64_two_args_affine_lea64(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) < 5 or body[:3] != b"\x48\x8d\x04":
+        return None
+    sib = body[3]
+    scale = 1 << ((sib >> 6) & 0x03)
+    index = (sib >> 3) & 0x07
+    base = sib & 0x07
+    register_names = {0x07: "a", 0x06: "b"}
+    if base not in register_names or index not in register_names:
+        return None
+    coeffs = {"a": 0, "b": 0}
+    coeffs[register_names[base]] += 1
+    coeffs[register_names[index]] += scale
+    immediate = 0
+    suffix = "scaled64"
+    if len(body) == 5 and body[4] == 0xC3:
+        pass
+    elif len(body) == 8 and body[4:8] == b"\x48\x01\xf8\xc3":
+        coeffs["a"] += 1
+        suffix = "scaled-add-a64"
+    elif len(body) == 9 and body[4:7] == b"\x48\x83\xc0" and body[8] == 0xC3:
+        immediate = body[7]
+        if immediate == 0:
+            return None
+        suffix = "scaled-add-imm8-64"
+    else:
+        return None
+    coeff_a = coeffs["a"]
+    coeff_b = coeffs["b"]
+    if coeff_a == 1 and coeff_b == 1 and immediate == 0:
+        return None
+    if coeff_a == 0 or coeff_b == 0:
+        return None
+    return {
+        "suffix": suffix,
+        "coeffA": coeff_a,
+        "coeffB": coeff_b,
+        "immediate": immediate,
+        "expression": format_x86_64_two_args_affine_expression64(coeff_a, coeff_b, immediate),
+        "pattern": f"lea-rax-sib-0x{sib:02x}{'-add-rax-rdi' if suffix == 'scaled-add-a64' else '-add-rax-imm8' if suffix == 'scaled-add-imm8-64' else ''}-ret",
+    }
+
+
+def x86_64_two_args_affine_lea64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_two_args_affine_lea64(data)
+    if decoded is None:
+        return []
+    expression = str(decoded["expression"])
+    source = header("x86-64-two-args-affine-lea64-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long a, unsigned long long b) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-two-args-affine-lea64-cdecl",
+            variant=f"sysv-o2-register-args-affine-lea-{decoded['suffix']}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArgs": ["rdi", "rsi"],
+                "coeffA": int(decoded["coeffA"]),
+                "coeffB": int(decoded["coeffB"]),
+                "immediate": int(decoded["immediate"]),
+                "expression": expression,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_TWO_ARG_BINARY_OPS: dict[bytes, tuple[str, str, str]] = {
     b"\x89\xf8\x29\xf0\xc3": ("sub", "-", "mov-eax-edi-sub-eax-esi-ret"),
     b"\x89\xf8\x0f\xaf\xc6\xc3": ("mul", "*", "mov-eax-edi-imul-eax-esi-ret"),
@@ -18656,6 +18754,7 @@ GENERATORS = [
     x86_64_three_args_bitwise64,
     x86_64_three_args_select64,
     x86_64_two_args_affine_lea,
+    x86_64_two_args_affine_lea64,
     x86_64_two_args_binary_op,
     x86_64_two_args_min_max,
     x86_64_arg_lea_multiply,
@@ -21969,10 +22068,12 @@ def main(argv: list[str] | None = None) -> int:
     accepted_path = args.out_dir / "accepted.jsonl"
     code_slice_matches_path = args.out_dir / "code-slice-matches.jsonl"
     source_shape_matches_path = args.out_dir / "source-shape-matches.jsonl"
+    # Always reset attempts for this run; preserve match artifacts unless --clean.
     clean_jsonl(attempts_path)
-    clean_jsonl(accepted_path)
-    clean_jsonl(code_slice_matches_path)
-    clean_jsonl(source_shape_matches_path)
+    if args.clean:
+        clean_jsonl(accepted_path)
+        clean_jsonl(code_slice_matches_path)
+        clean_jsonl(source_shape_matches_path)
 
     strategies = None
     if args.strategies:
