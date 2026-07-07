@@ -5142,6 +5142,104 @@ def two_stack_args_affine_stdcall(row: dict[str, Any], c_name: str, data: bytes)
     ]
 
 
+I386_THREE_STACK_ARG_COMMUTATIVE_OPS: dict[int, tuple[str, str]] = {
+    0x03: ("add", "+"),
+    0x33: ("xor", "^"),
+    0x23: ("and", "&"),
+    0x0B: ("or", "|"),
+}
+
+
+def decode_three_stack_args_commutative_op(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x0c\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 12 or core[:4] != b"\x8b\x44\x24\x08":
+        return None
+    first_opcode = core[4]
+    second_opcode = core[8]
+    if first_opcode != second_opcode or core[5:8] != b"\x44\x24\x04" or core[9:12] != b"\x44\x24\x0c":
+        return None
+    decoded = I386_THREE_STACK_ARG_COMMUTATIVE_OPS.get(first_opcode)
+    if decoded is None:
+        return None
+    suffix, operator = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "operandOrder": "stack8-then-stack4-then-stack12",
+        "pattern": f"mov-eax-stack8-{suffix}-eax-stack4-{suffix}-eax-stack12",
+        "stackBytes": 12 if stdcall else 0,
+    }
+
+
+def three_stack_args_commutative_op(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_three_stack_args_commutative_op(data, stdcall=False)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"three-stack-args-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return a {operator} b {operator} c;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"three-stack-args-{suffix}-cdecl",
+            variant=f"cdecl-o2-three-arg-{suffix}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "operandOrder": decoded["operandOrder"],
+            },
+        )
+    ]
+
+
+def three_stack_args_commutative_op_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_three_stack_args_commutative_op(data, stdcall=True)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"three-stack-args-{suffix}-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return a {operator} b {operator} c;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"three-stack-args-{suffix}-stdcall",
+            variant=f"stdcall12-o2-three-arg-{suffix}",
+            c_name=c_name,
+            symbol=f"_{c_name}@12",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "operandOrder": decoded["operandOrder"],
+                "stackBytes": 12,
+            },
+        )
+    ]
+
+
 I386_TWO_STACK_ARG_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str]] = {
     0x42: ("uint-min", "<", "unsigned int", "cmovb"),
     0x47: ("uint-max", ">", "unsigned int", "cmova"),
@@ -18029,6 +18127,8 @@ GENERATORS = [
     two_stack_args_binary_op_stdcall,
     two_stack_args_affine,
     two_stack_args_affine_stdcall,
+    three_stack_args_commutative_op,
+    three_stack_args_commutative_op_stdcall,
     two_stack_args_min_max,
     two_stack_args_min_max_stdcall,
     two_stack_args_unsigned_compare,

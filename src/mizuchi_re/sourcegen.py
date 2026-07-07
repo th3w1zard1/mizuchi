@@ -1792,6 +1792,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         two_stack_args_binary_op_stdcall_candidate,
         two_stack_args_affine_candidate,
         two_stack_args_affine_stdcall_candidate,
+        three_stack_args_commutative_op_candidate,
+        three_stack_args_commutative_op_stdcall_candidate,
         two_stack_args_min_max_candidate,
         two_stack_args_min_max_stdcall_candidate,
         two_stack_args_unsigned_compare_candidate,
@@ -8433,6 +8435,118 @@ def two_stack_args_affine_stdcall_candidate(task: dict[str, Any], data: bytes) -
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             "stdcall two-argument affine arithmetic is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+I386_THREE_STACK_ARG_COMMUTATIVE_OPS: dict[int, tuple[str, str]] = {
+    0x03: ("add", "+"),
+    0x33: ("xor", "^"),
+    0x23: ("and", "&"),
+    0x0B: ("or", "|"),
+}
+
+
+def decode_three_stack_args_commutative_op(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x0c\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 12 or core[:4] != b"\x8b\x44\x24\x08":
+        return None
+    if core[1:4] == b"\x44\x24\x04":
+        return None
+    first_opcode = core[4]
+    second_opcode = core[8]
+    if first_opcode != second_opcode or core[5:8] != b"\x44\x24\x04" or core[9:12] != b"\x44\x24\x0c":
+        return None
+    decoded = I386_THREE_STACK_ARG_COMMUTATIVE_OPS.get(first_opcode)
+    if decoded is None:
+        return None
+    suffix, operator = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "operandOrder": "stack8-then-stack4-then-stack12",
+        "pattern": f"mov-eax-stack8-{suffix}-eax-stack4-{suffix}-eax-stack12",
+        "stackBytes": 12 if stdcall else 0,
+    }
+
+
+def three_stack_args_commutative_op_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_three_stack_args_commutative_op(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 three-argument {suffix} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return a {operator} b {operator} c;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"three-stack-args-{suffix}-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "operandOrder": decoded["operandOrder"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"three-argument {suffix} is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def three_stack_args_commutative_op_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_three_stack_args_commutative_op(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stdcall three-argument {suffix} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return a {operator} b {operator} c;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"three-stack-args-{suffix}-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "operandOrder": decoded["operandOrder"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 12,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stdcall three-argument {suffix} is a canonical clang i386 O2 leaf pattern"
         ),
     }
 
