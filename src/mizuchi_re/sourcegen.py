@@ -1794,6 +1794,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         two_stack_args_unsigned_compare_stdcall_candidate,
         two_stack_args_signed_compare_candidate,
         two_stack_args_signed_compare_stdcall_candidate,
+        stack_arg_sdiv_pow2_candidate,
+        stack_arg_sdiv_pow2_stdcall_candidate,
         stack_arg_signed_zero_compare_candidate,
         stack_arg_signed_zero_compare_stdcall_candidate,
         stack_arg_signed_imm8_compare_candidate,
@@ -8480,6 +8482,116 @@ def i386_clang_o2_leaf_compiler_profile_hint(reason: str) -> dict[str, Any]:
         "language": "c",
         "args": ["-m32", "-O2", "-fomit-frame-pointer", "-ffreestanding", "-fno-pic", "-fno-pie", "-fno-asynchronous-unwind-tables", "-fno-stack-protector", "-fno-ident"],
         "reason": reason,
+    }
+
+
+def decode_stack_arg_sdiv_pow2(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if core == b"\x8b\x4c\x24\x04\x89\xc8\xc1\xe8\x1f\x01\xc8\xd1\xf8":
+        return {
+            "shift": 1,
+            "divisor": 2,
+            "bias": 1,
+            "pattern": "mov-ecx-stack4-mov-eax-ecx-shr-eax-31-add-eax-ecx-sar-eax-one",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    if len(core) == 15 and core[:4] == b"\x8b\x4c\x24\x04" and core[4:6] == b"\x8d\x41" and core[7:12] == b"\x85\xc9\x0f\x49\xc1" and core[12:14] == b"\xc1\xf8":
+        bias = core[6]
+        shift = core[14]
+        if not 2 <= shift <= 7:
+            return None
+        if bias != (1 << shift) - 1:
+            return None
+        return {
+            "shift": shift,
+            "divisor": 1 << shift,
+            "bias": bias,
+            "pattern": "mov-ecx-stack4-lea-eax-ecx-bias-test-ecx-ecx-cmovns-eax-ecx-sar-eax-imm8",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    return None
+
+
+def stack_arg_sdiv_pow2_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_sdiv_pow2(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stack-argument signed power-of-two division pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(int value) {{",
+            f"    return value / {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-sdiv-pow2-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "/",
+            "shift": int(decoded["shift"]),
+            "divisor": divisor,
+            "bias": int(decoded["bias"]),
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "signed stack argument power-of-two division is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_sdiv_pow2_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_sdiv_pow2(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall stack-argument signed power-of-two division pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int __stdcall {c_name}(int value) {{",
+            f"    return value / {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-sdiv-pow2-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": "/",
+            "shift": int(decoded["shift"]),
+            "divisor": divisor,
+            "bias": int(decoded["bias"]),
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall signed stack argument power-of-two division is a canonical clang i386 O2 leaf pattern"
+        ),
     }
 
 

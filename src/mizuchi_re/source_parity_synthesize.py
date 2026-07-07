@@ -5199,6 +5199,104 @@ def two_stack_args_signed_compare_stdcall(row: dict[str, Any], c_name: str, data
     ]
 
 
+def decode_stack_arg_sdiv_pow2(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if core == b"\x8b\x4c\x24\x04\x89\xc8\xc1\xe8\x1f\x01\xc8\xd1\xf8":
+        return {
+            "shift": 1,
+            "divisor": 2,
+            "bias": 1,
+            "pattern": "mov-ecx-stack4-mov-eax-ecx-shr-eax-31-add-eax-ecx-sar-eax-one",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    if len(core) == 15 and core[:4] == b"\x8b\x4c\x24\x04" and core[4:6] == b"\x8d\x41" and core[7:12] == b"\x85\xc9\x0f\x49\xc1" and core[12:14] == b"\xc1\xf8":
+        bias = core[6]
+        shift = core[14]
+        if not 2 <= shift <= 7:
+            return None
+        if bias != (1 << shift) - 1:
+            return None
+        return {
+            "shift": shift,
+            "divisor": 1 << shift,
+            "bias": bias,
+            "pattern": "mov-ecx-stack4-lea-eax-ecx-bias-test-ecx-ecx-cmovns-eax-ecx-sar-eax-imm8",
+            "stackBytes": 4 if stdcall else 0,
+        }
+    return None
+
+
+def stack_arg_sdiv_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_sdiv_pow2(data, stdcall=False)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-sdiv-pow2-cdecl", row) + "\n".join(
+        [
+            f"int {c_name}(int value) {{",
+            f"    return value / {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-sdiv-pow2-cdecl",
+            variant=f"cdecl-o2-stack-arg-sdiv-{divisor}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "/",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "bias": int(decoded["bias"]),
+            },
+        )
+    ]
+
+
+def stack_arg_sdiv_pow2_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_sdiv_pow2(data, stdcall=True)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-sdiv-pow2-stdcall", row) + "\n".join(
+        [
+            f"int __stdcall {c_name}(int value) {{",
+            f"    return value / {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-sdiv-pow2-stdcall",
+            variant=f"stdcall4-o2-stack-arg-sdiv-{divisor}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "/",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "bias": int(decoded["bias"]),
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 I386_SIGNED_ZERO_COMPARE_RULES: dict[str, tuple[str, str, str]] = {
     "lt": ("<", "mov-eax-stack4-shr-eax-31"),
     "ge": (">=", "mov-eax-stack4-not-eax-shr-eax-31"),
@@ -16476,6 +16574,8 @@ GENERATORS = [
     two_stack_args_unsigned_compare_stdcall,
     two_stack_args_signed_compare,
     two_stack_args_signed_compare_stdcall,
+    stack_arg_sdiv_pow2,
+    stack_arg_sdiv_pow2_stdcall,
     stack_arg_signed_zero_compare,
     stack_arg_signed_zero_compare_stdcall,
     stack_arg_signed_imm8_compare,
