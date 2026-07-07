@@ -1331,7 +1331,56 @@ def x86_64_two_args_binary_op(row: dict[str, Any], c_name: str, data: bytes) -> 
     ]
 
 
+X86_64_ARG_LEA_MULTIPLY_OPS: dict[bytes, tuple[int, str]] = {
+    b"\x8d\x04\x3f\xc3": (2, "lea-eax-rdi-rdi-ret"),
+    b"\x8d\x04\x7f\xc3": (3, "lea-eax-rdi-rdi2-ret"),
+    b"\x8d\x04\xbd\x00\x00\x00\x00\xc3": (4, "lea-eax-rdi4-ret"),
+    b"\x8d\x04\xbf\xc3": (5, "lea-eax-rdi-rdi4-ret"),
+    b"\x8d\x04\xfd\x00\x00\x00\x00\xc3": (8, "lea-eax-rdi8-ret"),
+    b"\x8d\x04\xff\xc3": (9, "lea-eax-rdi-rdi8-ret"),
+}
+
+
+def x86_64_arg_lea_multiply(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_LEA_MULTIPLY_OPS.get(body)
+    if decoded is None:
+        return []
+    multiplier, pattern = decoded
+    source = header("x86-64-arg-mul-lea-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value * {multiplier}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-mul-lea-cdecl",
+            variant=f"sysv-o2-register-arg-lea-mul-{multiplier}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "edi",
+                "operator": "*",
+                "multiplier": multiplier,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
+    0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
     0xF8: ("sar", ">>", "int", "int"),
 }
@@ -1404,7 +1453,24 @@ def decode_x86_64_arg_imm8_binary_op(data: bytes) -> dict[str, Any] | None:
             "immediate": abs(signed_immediate),
             "rawImmediate": raw_immediate,
             "signedImmediate": signed_immediate,
+            "immediateBits": 8,
             "pattern": "lea-eax-rdi-disp8-ret",
+        }
+    if len(body) == 7 and body[:2] == b"\x8d\x87" and body[6] == 0xC3:
+        raw_immediate = int.from_bytes(body[2:6], "little", signed=False)
+        signed_immediate = int.from_bytes(body[2:6], "little", signed=True)
+        if signed_immediate == 0:
+            return None
+        suffix = "add" if signed_immediate > 0 else "sub"
+        operator = "+" if signed_immediate > 0 else "-"
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": abs(signed_immediate),
+            "rawImmediate": raw_immediate,
+            "signedImmediate": signed_immediate,
+            "immediateBits": 32,
+            "pattern": "lea-eax-rdi-disp32-ret",
         }
     if len(body) == 6 and body[:3] == b"\x89\xf8\x83" and body[5] == 0xC3:
         decoded = X86_64_ARG_IMM8_BINARY_OPS.get(body[3])
@@ -1420,6 +1486,7 @@ def decode_x86_64_arg_imm8_binary_op(data: bytes) -> dict[str, Any] | None:
             "immediate": raw_immediate,
             "rawImmediate": raw_immediate,
             "signedImmediate": raw_immediate,
+            "immediateBits": 8,
             "pattern": "mov-eax-edi-op-eax-imm8-ret",
         }
     return None
@@ -1434,18 +1501,20 @@ def x86_64_arg_imm8_binary_op(row: dict[str, Any], c_name: str, data: bytes) -> 
     suffix = str(decoded["suffix"])
     operator = str(decoded["operator"])
     immediate = int(decoded["immediate"])
-    source = header(f"x86-64-arg-{suffix}-imm8-cdecl", row) + "\n".join(
+    immediate_bits = int(decoded.get("immediateBits") or 8)
+    immediate_digits = 2 if immediate_bits == 8 else 8
+    source = header(f"x86-64-arg-{suffix}-imm{immediate_bits}-cdecl", row) + "\n".join(
         [
             f"unsigned int {c_name}(unsigned int value) {{",
-            f"    return value {operator} 0x{immediate:02x}u;",
+            f"    return value {operator} 0x{immediate:0{immediate_digits}x}u;",
             "}",
             "",
         ]
     )
     return [
         GeneratedCandidate(
-            rule=f"x86-64-arg-{suffix}-imm8-cdecl",
-            variant=f"sysv-o2-register-arg-{suffix}-imm8",
+            rule=f"x86-64-arg-{suffix}-imm{immediate_bits}-cdecl",
+            variant=f"sysv-o2-register-arg-{suffix}-imm{immediate_bits}",
             c_name=c_name,
             symbol=clang_c_symbol(row, c_name),
             source=source,
@@ -1456,7 +1525,8 @@ def x86_64_arg_imm8_binary_op(row: dict[str, Any], c_name: str, data: bytes) -> 
                 "pattern": decoded["pattern"],
                 "registerArg": "edi",
                 "operator": operator,
-                "immediate": f"0x{immediate:02x}",
+                "immediate": f"0x{immediate:0{immediate_digits}x}",
+                "immediateBits": immediate_bits,
                 "rawImmediate": int(decoded["rawImmediate"]),
                 "signedImmediate": int(decoded["signedImmediate"]),
                 "framePointer": False,
@@ -13767,6 +13837,7 @@ GENERATORS = [
     x86_64_return_first_arg,
     x86_64_add_two_args,
     x86_64_two_args_binary_op,
+    x86_64_arg_lea_multiply,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,

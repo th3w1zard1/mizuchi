@@ -1724,6 +1724,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_return_first_arg_candidate,
         x86_64_add_two_args_candidate,
         x86_64_two_args_binary_op_candidate,
+        x86_64_arg_lea_multiply_candidate,
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_unary_op_candidate,
@@ -4471,7 +4472,59 @@ def x86_64_two_args_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
     }
 
 
+X86_64_ARG_LEA_MULTIPLY_OPS: dict[bytes, tuple[int, str]] = {
+    b"\x8d\x04\x3f\xc3": (2, "lea-eax-rdi-rdi-ret"),
+    b"\x8d\x04\x7f\xc3": (3, "lea-eax-rdi-rdi2-ret"),
+    b"\x8d\x04\xbd\x00\x00\x00\x00\xc3": (4, "lea-eax-rdi4-ret"),
+    b"\x8d\x04\xbf\xc3": (5, "lea-eax-rdi-rdi4-ret"),
+    b"\x8d\x04\xfd\x00\x00\x00\x00\xc3": (8, "lea-eax-rdi8-ret"),
+    b"\x8d\x04\xff\xc3": (9, "lea-eax-rdi-rdi8-ret"),
+}
+
+
+def x86_64_arg_lea_multiply_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_LEA_MULTIPLY_OPS.get(body)
+    if decoded is None:
+        return None
+    multiplier, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 argument multiply-by-{multiplier} LEA pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value * {multiplier}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-arg-mul-lea-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "edi",
+            "operator": "*",
+            "multiplier": multiplier,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
 X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
+    0xE0: ("shl", "<<", "unsigned int", "unsigned int"),
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
     0xF8: ("sar", ">>", "int", "int"),
 }
@@ -4546,7 +4599,24 @@ def decode_x86_64_arg_imm8_binary_op(data: bytes) -> dict[str, Any] | None:
             "immediate": abs(signed_immediate),
             "rawImmediate": raw_immediate,
             "signedImmediate": signed_immediate,
+            "immediateBits": 8,
             "pattern": "lea-eax-rdi-disp8-ret",
+        }
+    if len(body) == 7 and body[:2] == b"\x8d\x87" and body[6] == 0xC3:
+        raw_immediate = int.from_bytes(body[2:6], "little", signed=False)
+        signed_immediate = int.from_bytes(body[2:6], "little", signed=True)
+        if signed_immediate == 0:
+            return None
+        suffix = "add" if signed_immediate > 0 else "sub"
+        operator = "+" if signed_immediate > 0 else "-"
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": abs(signed_immediate),
+            "rawImmediate": raw_immediate,
+            "signedImmediate": signed_immediate,
+            "immediateBits": 32,
+            "pattern": "lea-eax-rdi-disp32-ret",
         }
     if len(body) == 6 and body[:3] == b"\x89\xf8\x83" and body[5] == 0xC3:
         decoded = X86_64_ARG_IMM8_BINARY_OPS.get(body[3])
@@ -4562,6 +4632,7 @@ def decode_x86_64_arg_imm8_binary_op(data: bytes) -> dict[str, Any] | None:
             "immediate": raw_immediate,
             "rawImmediate": raw_immediate,
             "signedImmediate": raw_immediate,
+            "immediateBits": 8,
             "pattern": "mov-eax-edi-op-eax-imm8-ret",
         }
     return None
@@ -4577,6 +4648,8 @@ def x86_64_arg_imm8_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
     suffix = str(decoded["suffix"])
     operator = str(decoded["operator"])
     immediate = int(decoded["immediate"])
+    immediate_bits = int(decoded.get("immediateBits") or 8)
+    immediate_digits = 2 if immediate_bits == 8 else 8
     source = "\n".join(
         [
             "/*",
@@ -4585,7 +4658,7 @@ def x86_64_arg_imm8_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
             " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
             " */",
             f"unsigned int {c_name}(unsigned int value) {{",
-            f"    return value {operator} 0x{immediate:02x}u;",
+            f"    return value {operator} 0x{immediate:0{immediate_digits}x}u;",
             "}",
             "",
         ]
@@ -4596,11 +4669,12 @@ def x86_64_arg_imm8_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
         "language": "c",
         "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
         "generator": {
-            "rule": f"x86-64-arg-{suffix}-imm8-cdecl",
+            "rule": f"x86-64-arg-{suffix}-imm{immediate_bits}-cdecl",
             "bodyBytes": len(strip_alignment_padding(data)),
             "registerArg": "edi",
             "operator": operator,
-            "immediate": f"0x{immediate:02x}",
+            "immediate": f"0x{immediate:0{immediate_digits}x}",
+            "immediateBits": immediate_bits,
             "rawImmediate": int(decoded["rawImmediate"]),
             "signedImmediate": int(decoded["signedImmediate"]),
             "pattern": decoded["pattern"],
