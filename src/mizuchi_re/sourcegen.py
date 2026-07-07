@@ -1726,6 +1726,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_two_args_binary_op_candidate,
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
+        x86_64_arg_unary_op_candidate,
         x86_64_arg_unsigned_imm8_compare_candidate,
         x86_64_arg_signed_imm8_compare_candidate,
         x86_64_two_args_unsigned_compare_candidate,
@@ -1761,6 +1762,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         stack_arg_bitmask_predicate_stdcall_candidate,
         stack_arg_imm8_binary_op_candidate,
         stack_arg_imm8_binary_op_stdcall_candidate,
+        stack_arg_unary_op_candidate,
+        stack_arg_unary_op_stdcall_candidate,
         stack_arg_shift_imm8_candidate,
         stack_arg_shift_imm8_stdcall_candidate,
         stack_arg_nonzero_bool_candidate,
@@ -4605,6 +4608,52 @@ def x86_64_arg_imm8_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
     }
 
 
+X86_64_ARG_UNARY_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x89\xf8\xf7\xd8\xc3": ("neg", "-", "mov-eax-edi-neg-eax-ret"),
+    b"\x89\xf8\xf7\xd0\xc3": ("not", "~", "mov-eax-edi-not-eax-ret"),
+}
+
+
+def x86_64_arg_unary_op_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_UNARY_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 argument {suffix} unary pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg-{suffix}-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "edi",
+            "operator": operator,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
 def decode_x86_64_arg_imm8_compare(data: bytes, *, signed: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if (
@@ -6151,6 +6200,104 @@ I386_STACK_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
     0xF8: ("sar", ">>", "int", "int"),
 }
+
+
+I386_STACK_ARG_UNARY_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x31\xc0\x2b\x44\x24\x04": ("neg", "-", "xor-eax-sub-eax-stack4"),
+    b"\x8b\x44\x24\x04\xf7\xd0": ("not", "~", "mov-eax-stack4-not-eax"),
+}
+
+
+def decode_stack_arg_unary_op(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    decoded = I386_STACK_ARG_UNARY_OPS.get(body[: -len(ret)])
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_unary_op_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_unary_op(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stack-argument {suffix} unary pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{suffix}-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stack argument {suffix} unary is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_unary_op_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_unary_op(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stdcall stack-argument {suffix} unary pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{suffix}-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stdcall stack argument {suffix} unary is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
 
 
 def decode_stack_arg_shift_imm8(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:

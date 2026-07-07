@@ -1466,6 +1466,49 @@ def x86_64_arg_imm8_binary_op(row: dict[str, Any], c_name: str, data: bytes) -> 
     ]
 
 
+X86_64_ARG_UNARY_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x89\xf8\xf7\xd8\xc3": ("neg", "-", "mov-eax-edi-neg-eax-ret"),
+    b"\x89\xf8\xf7\xd0\xc3": ("not", "~", "mov-eax-edi-not-eax-ret"),
+}
+
+
+def x86_64_arg_unary_op(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_UNARY_OPS.get(body)
+    if decoded is None:
+        return []
+    suffix, operator, pattern = decoded
+    source = header(f"x86-64-arg-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg-{suffix}-cdecl",
+            variant=f"sysv-o2-register-arg-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "edi",
+                "operator": operator,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_imm8_compare(data: bytes, *, signed: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if (
@@ -2963,6 +3006,85 @@ def stack_arg_imm8_binary_op_stdcall(row: dict[str, Any], c_name: str, data: byt
                 "signedImmediate": int(decoded["signedImmediate"]),
                 "stackBytes": 4,
             },
+        )
+    ]
+
+
+I386_STACK_ARG_UNARY_OPS: dict[bytes, tuple[str, str, str]] = {
+    b"\x31\xc0\x2b\x44\x24\x04": ("neg", "-", "xor-eax-sub-eax-stack4"),
+    b"\x8b\x44\x24\x04\xf7\xd0": ("not", "~", "mov-eax-stack4-not-eax"),
+}
+
+
+def decode_stack_arg_unary_op(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    decoded = I386_STACK_ARG_UNARY_OPS.get(body[: -len(ret)])
+    if decoded is None:
+        return None
+    suffix, operator, pattern = decoded
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_unary_op(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_unary_op(data, stdcall=False)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"stack-arg-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{suffix}-cdecl",
+            variant=f"cdecl-o2-stack-arg-{suffix}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={"pattern": decoded["pattern"], "operator": operator},
+        )
+    ]
+
+
+def stack_arg_unary_op_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_unary_op(data, stdcall=True)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    source = header(f"stack-arg-{suffix}-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return {operator}value;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{suffix}-stdcall",
+            variant=f"stdcall4-o2-stack-arg-{suffix}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={"pattern": decoded["pattern"], "operator": operator, "stackBytes": 4},
         )
     ]
 
@@ -13509,6 +13631,7 @@ GENERATORS = [
     x86_64_two_args_binary_op,
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
+    x86_64_arg_unary_op,
     x86_64_arg_unsigned_imm8_compare,
     x86_64_arg_signed_imm8_compare,
     x86_64_two_args_unsigned_compare,
@@ -13547,6 +13670,8 @@ GENERATORS = [
     stack_arg_bitmask_predicate_stdcall,
     stack_arg_imm8_binary_op,
     stack_arg_imm8_binary_op_stdcall,
+    stack_arg_unary_op,
+    stack_arg_unary_op_stdcall,
     stack_arg_shift_imm8,
     stack_arg_shift_imm8_stdcall,
     stack_arg_nonzero_bool,
