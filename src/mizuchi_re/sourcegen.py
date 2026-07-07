@@ -1741,6 +1741,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_udiv_pow2_candidate,
         x86_64_arg_udiv_magic_candidate,
         x86_64_arg_urem_magic_candidate,
+        x86_64_arg_sdiv_pow2_candidate,
         x86_64_arg_sdiv_magic_candidate,
         x86_64_arg_srem_magic_candidate,
         x86_64_arg_bswap32_candidate,
@@ -5608,6 +5609,73 @@ def x86_64_arg_urem_magic_candidate(task: dict[str, Any], data: bytes) -> dict[s
             "divisor": divisor,
             "multiplier": decoded["multiplier"],
             "shift": int(decoded["shift"]),
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_sdiv_pow2(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x89\xf8\xc1\xe8\x1f\x01\xf8\xd1\xf8\xc3":
+        return {
+            "shift": 1,
+            "divisor": 2,
+            "bias": 1,
+            "pattern": "mov-eax-edi-shr-eax-31-add-eax-edi-sar-eax-one-ret",
+        }
+    if len(body) == 12 and body[:2] == b"\x8d\x47" and body[3:8] == b"\x85\xff\x0f\x49\xc7" and body[8:10] == b"\xc1\xf8" and body[11] == 0xC3:
+        bias = body[2]
+        shift = body[10]
+        if not 2 <= shift <= 7:
+            return None
+        if bias != (1 << shift) - 1:
+            return None
+        return {
+            "shift": shift,
+            "divisor": 1 << shift,
+            "bias": bias,
+            "pattern": "lea-eax-rdi-bias-test-edi-edi-cmovns-eax-edi-sar-eax-imm8-ret",
+        }
+    return None
+
+
+def x86_64_arg_sdiv_pow2_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_sdiv_pow2(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 signed power-of-two division pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(int value) {{",
+            f"    return value / {divisor};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-arg-sdiv-pow2-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "operator": "/",
+            "shift": int(decoded["shift"]),
+            "divisor": divisor,
+            "bias": int(decoded["bias"]),
             "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
