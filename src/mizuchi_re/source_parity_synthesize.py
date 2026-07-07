@@ -16795,6 +16795,7 @@ def main(argv: list[str] | None = None) -> int:
     skipped_boundary_suspect = 0
     skipped_by_attempt_limit = 0
     attempted_limit_distribution: dict[int, int] = {}
+    attempted_limit_reason_distribution: dict[str, int] = {}
     compile_failed = 0
     slice_failed = 0
     unsupported = 0
@@ -16910,12 +16911,13 @@ def main(argv: list[str] | None = None) -> int:
         attempt_limit = args.max_attempts_per_function
         if attempt_limit <= 0:
             attempt_limit = args.max_variants_per_function
-        attempt_limit, _ = resolve_attempt_limit(
+        attempt_limit, attempt_limit_reason = resolve_attempt_limit(
             row=row,
             candidates=candidates,
             base_limit=attempt_limit,
             policy=args.max_attempts_per_function_policy,
         )
+        attempted_limit_reason_distribution[attempt_limit_reason] = attempted_limit_reason_distribution.get(attempt_limit_reason, 0) + 1
         attempted_limit_distribution[attempt_limit] = attempted_limit_distribution.get(attempt_limit, 0) + 1
         if attempt_limit > 0 and len(candidates) > attempt_limit:
             skipped_by_attempt_limit += len(candidates) - attempt_limit
@@ -17037,6 +17039,7 @@ def main(argv: list[str] | None = None) -> int:
         "skippedByAttemptLimit": skipped_by_attempt_limit,
         "attemptLimitPolicy": args.max_attempts_per_function_policy,
         "attemptLimitDistribution": dict(sorted(attempted_limit_distribution.items())),
+        "attemptLimitReasonDistribution": dict(sorted(attempted_limit_reason_distribution.items())),
         "acceptedCandidates": matched_count,
         "codeSliceMatchedCandidates": code_slice_matched,
         "semanticCodeSliceMatchedCandidates": semantic_code_slice_matched,
