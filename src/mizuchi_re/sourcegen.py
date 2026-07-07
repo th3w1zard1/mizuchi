@@ -1812,6 +1812,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         stack_arg_urem_pow2_stdcall_candidate,
         stack_arg_signed_zero_compare_candidate,
         stack_arg_signed_zero_compare_stdcall_candidate,
+        stack_arg_const_min_max_candidate,
+        stack_arg_const_min_max_stdcall_candidate,
         stack_arg_signed_imm8_compare_candidate,
         stack_arg_signed_imm8_compare_stdcall_candidate,
         stack_arg_unsigned_imm8_compare_candidate,
@@ -9466,6 +9468,163 @@ def stack_arg_signed_zero_compare_stdcall_candidate(task: dict[str, Any], data: 
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             "stdcall signed stack argument zero-comparison is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+I386_STACK_ARG_CONST_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str, bool]] = {
+    0x42: ("uint-min", "<", "unsigned int", "cmovb", False),
+    0x43: ("uint-max", ">", "unsigned int", "cmovae", True),
+    0x4C: ("int-min", "<", "int", "cmovl", False),
+    0x4D: ("int-max", ">", "int", "cmovge", True),
+}
+
+
+def decode_stack_arg_const_min_max(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret) or body[:4] != b"\x8b\x4c\x24\x04":
+        return None
+    core = body[: -len(ret)]
+    if len(core) < 15:
+        return None
+    offset = 4
+    if core[offset : offset + 2] == b"\x83\xf9":
+        raw_compare = core[offset + 2]
+        compare_unsigned = raw_compare
+        compare_signed = raw_compare if raw_compare < 0x80 else raw_compare - 0x100
+        offset += 3
+        cmp_pattern = "cmp-ecx-imm8"
+    elif core[offset : offset + 2] == b"\x81\xf9":
+        compare_unsigned = int.from_bytes(core[offset + 2 : offset + 6], "little", signed=False)
+        compare_signed = int.from_bytes(core[offset + 2 : offset + 6], "little", signed=True)
+        offset += 6
+        cmp_pattern = "cmp-ecx-imm32"
+    else:
+        return None
+    if len(core) != offset + 8 or core[offset] != 0xB8 or core[offset + 5] != 0x0F or core[offset + 7] != 0xC1:
+        return None
+    cmov_opcode = core[offset + 6]
+    decoded = I386_STACK_ARG_CONST_MIN_MAX_CMOV.get(cmov_opcode)
+    if decoded is None:
+        return None
+    suffix, operator, value_type, cmov, compare_is_exclusive_upper = decoded
+    raw_constant = int.from_bytes(core[offset + 1 : offset + 5], "little", signed=False)
+    if value_type == "int":
+        constant: int = int.from_bytes(core[offset + 1 : offset + 5], "little", signed=True)
+        compare_value = compare_signed
+    else:
+        constant = raw_constant
+        compare_value = compare_unsigned
+    if compare_is_exclusive_upper:
+        if compare_value == -0x80000000 or (value_type == "unsigned int" and compare_value == 0):
+            return None
+        expected_constant = compare_value - 1
+    else:
+        expected_constant = compare_value
+    if constant != expected_constant:
+        return None
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "valueType": value_type,
+        "returnType": value_type,
+        "constant": constant,
+        "rawConstant": raw_constant,
+        "compareImmediate": compare_value,
+        "cmov": cmov,
+        "pattern": f"mov-ecx-stack4-{cmp_pattern}-mov-eax-imm32-{cmov}-eax-ecx",
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_const_min_max_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_const_min_max(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    constant = int(decoded["constant"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    literal = f"0x{constant:08x}u" if value_type == "unsigned int" else str(constant)
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stack-argument {decoded['suffix']} constant cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return value {operator} {literal} ? value : {literal};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{decoded['suffix']}-const-cmov-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "constant": f"0x{constant:08x}" if value_type == "unsigned int" else constant,
+            "compareImmediate": int(decoded["compareImmediate"]),
+            "valueType": value_type,
+            "returnType": return_type,
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stack argument {decoded['suffix']} constant cmov is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_const_min_max_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_const_min_max(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    constant = int(decoded["constant"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    literal = f"0x{constant:08x}u" if value_type == "unsigned int" else str(constant)
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86 stdcall stack-argument {decoded['suffix']} constant cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{return_type} __stdcall {c_name}({value_type} value) {{",
+            f"    return value {operator} {literal} ? value : {literal};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"stack-arg-{decoded['suffix']}-const-cmov-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "operator": operator,
+            "constant": f"0x{constant:08x}" if value_type == "unsigned int" else constant,
+            "compareImmediate": int(decoded["compareImmediate"]),
+            "valueType": value_type,
+            "returnType": return_type,
+            "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            f"stdcall stack argument {decoded['suffix']} constant cmov is a canonical clang i386 O2 leaf pattern"
         ),
     }
 

@@ -6055,6 +6055,151 @@ def stack_arg_signed_zero_compare_stdcall(row: dict[str, Any], c_name: str, data
     ]
 
 
+I386_STACK_ARG_CONST_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str, bool]] = {
+    0x42: ("uint-min", "<", "unsigned int", "cmovb", False),
+    0x43: ("uint-max", ">", "unsigned int", "cmovae", True),
+    0x4C: ("int-min", "<", "int", "cmovl", False),
+    0x4D: ("int-max", ">", "int", "cmovge", True),
+}
+
+
+def decode_stack_arg_const_min_max(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret) or body[:4] != b"\x8b\x4c\x24\x04":
+        return None
+    core = body[: -len(ret)]
+    if len(core) < 15:
+        return None
+    offset = 4
+    if core[offset : offset + 2] == b"\x83\xf9":
+        raw_compare = core[offset + 2]
+        compare_unsigned = raw_compare
+        compare_signed = raw_compare if raw_compare < 0x80 else raw_compare - 0x100
+        offset += 3
+        cmp_pattern = "cmp-ecx-imm8"
+    elif core[offset : offset + 2] == b"\x81\xf9":
+        compare_unsigned = int.from_bytes(core[offset + 2 : offset + 6], "little", signed=False)
+        compare_signed = int.from_bytes(core[offset + 2 : offset + 6], "little", signed=True)
+        offset += 6
+        cmp_pattern = "cmp-ecx-imm32"
+    else:
+        return None
+    if len(core) != offset + 8 or core[offset] != 0xB8 or core[offset + 5] != 0x0F or core[offset + 7] != 0xC1:
+        return None
+    cmov_opcode = core[offset + 6]
+    decoded = I386_STACK_ARG_CONST_MIN_MAX_CMOV.get(cmov_opcode)
+    if decoded is None:
+        return None
+    suffix, operator, value_type, cmov, compare_is_exclusive_upper = decoded
+    raw_constant = int.from_bytes(core[offset + 1 : offset + 5], "little", signed=False)
+    if value_type == "int":
+        constant: int = int.from_bytes(core[offset + 1 : offset + 5], "little", signed=True)
+        compare_value = compare_signed
+    else:
+        constant = raw_constant
+        compare_value = compare_unsigned
+    if compare_is_exclusive_upper:
+        if compare_value == -0x80000000 or (value_type == "unsigned int" and compare_value == 0):
+            return None
+        expected_constant = compare_value - 1
+    else:
+        expected_constant = compare_value
+    if constant != expected_constant:
+        return None
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "valueType": value_type,
+        "returnType": value_type,
+        "constant": constant,
+        "rawConstant": raw_constant,
+        "compareImmediate": compare_value,
+        "cmov": cmov,
+        "pattern": f"mov-ecx-stack4-{cmp_pattern}-mov-eax-imm32-{cmov}-eax-ecx",
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_const_min_max(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_const_min_max(data, stdcall=False)
+    if decoded is None:
+        return []
+    constant = int(decoded["constant"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    literal = f"0x{constant:08x}u" if value_type == "unsigned int" else str(constant)
+    source = header(f"stack-arg-{decoded['suffix']}-const-cmov-cdecl", row) + "\n".join(
+        [
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return value {operator} {literal} ? value : {literal};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{decoded['suffix']}-const-cmov-cdecl",
+            variant=f"cdecl-o2-stack-arg-{decoded['suffix']}-const-{decoded['cmov']}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=return_type,
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "constant": f"0x{constant:08x}" if value_type == "unsigned int" else constant,
+                "compareImmediate": int(decoded["compareImmediate"]),
+                "valueType": value_type,
+                "returnType": return_type,
+                "cmov": decoded["cmov"],
+            },
+        )
+    ]
+
+
+def stack_arg_const_min_max_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_const_min_max(data, stdcall=True)
+    if decoded is None:
+        return []
+    constant = int(decoded["constant"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    operator = str(decoded["operator"])
+    literal = f"0x{constant:08x}u" if value_type == "unsigned int" else str(constant)
+    source = header(f"stack-arg-{decoded['suffix']}-const-cmov-stdcall", row) + "\n".join(
+        [
+            f"{return_type} __stdcall {c_name}({value_type} value) {{",
+            f"    return value {operator} {literal} ? value : {literal};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"stack-arg-{decoded['suffix']}-const-cmov-stdcall",
+            variant=f"stdcall4-o2-stack-arg-{decoded['suffix']}-const-{decoded['cmov']}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type=return_type,
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": operator,
+                "constant": f"0x{constant:08x}" if value_type == "unsigned int" else constant,
+                "compareImmediate": int(decoded["compareImmediate"]),
+                "valueType": value_type,
+                "returnType": return_type,
+                "cmov": decoded["cmov"],
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 I386_UNSIGNED_IMM8_COMPARE_SETCC: dict[int, tuple[str, str, str]] = {
     0x92: ("lt", "<", "setb"),
     0x93: ("ge", ">=", "setae"),
@@ -17358,6 +17503,8 @@ GENERATORS = [
     stack_arg_urem_pow2_stdcall,
     stack_arg_signed_zero_compare,
     stack_arg_signed_zero_compare_stdcall,
+    stack_arg_const_min_max,
+    stack_arg_const_min_max_stdcall,
     stack_arg_signed_imm8_compare,
     stack_arg_signed_imm8_compare_stdcall,
     stack_arg_unsigned_imm8_compare,
