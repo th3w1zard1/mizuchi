@@ -5503,6 +5503,99 @@ def stack_arg_udiv_magic_stdcall(row: dict[str, Any], c_name: str, data: bytes) 
     ]
 
 
+I386_STACK_ARG_UREM_MAGIC_OPS: dict[bytes, tuple[int, str, int, str]] = {
+    bytes.fromhex("8b4c2404baabaaaaaa89c8f7e2d1ea8d045229c189c8"): (3, "0xaaaaaaab", 1, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-mul-edx-shr-edx-one-lea-eax-edx-edx2-sub-ecx-eax-mov-eax-ecx"),
+    bytes.fromhex("8b4c2404bacdcccccc89c8f7e2c1ea028d049229c189c8"): (5, "0xcccccccd", 2, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-mul-edx-shr-edx-2-lea-eax-edx-edx4-sub-ecx-eax-mov-eax-ecx"),
+    bytes.fromhex("8b4c2404bacdcccccc89c8f7e2c1ea0283e2fe8d049229c189c8"): (10, "0xcccccccd", 2, "mov-ecx-stack4-mov-edx-magic-mov-eax-ecx-mul-edx-shr-edx-2-and-edx-not1-lea-eax-edx-edx4-sub-ecx-eax-mov-eax-ecx"),
+}
+
+
+def decode_stack_arg_urem_magic(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    decoded = I386_STACK_ARG_UREM_MAGIC_OPS.get(core)
+    if decoded is None:
+        return None
+    divisor, multiplier, shift, pattern = decoded
+    return {
+        "divisor": divisor,
+        "multiplier": multiplier,
+        "shift": shift,
+        "pattern": pattern,
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_urem_magic(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_urem_magic(data, stdcall=False)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-urem-magic-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value % {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-urem-magic-cdecl",
+            variant=f"cdecl-o2-stack-arg-urem-{divisor}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "%",
+                "divisor": divisor,
+                "multiplier": decoded["multiplier"],
+                "shift": int(decoded["shift"]),
+            },
+        )
+    ]
+
+
+def stack_arg_urem_magic_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_urem_magic(data, stdcall=True)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("stack-arg-urem-magic-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value % {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-urem-magic-stdcall",
+            variant=f"stdcall4-o2-stack-arg-urem-{divisor}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "operator": "%",
+                "divisor": divisor,
+                "multiplier": decoded["multiplier"],
+                "shift": int(decoded["shift"]),
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 def decode_stack_arg_udiv_pow2(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
@@ -16969,6 +17062,8 @@ GENERATORS = [
     stack_arg_srem_pow2_stdcall,
     stack_arg_udiv_magic,
     stack_arg_udiv_magic_stdcall,
+    stack_arg_urem_magic,
+    stack_arg_urem_magic_stdcall,
     stack_arg_udiv_pow2,
     stack_arg_udiv_pow2_stdcall,
     stack_arg_urem_pow2,
