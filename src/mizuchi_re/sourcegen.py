@@ -1726,6 +1726,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_return_second_arg_candidate,
         x86_64_add_two_args_candidate,
         x86_64_three_args_arithmetic_candidate,
+        x86_64_three_args_bitwise_candidate,
         x86_64_two_args_affine_lea_candidate,
         x86_64_two_args_binary_op_candidate,
         x86_64_two_args_binary_op64_candidate,
@@ -4626,6 +4627,66 @@ def x86_64_three_args_arithmetic_candidate(task: dict[str, Any], data: bytes) ->
         "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
         "generator": {
             "rule": "x86-64-three-args-arithmetic-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "expression": decoded["expression"],
+            "pattern": decoded["pattern"],
+            "registerArgs": ["edi", "esi", "edx"],
+            "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_THREE_ARGS_BITWISE_OPS: dict[int, tuple[str, str]] = {
+    0x21: ("and", "&"),
+    0x09: ("or", "|"),
+    0x31: ("xor", "^"),
+}
+
+
+def decode_x86_64_three_args_bitwise(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 7 or body[:2] != b"\x89\xf8" or body[3] != 0xF0 or body[5:] != b"\xd0\xc3":
+        return None
+    first = X86_64_THREE_ARGS_BITWISE_OPS.get(body[2])
+    second = X86_64_THREE_ARGS_BITWISE_OPS.get(body[4])
+    if first is None or second is None:
+        return None
+    expression = f"(a {first[1]} b) {second[1]} c"
+    return {
+        "suffix": f"{first[0]}-{second[0]}",
+        "expression": expression,
+        "pattern": f"mov-eax-edi-{first[0]}-eax-esi-{second[0]}-eax-edx-ret",
+    }
+
+
+def x86_64_three_args_bitwise_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_three_args_bitwise(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 three-argument {decoded['suffix']} bitwise pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-three-args-bitwise-cdecl",
             "bodyBytes": len(strip_alignment_padding(data)),
             "expression": decoded["expression"],
             "pattern": decoded["pattern"],

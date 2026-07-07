@@ -1413,6 +1413,64 @@ def x86_64_three_args_arithmetic(row: dict[str, Any], c_name: str, data: bytes) 
     ]
 
 
+X86_64_THREE_ARGS_BITWISE_OPS: dict[int, tuple[str, str]] = {
+    0x21: ("and", "&"),
+    0x09: ("or", "|"),
+    0x31: ("xor", "^"),
+}
+
+
+def decode_x86_64_three_args_bitwise(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 7 or body[:2] != b"\x89\xf8" or body[3] != 0xF0 or body[5:] != b"\xd0\xc3":
+        return None
+    first = X86_64_THREE_ARGS_BITWISE_OPS.get(body[2])
+    second = X86_64_THREE_ARGS_BITWISE_OPS.get(body[4])
+    if first is None or second is None:
+        return None
+    expression = f"(a {first[1]} b) {second[1]} c"
+    return {
+        "suffix": f"{first[0]}-{second[0]}",
+        "expression": expression,
+        "pattern": f"mov-eax-edi-{first[0]}-eax-esi-{second[0]}-eax-edx-ret",
+    }
+
+
+def x86_64_three_args_bitwise(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_three_args_bitwise(data)
+    if decoded is None:
+        return []
+    source = header("x86-64-three-args-bitwise-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-three-args-bitwise-cdecl",
+            variant=f"sysv-o2-three-arg-{decoded['suffix']}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "expression": decoded["expression"],
+                "registerArgs": ["edi", "esi", "edx"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def format_x86_64_two_args_affine_expression(coeff_a: int, coeff_b: int, immediate: int) -> str:
     terms: list[str] = []
     if coeff_a == 1:
@@ -18343,6 +18401,7 @@ GENERATORS = [
     x86_64_return_first_arg,
     x86_64_add_two_args,
     x86_64_three_args_arithmetic,
+    x86_64_three_args_bitwise,
     x86_64_two_args_affine_lea,
     x86_64_two_args_binary_op,
     x86_64_two_args_min_max,
@@ -18736,7 +18795,7 @@ def load_matched(paths: list[Path]) -> set[tuple[str, str]]:
     matched: set[tuple[str, str]] = set()
     for path in paths:
         for row in iter_jsonl(path):
-            if row.get("status") == "matched" and int(row.get("differences", -1)) == 0:
+            if row.get("status") in {"matched", "code-slice-matched"} and int(row.get("differences", -1)) == 0:
                 matched.add((str(row.get("name")), str(row.get("entry"))))
     return matched
 
