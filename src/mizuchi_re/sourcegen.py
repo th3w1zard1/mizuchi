@@ -1750,6 +1750,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_unary_op_candidate,
         x86_64_arg64_unary_op_candidate,
         x86_64_arg_neg_cmov_candidate,
+        x86_64_arg64_neg_cmov_candidate,
         x86_64_arg64_sign_extend_candidate,
         x86_64_arg_cast_candidate,
         x86_64_arg_narrow_imm8_compare_candidate,
@@ -6210,6 +6211,55 @@ def x86_64_arg_neg_cmov_candidate(task: dict[str, Any], data: bytes) -> dict[str
             "registerArg": "edi",
             "valueType": "int",
             "returnType": "int",
+            "expression": expression,
+            "cmov": cmov,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG64_NEG_CMOV_OPS: dict[bytes, tuple[str, str, str, str]] = {
+    b"\x48\x89\xf8\x48\xf7\xd8\x48\x0f\x48\xc7\xc3": ("abs", "value < 0 ? -value : value", "cmovs", "mov-rax-rdi-neg-rax-cmovs-rax-rdi-ret"),
+    b"\x48\x89\xf8\x48\xf7\xd8\x48\x0f\x49\xc7\xc3": ("neg-if-pos", "value > 0 ? -value : value", "cmovns", "mov-rax-rdi-neg-rax-cmovns-rax-rdi-ret"),
+}
+
+
+def x86_64_arg64_neg_cmov_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG64_NEG_CMOV_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, expression, cmov, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 signed 64-bit argument {suffix} neg/cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"long long {c_name}(long long value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg64-{suffix}-cmov-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "rdi",
+            "valueType": "long long",
+            "returnType": "long long",
             "expression": expression,
             "cmov": cmov,
             "pattern": pattern,
