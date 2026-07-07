@@ -2268,6 +2268,65 @@ def x86_64_arg_udiv_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[
     ]
 
 
+X86_64_ARG_UDIV_MAGIC_OPS: dict[tuple[int, int], tuple[int, str]] = {
+    (0xAAAAAAAB, 0x21): (3, "mov-ecx-edi-mov-eax-magic-imul-rax-rcx-shr-rax-33-ret"),
+    (0xCCCCCCCD, 0x22): (5, "mov-ecx-edi-mov-eax-magic-imul-rax-rcx-shr-rax-34-ret"),
+    (0xCCCCCCCD, 0x23): (10, "mov-ecx-edi-mov-eax-magic-imul-rax-rcx-shr-rax-35-ret"),
+}
+
+
+def decode_x86_64_arg_udiv_magic(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 16 or body[:2] != b"\x89\xf9" or body[2] != 0xB8 or body[7:11] != b"\x48\x0f\xaf\xc1" or body[11:14] != b"\x48\xc1\xe8" or body[15] != 0xC3:
+        return None
+    multiplier = int.from_bytes(body[3:7], "little", signed=False)
+    shift = body[14]
+    decoded = X86_64_ARG_UDIV_MAGIC_OPS.get((multiplier, shift))
+    if decoded is None:
+        return None
+    divisor, pattern = decoded
+    return {"divisor": divisor, "multiplier": multiplier, "shift": shift, "pattern": pattern}
+
+
+def x86_64_arg_udiv_magic(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_udiv_magic(data)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    source = header("x86-64-arg-udiv-magic-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value / {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-udiv-magic-cdecl",
+            variant=f"sysv-o2-register-arg-udiv-{divisor}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": "/",
+                "divisor": divisor,
+                "multiplier": f"0x{int(decoded['multiplier']):08x}",
+                "shift": int(decoded["shift"]),
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_bswap32(data: bytes) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if body == b"\x89\xf8\x0f\xc8\xc3":
@@ -15944,6 +16003,7 @@ GENERATORS = [
     x86_64_arg64_bitmask_bool,
     x86_64_arg64_unary_op,
     x86_64_arg64_neg_cmov,
+    x86_64_arg_udiv_magic,
     x86_64_return_first_arg64,
     x86_64_return_second_arg,
     x86_64_two_args_binary_op64,
