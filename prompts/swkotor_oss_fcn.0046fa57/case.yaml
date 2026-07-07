@@ -1,0 +1,13 @@
+caseId: swkotor_oss_fcn.0046fa57
+functionName: 'fcn.0046fa57'
+targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0002_fcn_0046fa57/target.bin'
+candidateSourcePath: prompt:/candidate.c
+targetFamily: byte-slice
+proof: task-byte-identical
+status: pending
+oneShotPackagePath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source'
+oneShotTaskPath: 'function-reconstruction-tasks/0002_fcn_0046fa57'
+oneShotTaskJson: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0002_fcn_0046fa57/task.json'
+targetBytesSha256: 'fab627420683abcd8bd478805a545685852a8e74ba81cf20ef17774f9ba47915'
+verifierCommand: |
+  bash ./scripts/verify-reconstruction-task.sh --task-dir '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0002_fcn_0046fa57' --verifier 'VERIFY_CANDIDATE.sh' --candidate "{{candidateSourcePath}}" --candidate-output "{{candidateOutputPath}}"

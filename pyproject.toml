@@ -4,13 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mizuchi-re"
-version = "0.1.0"
+version = "0.1.2"
 description = "Imperative, resumable reverse-engineering/source-parity orchestration."
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 dependencies = []
 
 [project.scripts]
+mizuchi-cli = "mizuchi_re.mizuchi_cli:main"
 mizuchi-recover = "mizuchi_re.cli:main"
+
+[tool.setuptools.data-files]
+"share/mizuchi-re/scripts" = [
+  "scripts/binary-source-roundtrip.py",
+  "scripts/one-shot-source.py",
+  "scripts/one-shot-source-archive-verify.py",
+  "scripts/one-shot-source-claims.py",
+  "scripts/one-shot-source-deliverable-verify.py",
+  "scripts/one-shot-source-proof.py",
+  "scripts/one-shot-source-validate.py",
+  "scripts/one-shot-source-verify.py",
+  "scripts/source-authority-report.py",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

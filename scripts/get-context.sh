@@ -37,18 +37,18 @@ functionName="$(prompt_settings_get "$prompt_dir" functionName)"
 targetObjectPath="$(prompt_settings_get "$prompt_dir" targetObjectPath)"
 targetObjectPath="${targetObjectPath//\{\{functionName\}\}/$functionName}"
 
-if [[ -z "$output" ]]; then
-  output="$ROOT/context/ctx.h"
-fi
-
 script="$(mizuchi_config_get global.getContextScript)" || {
   echo "get-context: global.getContextScript not set in mizuchi config" >&2
   exit 1
 }
 
-mkdir -p "$(dirname "$output")"
 log="$prompt_dir/build/get-context.log"
 mkdir -p "$prompt_dir/build"
+
+if [[ -z "$output" ]]; then
+  output="$prompt_dir/build/ctx.h"
+fi
+mkdir -p "$(dirname "$output")"
 
 echo "get-context: running getContextScript -> $output"
 if ! bash -c "$(printf '%s' "$script" | mizuchi_expand_templates)" >"$output" 2>"$log"; then

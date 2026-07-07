@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sysconfig
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +57,8 @@ def inspect_capabilities(repo_root: Path) -> dict[str, Any]:
         "uv": inspect_tool("uv", ["uv", "--version"]),
     }
     local = {
-        "oneShotSource": (repo_root / "scripts/one-shot-source.py").exists(),
+        "oneShotSource": resolve_script_asset(repo_root, "one-shot-source.py") is not None,
+        "oneShotSourcePath": str(resolve_script_asset(repo_root, "one-shot-source.py") or ""),
         "sourceParityOneShot": (repo_root / "scripts/source-parity-one-shot.py").exists(),
         "swkotorInventorySlice": (repo_root / "scripts/swkotor-inventory-slice.py").exists(),
         "verifyObjdiff": (repo_root / "scripts/lib/verify-objdiff.sh").exists(),
@@ -87,4 +89,15 @@ def resolve_steamless_cli(repo_root: Path, configured: Path | None = None) -> Pa
         expanded = candidate.expanduser()
         if expanded.exists():
             return expanded.resolve()
+    return None
+
+
+def resolve_script_asset(repo_root: Path, script_name: str) -> Path | None:
+    candidates = [
+        repo_root / "scripts" / script_name,
+        Path(sysconfig.get_path("data")) / "share" / "mizuchi-re" / "scripts" / script_name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
     return None

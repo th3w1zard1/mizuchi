@@ -3,30 +3,90 @@ set -euo pipefail
 
 # MCP tool: list_prompts
 # Returns JSON array of available prompt folders with metadata
-# Optional filter: status=matched|in_progress|integrated|pending
+# Optional filter: status=matched|in_progress|integrated|pending|blocked
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$root_dir/scripts/lib/case-metadata.sh"
+. "$root_dir/scripts/lib/prompt-settings.sh"
+READINESS_CACHE_KEY=""
+READINESS_CACHE_VALUE=""
 
-# Helper: extract status from notes.md
+normalize_prompt_status() {
+  case "$1" in
+    pending|matched|in_progress|in-progress|integrated|blocked)
+      printf '%s' "${1//-/_}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Helper: extract status from canonical metadata, then legacy notes.md.
 get_prompt_status() {
   local prompt_dir="$1"
   local notes_file="$prompt_dir/notes.md"
-  
-  # Default status
-  local status="pending"
-  
+
+  local status
+  if status="$(case_metadata_get "$prompt_dir" status 2>/dev/null)" && normalize_prompt_status "$status" >/dev/null; then
+    normalize_prompt_status "$status"
+    return
+  fi
+
+  if status="$(prompt_settings_get "$prompt_dir" status 2>/dev/null)" && normalize_prompt_status "$status" >/dev/null; then
+    normalize_prompt_status "$status"
+    return
+  fi
+
   if [[ -f "$notes_file" ]]; then
-    # Look for patterns like "status: matched" or "status: in_progress" or "status: integrated"
-    if grep -q "status.*integrated" "$notes_file" 2>/dev/null; then
-      status="integrated"
-    elif grep -q "status.*matched" "$notes_file" 2>/dev/null; then
-      status="matched"
-    elif grep -q "status.*in_progress\|status.*in-progress" "$notes_file" 2>/dev/null; then
-      status="in_progress"
+    if grep -qi "status.*blocked" "$notes_file" 2>/dev/null; then
+      echo "blocked"
+      return
+    elif grep -qi "status.*integrated" "$notes_file" 2>/dev/null; then
+      echo "integrated"
+      return
+    elif grep -qi "status.*matched" "$notes_file" 2>/dev/null; then
+      echo "matched"
+      return
+    elif grep -qi "status.*in_progress\|status.*in-progress" "$notes_file" 2>/dev/null; then
+      echo "in_progress"
+      return
     fi
   fi
-  
-  echo "$status"
+
+  echo "pending"
+}
+
+get_blocked_reason() {
+  local prompt_dir="$1"
+  case_metadata_get "$prompt_dir" blockedReason 2>/dev/null || true
+}
+
+get_case_field() {
+  local prompt_dir="$1" field="$2"
+  case_metadata_get "$prompt_dir" "$field" 2>/dev/null || true
+}
+
+get_readiness_summary() {
+  local prompts_dir="${1:-${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}}"
+  if [[ "$READINESS_CACHE_KEY" == "$prompts_dir" && -n "$READINESS_CACHE_VALUE" ]]; then
+    printf '%s' "$READINESS_CACHE_VALUE"
+    return
+  fi
+  local summary
+  set +e
+  summary="$("$root_dir/scripts/decomp-readiness.sh" --all --prompts-dir "$prompts_dir" 2>/dev/null)"
+  local rc=$?
+  set -e
+  if [[ "$rc" -eq 0 || "$rc" -eq 1 ]]; then
+    READINESS_CACHE_KEY="$prompts_dir"
+    READINESS_CACHE_VALUE="$summary"
+    printf '%s' "$READINESS_CACHE_VALUE"
+  else
+    READINESS_CACHE_KEY="$prompts_dir"
+    READINESS_CACHE_VALUE="$(jq -n '{schema: "mizuchi.decomp-readiness-summary.v1", status: "error", prompts: []}')"
+    printf '%s' "$READINESS_CACHE_VALUE"
+  fi
 }
 
 # Helper: extract function name from prompt metadata
@@ -38,7 +98,21 @@ get_function_name() {
   local function_name
   function_name=$(echo "$prompt_name" | sed 's/fun_/FUN_/' | tr '[:lower:]' '[:upper:]')
   
-  # Try to refine from prompt.md if available
+  local from_case
+  from_case="$(case_metadata_get "$prompt_dir" functionName 2>/dev/null || true)"
+  if [[ -n "$from_case" ]]; then
+    echo "$from_case"
+    return
+  fi
+
+  local from_settings
+  from_settings="$(prompt_settings_get "$prompt_dir" functionName 2>/dev/null || true)"
+  if [[ -n "$from_settings" ]]; then
+    echo "$from_settings"
+    return
+  fi
+
+  # Try to refine from prompt.md if available.
   if [[ -f "$prompt_dir/prompt.md" ]]; then
     local from_md
     from_md=$(grep -oP 'Decompile `\K[^`]+' "$prompt_dir/prompt.md" | head -1 || echo "")
@@ -68,8 +142,12 @@ get_last_updated() {
 
 # Build prompts array
 build_prompts_array() {
-  local prompts_dir="$root_dir/prompts"
+  local prompts_dir="${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}"
+  local readiness_summary="${1:-}"
   local prompts=()
+  if [[ -z "$readiness_summary" ]]; then
+    readiness_summary="$(get_readiness_summary "$prompts_dir")"
+  fi
   
   if [[ ! -d "$prompts_dir" ]]; then
     echo "[]"
@@ -91,6 +169,26 @@ build_prompts_array() {
     
     local status
     status=$(get_prompt_status "$prompt_dir")
+
+    local blocked_reason
+    blocked_reason=$(get_blocked_reason "$prompt_dir")
+
+    local integrated_source_path integration_receipt_path integrated_at
+    integrated_source_path="$(get_case_field "$prompt_dir" integratedSourcePath)"
+    integration_receipt_path="$(get_case_field "$prompt_dir" integrationReceiptPath)"
+    integrated_at="$(get_case_field "$prompt_dir" integratedAt)"
+
+    local readiness_json readiness_status readiness_blockers readiness_warnings
+    readiness_json="$(jq -c --arg name "$prompt_name" '.prompts[]? | select(.prompt == $name)' <<<"$readiness_summary")"
+    if [[ -n "$readiness_json" ]]; then
+      readiness_status="$(jq -r '.status // "unknown"' <<<"$readiness_json")"
+      readiness_blockers="$(jq -c '.blockers // []' <<<"$readiness_json")"
+      readiness_warnings="$(jq -c '.warnings // []' <<<"$readiness_json")"
+    else
+      readiness_status="unknown"
+      readiness_blockers="[]"
+      readiness_warnings="[]"
+    fi
     
     local function_name
     function_name=$(get_function_name "$prompt_dir" "$prompt_name")
@@ -104,7 +202,26 @@ build_prompts_array() {
       --arg status "$status" \
       --arg func "$function_name" \
       --arg updated "$last_updated" \
-      '{name: $name, status: $status, function_name: $func, last_updated: $updated}')
+      --arg blocked_reason "$blocked_reason" \
+      --arg integrated_source_path "$integrated_source_path" \
+      --arg integration_receipt_path "$integration_receipt_path" \
+      --arg integrated_at "$integrated_at" \
+      --arg readiness_status "$readiness_status" \
+      --argjson readiness_blockers "$readiness_blockers" \
+      --argjson readiness_warnings "$readiness_warnings" \
+      '{
+        name: $name,
+        status: $status,
+        function_name: $func,
+        last_updated: $updated,
+        readiness_status: $readiness_status,
+        readiness_blockers: $readiness_blockers,
+        readiness_warnings: $readiness_warnings,
+        blocked_reason: (if $blocked_reason == "" then null else $blocked_reason end),
+        integrated_source_path: (if $integrated_source_path == "" then null else $integrated_source_path end),
+        integration_receipt_path: (if $integration_receipt_path == "" then null else $integration_receipt_path end),
+        integrated_at: (if $integrated_at == "" then null else $integrated_at end)
+      }')
     
     prompts+=("$item")
   done
@@ -127,9 +244,9 @@ filter_by_status() {
     return
   fi
   
-  # Validate status_filter (must be one of: matched, in_progress, integrated, pending)
+  # Validate status_filter (must be one of: matched, in_progress, integrated, pending, blocked)
   case "$status_filter" in
-    matched|in_progress|integrated|pending)
+    matched|in_progress|integrated|pending|blocked)
       echo "$prompts_json" | jq "[.[] | select(.status == \"$status_filter\")]"
       ;;
     *)
@@ -158,14 +275,20 @@ parse_arguments() {
 main() {
   local status_filter
   status_filter=$(parse_arguments "$@")
+
+  local readiness_summary
+  readiness_summary="$(get_readiness_summary "${MIZUCHI_PROMPTS_DIR:-$root_dir/prompts}")"
   
   local prompts_array
-  prompts_array=$(build_prompts_array)
+  prompts_array=$(build_prompts_array "$readiness_summary")
   
   local filtered_prompts
   filtered_prompts=$(filter_by_status "$prompts_array" "$status_filter")
-  
-  jq -n --argjson prompts "$filtered_prompts" '{prompts: $prompts}'
+
+  jq -n \
+    --argjson prompts "$filtered_prompts" \
+    --argjson readiness "$readiness_summary" \
+    '{prompts: $prompts, readiness: {status: $readiness.status, total: $readiness.total, ready: $readiness.ready, notReady: $readiness.notReady, blockersTotal: $readiness.blockersTotal, warningsTotal: $readiness.warningsTotal, blockerSummary: $readiness.blockerSummary}}'
 }
 
 main "$@"

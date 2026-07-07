@@ -22,6 +22,10 @@ last_line="$(printf '%s\n' "$out" | tail -n 1)"
   echo "missing settings.yaml" >&2
   exit 1
 }
+[[ -f "$PROMPT/case.yaml" ]] || {
+  echo "missing case.yaml" >&2
+  exit 1
+}
 
 orig_prompt_contents="$(cat "$PROMPT/prompt.md")"
 out2="$("$SCRIPT" --prompt "$PROMPT")"

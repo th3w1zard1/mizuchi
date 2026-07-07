@@ -1,0 +1,13 @@
+{
+  "name": "patchright-flaresolverr-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FlareSolverr-compatible API backed by Patchright for Cloudflare bypass",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "patchright": "^1.52.0"
+  }
+}

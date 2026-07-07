@@ -45,6 +45,7 @@ The workspace has execution scripts for compile, context, and programmatic phase
 **Dependencies:** None.
 
 **Files:**
+
 - scripts/bootstrap-re-pipeline.sh
 - scripts/validate-prompt-settings.sh
 
@@ -53,6 +54,7 @@ The workspace has execution scripts for compile, context, and programmatic phase
 **Patterns to follow:** Existing strict-shell script style in `scripts/*.sh`.
 
 **Test scenarios:**
+
 - Happy path: missing folder is created and required files are written.
 - Edge case: folder already exists with files; script is idempotent and does not overwrite content unexpectedly.
 - Error path: missing `--prompt` exits non-zero with usage text.
@@ -68,6 +70,7 @@ The workspace has execution scripts for compile, context, and programmatic phase
 **Dependencies:** U1.
 
 **Files:**
+
 - tests/bootstrap_re_pipeline_test.sh
 - docs/re-pipeline-bootstrap.md
 
@@ -76,6 +79,7 @@ The workspace has execution scripts for compile, context, and programmatic phase
 **Patterns to follow:** Existing docs format and shell-test conventions in this repo.
 
 **Test scenarios:**
+
 - Happy path: script creates expected files and test confirms contents.
 - Error path: script fails with usage on missing args.
 

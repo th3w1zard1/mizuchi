@@ -1,0 +1,1 @@
+/* Shared context stub for local Mizuchi proof fixtures. */

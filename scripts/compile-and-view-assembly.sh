@@ -16,6 +16,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/prompt-settings.sh
 . "$ROOT/scripts/lib/prompt-settings.sh"
+# shellcheck source=scripts/lib/case-metadata.sh
+. "$ROOT/scripts/lib/case-metadata.sh"
 
 prompt_dir=""
 code_file=""
@@ -43,10 +45,16 @@ if [[ -z "$prompt_dir" ]]; then
   exit 2
 fi
 prompt_settings_require_dir "$prompt_dir" || exit $?
+prompt_dir="$(cd "$prompt_dir" && pwd)"
 
 function_name="$(prompt_settings_get "$prompt_dir" functionName)"
-target_object="$(prompt_settings_get "$prompt_dir" targetObjectPath)"
-target_object="${target_object//\{\{functionName\}\}/$function_name}"
+prompt_name="$(basename "$prompt_dir")"
+case_status="$(case_metadata_get_default "$prompt_dir" status "")"
+if [[ "$case_status" == "blocked" ]]; then
+  blocked_reason="$(case_metadata_get_default "$prompt_dir" blockedReason "case.yaml status is blocked")"
+  echo "compile-and-view-assembly: prompt is blocked: $blocked_reason" >&2
+  exit 3
+fi
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -76,12 +84,26 @@ combined="$tmpdir/combined.c"
   cat "$code_file"
 } >"$combined"
 
-if ! "$ROOT/scripts/compile-trial.sh" "$prompt_dir" "$combined"; then
+obj_out="$prompt_dir/build/candidate.o"
+report_json="$prompt_dir/build/build-and-verify.json"
+rm -f "$obj_out" "$report_json"
+
+set +e
+"$ROOT/scripts/compile-trial.sh" "$prompt_dir" "$combined"
+compile_rc=$?
+set -e
+
+if [[ "$compile_rc" -eq 3 ]]; then
+  exit 3
+fi
+if [[ "$compile_rc" -ne 0 && ! -f "$obj_out" ]]; then
   echo "compile-and-view-assembly: compile failed" >&2
   exit 1
 fi
-
-obj_out="$prompt_dir/build/candidate.o"
+if [[ "$compile_rc" -ne 0 && ! -f "$report_json" ]]; then
+  echo "compile-and-view-assembly: verifier failed before writing report" >&2
+  exit 1
+fi
 
 echo "=== disassembly: $function_name (candidate) ==="
 if command -v objdump >/dev/null 2>&1; then
@@ -90,26 +112,27 @@ else
   echo "(objdump not found — install binutils)" >&2
 fi
 
-target_path="$target_object"
-[[ "$target_path" != /* ]] && target_path="$ROOT/$target_path"
-
 echo
 echo "=== objdiff summary ==="
-if [[ ! -f "$target_path" ]]; then
-  echo "[OPEN] target object missing: $target_path"
-  echo "Cannot compute diff count without golden .o"
-  exit 0
-fi
-
-if command -v objdiff >/dev/null 2>&1; then
-  if "$ROOT/scripts/objdiff-gate.sh" "$target_path" "$obj_out"; then
+if [[ -f "$report_json" ]]; then
+  status="$(jq -r '.status // "unknown"' "$report_json")"
+  method="$(jq -r '.method // "unknown"' "$report_json")"
+  target_path="$(jq -r '.target_object // ""' "$report_json")"
+  echo "method: $method"
+  [[ -n "$target_path" ]] && echo "target_object: $target_path"
+  echo "candidate_object: $obj_out"
+  if [[ "$status" == "matched" ]]; then
     echo "diff_count: 0"
     echo "verdict: MATCH"
-    exit 0
+  else
+    echo "diff_count: non-zero"
+    echo "verdict: NOT_MATCHED"
   fi
-  echo "diff_count: non-zero"
-  echo "verdict: NOT_MATCHED"
-  exit 0
+else
+  target_object="$(prompt_settings_get "$prompt_dir" targetObjectPath)"
+  target_object="$(case_metadata_expand "$target_object" "$function_name" "$prompt_name")"
+  target_path="$(case_metadata_resolve_path "$ROOT" "$prompt_dir" "$target_object")"
+  echo "[OPEN] verifier report missing: $report_json"
+  echo "target_object: $target_path"
+  echo "candidate_object: $obj_out"
 fi
-
-echo "[OPEN] objdiff not installed — assembly shown only"

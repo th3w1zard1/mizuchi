@@ -15,6 +15,12 @@ from .package_verify import verify_recovered_source_package
 from .pipeline import RecoveryConfig, RecoveryRunner
 from .source_parity_profile_corpus import main as source_parity_profile_corpus_main
 from .source_parity_synthesize import main as source_parity_synthesize_main
+from .source_plugin_runner import (
+    SourcePluginRunConfig,
+    parse_csv_set,
+    parse_profile_values,
+    run_source_plugin_pipeline,
+)
 from .targets import identify_binary
 from .windows import run_recovery_windows
 
@@ -74,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--work-dir", type=Path, help="Run/state directory. Defaults to target/mizuchi-recover/<stable-target-id>.")
     recover.add_argument("--resume", action="store_true", help="Reuse complete stage receipts with matching config.")
     recover.add_argument("--force", action="store_true", help="Rerun selected stages even when receipts exist.")
-    recover.add_argument("--stop-after", choices=["discover", "inspect-capabilities", "prepare-analysis-image", "export-context", "inventory-binary", "discover-functions", "analyze-functions", "generate-source-candidates", "plan-strategy", "byte-authority", "legacy-adapter", "snapshot-existing-recovery", "report"])
+    recover.add_argument("--stop-after", choices=["discover", "inspect-capabilities", "prepare-analysis-image", "export-context", "inventory-binary", "discover-functions", "analyze-functions", "generate-source-candidates", "synthesize-source-tasks", "plan-strategy", "byte-authority", "legacy-adapter", "snapshot-existing-recovery", "report"])
     recover.add_argument("--json", action="store_true", help="Emit progress as JSON lines.")
     recover.add_argument("--progress-width", type=int, default=24)
     recover.add_argument("--stage-timeout", type=int, default=300)
@@ -85,6 +91,19 @@ def build_parser() -> argparse.ArgumentParser:
     recover.add_argument("--function-facts-jsonl", type=Path, help="Machine-generated function facts JSONL used as source-candidate context.")
     recover.add_argument("--source-task-limit", type=int, default=500, help="Maximum function candidates to queue for automatic source generation.")
     recover.add_argument("--source-task-offset", type=int, default=0, help="Skip this many eligible function candidates before analysis/source generation.")
+    recover.add_argument("--source-synthesis-engine", choices=["legacy", "plugin"], default="legacy", help="Source synthesis orchestration engine. plugin uses the upstream-style plugin lifecycle.")
+    recover.add_argument("--source-synthesis", choices=["clang", "clang-cl", "dry-run", "msvc", "none"], default="clang", help="Automatically synthesize and verify generated source tasks after source generation.")
+    recover.add_argument("--source-synthesis-limit", type=int, default=25, help="Maximum generated source tasks to inspect during automatic source synthesis.")
+    recover.add_argument("--source-synthesis-max-variants", type=int, default=4, help="Maximum source variants per generated source task during automatic synthesis.")
+    recover.add_argument("--source-synthesis-semantic-only", action="store_true", help="Only compile semantic source candidates during automatic source synthesis. MSVC enables this by default.")
+    recover.add_argument("--source-synthesis-skip-boundary-suspect", action="store_true", help="Skip source tasks whose target-slice boundary quality is marked suspect during automatic source synthesis. MSVC enables this by default.")
+    recover.add_argument("--source-synthesis-verify-packaged-source", action="store_true", help="Verify the packaged source files emitted in source-generation/tasks.jsonl instead of regenerating candidates from bytes.")
+    recover.add_argument("--source-synthesis-upgrade-packaged-source", action="store_true", help="When verifying packaged source tasks, try regenerated semantic candidates before falling back to packaged source.")
+    recover.add_argument("--source-synthesis-strategies", help="Comma-separated strategy/tag/rule filter for automatic source synthesis.")
+    recover.add_argument("--source-synthesis-source-quality", action="append", default=[], help="Only verify generated candidates with this source quality during automatic source synthesis. Repeat or comma-separate.")
+    recover.add_argument("--source-synthesis-vc-root", type=Path, help="MSVC/VC Toolkit root used by source synthesis.")
+    recover.add_argument("--source-synthesis-wine", default="wine", help="Wine executable used by MSVC source synthesis.")
+    recover.add_argument("--source-synthesis-wineprefix", type=Path, help="Wine prefix used by MSVC source synthesis.")
     recover.add_argument("--steamless-cli", type=Path, help="Steamless CLI used to prepare PE analysis images when applicable.")
     recover.add_argument("--context-format", choices=["json", "md"], default="json", help="LLM-readable context export format used by the recover pipeline.")
     recover.add_argument("--context-binary-analysis", choices=["light", "standard", "deep"], default="standard", help="Binary analysis depth for the recover context stage.")
@@ -179,6 +198,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     synth = sub.add_parser("source-parity-synthesize", help="Generate and objdiff-gate source candidates from a recovery queue.")
     synth.add_argument("--queue", type=Path, default=Path("target/swkotor-recovery-queue/queue.jsonl"))
+    synth.add_argument("--source-tasks", type=Path, action="append", default=[], help="source-generation/tasks.jsonl emitted by recover/recover-windows. Repeat for multiple task files.")
+    synth.add_argument("--source-tasks-only", action="store_true", help="Only inspect rows converted from --source-tasks; do not prepend the default recovery queue.")
+    synth.add_argument("--verify-packaged-source", action="store_true", help="For source-task rows, verify the packaged source file from tasks.jsonl instead of regenerating a candidate from bytes.")
+    synth.add_argument("--upgrade-packaged-source", action="store_true", help="For source-task rows, try regenerated semantic candidates before the packaged source fallback.")
     synth.add_argument("--inventory", type=Path, default=Path("target/swkotor-unpack/facts/function-inventory.jsonl"))
     synth.add_argument("--remaining-features", type=Path, default=Path("target/source-parity-index/swkotor/remaining-features.jsonl"))
     synth.add_argument("--retrieval", type=Path, default=Path("target/source-parity-index/swkotor/retrieval.jsonl"))
@@ -188,14 +211,46 @@ def build_parser() -> argparse.ArgumentParser:
     synth.add_argument("--offset", type=int, default=0)
     synth.add_argument("--max-variants-per-function", type=int, default=8)
     synth.add_argument("--strategies")
+    synth.add_argument("--source-quality", action="append", default=[], help="Only verify generated candidates with this source quality. Repeat or comma-separate.")
+    synth.add_argument("--compiler", choices=["msvc", "clang", "clang-cl"], default="msvc")
+    synth.add_argument("--clang", default="clang")
     synth.add_argument("--compiler-profile", action="append", default=[], help="Compiler profile as NAME='/O2 /Oy /GS-'. Repeat for multiple profiles.")
     synth.add_argument("--dry-run", action="store_true")
+    synth.add_argument("--semantic-only", action="store_true", help="Only compile semantic source candidates; skip byte-exact assembly bootstrap candidates.")
+    synth.add_argument("--skip-boundary-suspect", action="store_true", help="Skip source-task rows whose target-slice boundary quality is marked suspect.")
+    synth.add_argument("--source-shape-search", action="store_true", help="Run bounded source-shape searches for semantic mismatches. Slower; off by default.")
     synth.add_argument("--clean", action="store_true")
     synth.add_argument("--vc-root", type=Path)
     synth.add_argument("--wine", default="wine")
     synth.add_argument("--wineprefix", type=Path)
     synth.add_argument("--timeout", type=int, default=120)
     synth.add_argument("--progress-every", type=int, default=0)
+
+    plugin_synth = sub.add_parser("source-plugin-pipeline", help="Run source generation and objdiff through the upstream-style plugin lifecycle.")
+    plugin_synth.add_argument("--queue", type=Path, default=Path("target/swkotor-recovery-queue/queue.jsonl"))
+    plugin_synth.add_argument("--source-tasks", type=Path, action="append", default=[], help="source-generation/tasks.jsonl emitted by recover/recover-windows. Repeat for multiple task files.")
+    plugin_synth.add_argument("--source-tasks-only", action="store_true", help="Only inspect rows converted from --source-tasks; do not prepend the default recovery queue.")
+    plugin_synth.add_argument("--inventory", type=Path, default=Path("target/swkotor-unpack/facts/function-inventory.jsonl"))
+    plugin_synth.add_argument("--out-dir", type=Path, default=Path("target/source-plugin-pipeline/swkotor"))
+    plugin_synth.add_argument("--limit", type=int, default=25)
+    plugin_synth.add_argument("--offset", type=int, default=0)
+    plugin_synth.add_argument("--max-variants-per-function", type=int, default=8)
+    plugin_synth.add_argument("--max-retries", type=int, default=8, help="Maximum plugin main-phase retries; each retry advances to the next source candidate.")
+    plugin_synth.add_argument("--strategies", help="Comma-separated strategy/tag/rule filter.")
+    plugin_synth.add_argument("--source-quality", action="append", default=[], help="Only verify generated candidates with this source quality. Repeat or comma-separate.")
+    plugin_synth.add_argument("--compiler", choices=["msvc", "clang", "clang-cl"], default="msvc")
+    plugin_synth.add_argument("--clang", default="clang")
+    plugin_synth.add_argument("--compiler-profile", action="append", default=[], help="Compiler profile as NAME='/O2 /Oy /GS-'. Repeat for multiple profiles.")
+    plugin_synth.add_argument("--dry-run", action="store_true")
+    plugin_synth.add_argument("--semantic-only", action="store_true")
+    plugin_synth.add_argument("--skip-boundary-suspect", action="store_true")
+    plugin_synth.add_argument("--source-shape-search", action="store_true")
+    plugin_synth.add_argument("--clean", action="store_true")
+    plugin_synth.add_argument("--vc-root", type=Path)
+    plugin_synth.add_argument("--wine", default="wine")
+    plugin_synth.add_argument("--wineprefix", type=Path)
+    plugin_synth.add_argument("--timeout", type=int, default=120)
+    plugin_synth.add_argument("--progress-every", type=int, default=0)
     return parser
 
 
@@ -242,6 +297,28 @@ def run_recover(args: argparse.Namespace) -> int:
         function_facts_jsonl=args.function_facts_jsonl,
         source_task_limit=args.source_task_limit,
         source_task_offset=args.source_task_offset,
+        source_synthesis_engine=args.source_synthesis_engine,
+        source_synthesis_mode=args.source_synthesis,
+        source_synthesis_limit=args.source_synthesis_limit,
+        source_synthesis_max_variants=args.source_synthesis_max_variants,
+        source_synthesis_semantic_only=args.source_synthesis_semantic_only,
+        source_synthesis_skip_boundary_suspect=args.source_synthesis_skip_boundary_suspect,
+        source_synthesis_verify_packaged_source=args.source_synthesis_verify_packaged_source,
+        source_synthesis_upgrade_packaged_source=args.source_synthesis_upgrade_packaged_source,
+        source_synthesis_strategies=tuple(sorted(parse_csv_set(args.source_synthesis_strategies) or [])),
+        source_synthesis_source_qualities=tuple(
+            sorted(
+                {
+                    item.strip()
+                    for value in args.source_synthesis_source_quality
+                    for item in value.split(",")
+                    if item.strip()
+                }
+            )
+        ),
+        source_synthesis_vc_root=args.source_synthesis_vc_root,
+        source_synthesis_wine=args.source_synthesis_wine,
+        source_synthesis_wineprefix=args.source_synthesis_wineprefix,
         steamless_cli=args.steamless_cli,
         context_format=args.context_format,
         context_binary_analysis=args.context_binary_analysis,
@@ -468,19 +545,39 @@ def run_source_parity_synthesize(args: argparse.Namespace) -> int:
         str(args.offset),
         "--max-variants-per-function",
         str(args.max_variants_per_function),
+        "--compiler",
+        args.compiler,
+        "--clang",
+        args.clang,
         "--timeout",
         str(args.timeout),
         "--progress-every",
         str(args.progress_every),
     ]
+    for source_tasks in args.source_tasks:
+        argv.extend(["--source-tasks", str(source_tasks.resolve())])
+    if args.source_tasks_only:
+        argv.append("--source-tasks-only")
+    if args.verify_packaged_source:
+        argv.append("--verify-packaged-source")
+    if args.upgrade_packaged_source:
+        argv.append("--upgrade-packaged-source")
     for matched_summary in args.matched_summary or []:
         argv.extend(["--matched-summary", str(matched_summary.resolve())])
     if args.strategies:
         argv.extend(["--strategies", args.strategies])
+    for quality in args.source_quality:
+        argv.extend(["--source-quality", quality])
     for profile in args.compiler_profile:
         argv.extend(["--compiler-profile", profile])
     if args.dry_run:
         argv.append("--dry-run")
+    if args.semantic_only:
+        argv.append("--semantic-only")
+    if args.skip_boundary_suspect:
+        argv.append("--skip-boundary-suspect")
+    if args.source_shape_search:
+        argv.append("--source-shape-search")
     if args.clean:
         argv.append("--clean")
     if args.vc_root:
@@ -490,6 +587,45 @@ def run_source_parity_synthesize(args: argparse.Namespace) -> int:
     if args.wineprefix:
         argv.extend(["--wineprefix", str(args.wineprefix.resolve())])
     return source_parity_synthesize_main(argv)
+
+
+def run_source_plugin_pipeline_command(args: argparse.Namespace) -> int:
+    source_qualities = {
+        item.strip()
+        for value in args.source_quality
+        for item in value.split(",")
+        if item.strip()
+    } or None
+    report = run_source_plugin_pipeline(
+        SourcePluginRunConfig(
+            queue=args.queue.resolve() if args.queue else None,
+            source_tasks=[path.resolve() for path in args.source_tasks],
+            source_tasks_only=args.source_tasks_only,
+            out_dir=args.out_dir.resolve(),
+            limit=args.limit,
+            offset=args.offset,
+            max_variants_per_function=args.max_variants_per_function,
+            max_retries=args.max_retries,
+            strategies=parse_csv_set(args.strategies),
+            source_qualities=source_qualities,
+            compiler=args.compiler,
+            clang=args.clang,
+            compiler_profiles=parse_profile_values(args.compiler_profile),
+            dry_run=args.dry_run,
+            semantic_only=args.semantic_only,
+            skip_boundary_suspect=args.skip_boundary_suspect,
+            source_shape_search=args.source_shape_search,
+            clean=args.clean,
+            inventory=args.inventory.resolve(),
+            vc_root=args.vc_root.resolve() if args.vc_root else None,
+            wine=args.wine,
+            wineprefix=args.wineprefix.resolve() if args.wineprefix else None,
+            timeout=args.timeout,
+            progress_every=args.progress_every,
+        )
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
 
 
 def run_compiler_profile_corpus(args: argparse.Namespace) -> int:
@@ -551,6 +687,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_compiler_profile_corpus(args)
     if args.command == "source-parity-synthesize":
         return run_source_parity_synthesize(args)
+    if args.command == "source-plugin-pipeline":
+        return run_source_plugin_pipeline_command(args)
     parser.print_help()
     return 2
 

@@ -7,7 +7,9 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +39,95 @@ typedef char *LPSTR;
 
 GLOBAL_RE = re.compile(r"\b(?:DAT|UNK|PTR|iRam|uRam|bRam|sRam|wRam|dRam|qRam|fRam|g_|s_)[A-Za-z0-9_]*\b")
 STACK_SYMBOL_RE = re.compile(r"\bstack0x[0-9A-Fa-f]+\b")
+
+
+def run_command(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory(prefix="mizuchi-verify-run-") as tmp:
+        stdout_path = Path(tmp) / "stdout.txt"
+        stderr_path = Path(tmp) / "stderr.txt"
+        with stdout_path.open("w+", encoding="utf-8", errors="replace") as stdout_file, stderr_path.open(
+            "w+",
+            encoding="utf-8",
+            errors="replace",
+        ) as stderr_file:
+            proc = subprocess.Popen(
+                command,
+                cwd=cwd,
+                env=env,
+                text=True,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                start_new_session=True,
+            )
+            timed_out = False
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                terminate_process_tree(proc.pid)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    kill_process_tree(proc.pid)
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+            stdout_file.flush()
+            stderr_file.flush()
+            stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
+            stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+            if timed_out:
+                message = f"timed out after {timeout} seconds"
+                return subprocess.CompletedProcess(command, 124, stdout, f"{stderr}\n{message}".strip())
+            return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
+
+
+def child_processes(pid: int) -> list[int]:
+    proc = subprocess.run(["pgrep", "-P", str(pid)], text=True, capture_output=True, check=False)
+    children: list[int] = []
+    for line in proc.stdout.splitlines():
+        try:
+            child = int(line.strip())
+        except ValueError:
+            continue
+        children.append(child)
+        children.extend(child_processes(child))
+    return children
+
+
+def terminate_process_tree(pid: int) -> None:
+    signal_process_tree(pid, signal.SIGTERM)
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+
+def kill_process_tree(pid: int) -> None:
+    signal_process_tree(pid, signal.SIGKILL)
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def signal_process_tree(pid: int, sig: signal.Signals) -> None:
+    for child in reversed(child_processes(pid)):
+        try:
+            os.kill(child, sig)
+        except ProcessLookupError:
+            pass
+    try:
+        os.kill(pid, sig)
+    except ProcessLookupError:
+        pass
 
 
 def verify_recovered_source_package(
@@ -92,18 +183,22 @@ def verify_recovered_source_package(
     code_attempted = sum(1 for row in results if row.get("codeCompare", {}).get("status") not in {None, "not-run"})
     code_raw_matched = sum(1 for row in results if is_code_match(row.get("codeCompare", {}).get("status"), raw_only=True))
     code_masked_matched = sum(1 for row in results if is_code_match(row.get("codeCompare", {}).get("status"), raw_only=False) and not is_code_match(row.get("codeCompare", {}).get("status"), raw_only=True))
+    aggregate_status = verification_status(
+        len(results),
+        syntax_ok,
+        object_attempted,
+        object_ok,
+        code_compare=code_compare,
+        code_attempted=code_attempted,
+        code_raw_matched=code_raw_matched,
+        code_masked_matched=code_masked_matched,
+    )
+    verification_tier = verification_tier_for_package_status(aggregate_status, "not-run")
     report = {
         "schema": "mizuchi.recovered-source-verification.v1",
-        "status": verification_status(
-            len(results),
-            syntax_ok,
-            object_attempted,
-            object_ok,
-            code_compare=code_compare,
-            code_attempted=code_attempted,
-            code_raw_matched=code_raw_matched,
-            code_masked_matched=code_masked_matched,
-        ),
+        "status": aggregate_status,
+        "verificationTier": verification_tier,
+        "acceptanceGate": acceptance_gate_for_tier(verification_tier),
         "package": str(package_dir),
         "manifest": str(manifest_path),
         "verifier": "clang-generated-shim",
@@ -250,6 +345,17 @@ def verify_source(
             timeout=timeout,
         )
 
+    row_status = "object-ok" if object_result.get("status") == "ok" else ("syntax-ok" if syntax_status == "ok" else "syntax-failed")
+    objdiff_block = {
+        "status": "not-run",
+        "reason": objdiff_blocker_reason(1 if target_slice.get("status") == "complete" else 0, 1),
+    }
+    verification_tier = verification_tier_for_result(
+        row_status=row_status,
+        object_result=object_result,
+        code_compare_result=code_compare_result,
+        objdiff_result=objdiff_block,
+    )
     result = {
         "name": meta.get("name") or source.stem,
         "address": meta.get("address"),
@@ -260,7 +366,9 @@ def verify_source(
         "compiler": compiler,
         "sourceLanguage": source_language,
         "compilerArgs": effective_args,
-        "status": "object-ok" if object_result.get("status") == "ok" else ("syntax-ok" if syntax_status == "ok" else "syntax-failed"),
+        "status": row_status,
+        "verificationTier": verification_tier,
+        "acceptanceGate": acceptance_gate_for_tier(verification_tier),
         "syntax": {
             "status": syntax_status,
             "returnCode": syntax_return_code,
@@ -271,10 +379,7 @@ def verify_source(
         },
         "object": object_result,
         "codeCompare": code_compare_result,
-        "objdiff": {
-            "status": "not-run",
-            "reason": objdiff_blocker_reason(1 if target_slice.get("status") == "complete" else 0, 1),
-        },
+        "objdiff": objdiff_block,
     }
     return result
 
@@ -353,29 +458,48 @@ def compile_with_msvc(
 ) -> dict[str, Any]:
     root = resolve_msvc_root(msvc_root)
     cl_exe = root / "bin" / "cl.exe"
+    ml_exe = root / "bin" / "ml.exe"
     stdout_path = out_dir / f"{stem}.object.stdout.txt"
     stderr_path = out_dir / f"{stem}.object.stderr.txt"
-    work_dir = out_dir / f"{stem}.msvc-work"
-    if work_dir.exists():
-        shutil.rmtree(work_dir)
-    work_dir.mkdir(parents=True, exist_ok=True)
+    artifact_work_dir = out_dir / f"{stem}.msvc-work"
+    if artifact_work_dir.exists():
+        shutil.rmtree(artifact_work_dir)
+    artifact_work_dir.mkdir(parents=True, exist_ok=True)
     if not cl_exe.exists():
         message = f"cl.exe not found at {cl_exe}; pass --msvc-root or set VC_ROOT"
         stdout_path.write_text("", encoding="utf-8")
         stderr_path.write_text(message, encoding="utf-8")
         return {"status": "failed", "returnCode": 3, "reason": message, "stdout": str(stdout_path), "stderr": str(stderr_path), "stderrTail": message}
 
-    local_source = work_dir / "in.c"
-    local_source.write_text(source.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    source_suffix = source.suffix.lower()
+    is_assembler = source_suffix == ".asm"
+    if is_assembler and not ml_exe.exists():
+        message = f"ml.exe not found at {ml_exe}; pass --msvc-root or set VC_ROOT"
+        stdout_path.write_text("", encoding="utf-8")
+        stderr_path.write_text(message, encoding="utf-8")
+        return {"status": "failed", "returnCode": 3, "reason": message, "stdout": str(stdout_path), "stderr": str(stderr_path), "stderrTail": message}
+
+    source_text = source.read_text(encoding="utf-8", errors="replace")
+    source_name = "in.asm" if is_assembler else "in.c"
+    (artifact_work_dir / source_name).write_text(source_text, encoding="utf-8")
     out_name = "out.obj"
-    command = [wine, str(cl_exe), "/nologo", "/c", *args, f"/Fo{out_name}", local_source.name]
+    if is_assembler:
+        command = [wine, str(ml_exe), "/nologo", "/c", f"/Fo{out_name}", source_name]
+    else:
+        command = [wine, str(cl_exe), "/nologo", "/c", *args, f"/Fo{out_name}", source_name]
     env = msvc_environment(root, wineprefix)
-    proc = subprocess.run(command, cwd=work_dir, env=env, text=True, capture_output=True, check=False, timeout=timeout)
+    with tempfile.TemporaryDirectory(prefix=f"mizuchi-msvc-{stem}-") as tmp:
+        work_dir = Path(tmp)
+        local_source = work_dir / source_name
+        local_source.write_text(source_text, encoding="utf-8")
+        proc = run_command(command, cwd=work_dir, env=env, timeout=timeout)
+        produced = work_dir / out_name
+        if produced.exists():
+            shutil.copy2(produced, artifact_work_dir / out_name)
+        if proc.returncode == 0 and produced.exists():
+            shutil.copy2(produced, object_path)
     stdout_path.write_text(proc.stdout, encoding="utf-8")
     stderr_path.write_text(proc.stderr, encoding="utf-8")
-    produced = work_dir / out_name
-    if proc.returncode == 0 and produced.exists():
-        shutil.copy2(produced, object_path)
     return {
         "status": "ok" if proc.returncode == 0 and object_path.exists() else "failed",
         "returnCode": proc.returncode,
@@ -386,6 +510,7 @@ def compile_with_msvc(
         "stderrTail": proc.stderr[-2000:],
         "compilerRoot": str(root),
         "wineprefix": env.get("WINEPREFIX"),
+        "artifactWorkDir": str(artifact_work_dir),
     }
 
 
@@ -651,6 +776,60 @@ def objdiff_blocker_reason(target_slices_ok: int, total: int) -> str:
     if target_slices_ok == 0:
         return "package contains generated source candidates but no target function slices to compare"
     return "target slices are present, but no compiler profile, relocation model, or objdiff-compatible target object is available yet"
+
+
+def verification_tier_for_package_status(package_status: str, objdiff_status: Any) -> str:
+    if objdiff_status == "matched":
+        return "target-object-objdiff"
+    mapping = {
+        "empty": "generated",
+        "syntax-failed": "generated",
+        "syntax-ok": "generated",
+        "object-failed": "generated",
+        "object-ok": "object-compilable",
+        "code-compare-incomplete": "code-slice",
+        "code-mismatch": "code-slice",
+        "code-match": "code-slice",
+        "code-relocation-masked-match": "relocation-aware-code-slice",
+    }
+    return mapping.get(package_status, "generated")
+
+
+def verification_tier_for_result(
+    *,
+    row_status: str,
+    object_result: dict[str, Any],
+    code_compare_result: dict[str, Any],
+    objdiff_result: dict[str, Any],
+) -> str:
+    if objdiff_result.get("status") == "matched":
+        return "target-object-objdiff"
+    code_status = code_compare_result.get("status")
+    if code_status in {
+        "relocation-masked-match",
+        "relocation-masked-target-padding-trimmed-match",
+    }:
+        return "relocation-aware-code-slice"
+    if code_status in {"match", "target-padding-trimmed-match"}:
+        return "code-slice"
+    if code_status not in {None, "not-run"}:
+        return "code-slice"
+    if object_result.get("status") == "ok" or row_status == "object-ok":
+        return "object-compilable"
+    if row_status == "syntax-ok":
+        return "generated"
+    return "generated"
+
+
+def acceptance_gate_for_tier(tier: str) -> str:
+    gates = {
+        "generated": "compile candidate with recorded compiler profile",
+        "object-compilable": "compare candidate object against packaged target slice or relocation-aware target object",
+        "code-slice": "promote to relocation-aware target object and run objdiff zero",
+        "relocation-aware-code-slice": "run objdiff zero against full target object with relocation context",
+        "target-object-objdiff": "accepted source parity at function/object tier",
+    }
+    return gates.get(tier, "unknown verification tier")
 
 
 def build_shim(source: str) -> str:

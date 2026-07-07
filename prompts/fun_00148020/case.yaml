@@ -1,0 +1,11 @@
+caseId: fun_00148020
+functionName: FUN_00148020
+targetObjectPath: build/xbox/fun_00148020.o
+targetSourcePath: prompt:/target.S
+candidateSourcePath: prompt:/candidate.c
+targetFamily: xbox-x86
+binaryPath: /TSL/k2_xbox_default.xbe
+compilerCommand: bash ./scripts/compile-x86-32-scaffold.sh "{{cFilePath}}" "{{objFilePath}}"
+proof: objdiff-0
+status: matched
+proofScope: asm-derived-scaffold

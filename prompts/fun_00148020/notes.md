@@ -1,21 +1,24 @@
 # FUN_00148020 — scaffold notes
 
-**status: matched**
+**status: matched against local asm scaffold**
 
 ## Provenance
 
 | Field | Value |
 |-------|--------|
-| Binary | `/TSL/k2_xbox_default.xbe` |
+| Binary | `/TSL/k2_xbox_default.xbe` (not present locally) |
 | Address | `0x00148020` |
 | Size | 12 bytes |
 | Ghidra | Disassembly OK; decompiler failed (shared server) |
+| Local proof target | `target.S` assembled from exported Ghidra asm |
 
-## `[OPEN]` Before Mizuchi run
+## Local scaffold status
 
-1. Extract golden `build/xbox/fun_00148020.o` from Xbox decomp build (same flags as game)
-2. Wire `global.compilerScript` in `mizuchi.yaml` (placeholder → real Xbox/x86 toolchain)
-3. Add m2ctx context for types at `this+0` and symbol at `0x0040e180`
+This prompt can be verified locally against the asm-derived scaffold target.
+That removes the local pipeline blocker, but it is not a substitute for an
+object extracted from an original Xbox build. When the real build artifact is
+available, replace `targetSourcePath`/`targetObjectPath` with the extracted
+object and keep the same objdiff gate.
 
 ## Expected C shape (hypothesis — verify with objdiff)
 

@@ -24,3 +24,20 @@ rustc-ice-*.txt
 #.idea/
 
 .history/
+
+# Compound Engineering local config contains machine/user-specific settings.
+.compound-engineering/config.local.yaml
+
+# Local-only tool state and generated caches.
+.agentdecompile/
+.autoclaw/
+.playwright-mcp/
+.vscode/
+.cursor/*.local.md
+artifacts/
+build/
+logs/
+state/
+src/mizuchi_re.egg-info/
+**/__pycache__/
+*.pyc

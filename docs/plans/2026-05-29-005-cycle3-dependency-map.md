@@ -41,6 +41,7 @@ This document provides a visual dependency graph, testing strategy per phase, an
 ## Testing Strategy by Phase
 
 ### Phase 1: Foundation (U1)
+
 **Goal:** Verify queue state is atomic and round-trips correctly.
 
 ```bash
@@ -59,7 +60,8 @@ Test matrix:
 Expected: All tests pass, queue state survives restart
 ```
 
-**Acceptance:** 
+**Acceptance:**
+
 - ✅ `load_queue` returns correct array sizes
 - ✅ `save_queue` writes atomic JSON
 - ✅ `move_function` updates queue correctly
@@ -68,6 +70,7 @@ Expected: All tests pass, queue state survives restart
 ---
 
 ### Phase 2: Scorer (U2)
+
 **Goal:** Verify functions scored by complexity; easiest processed first.
 
 ```bash
@@ -90,6 +93,7 @@ Expected: Scores correlate with complexity; easiest first
 ```
 
 **Acceptance:**
+
 - ✅ `scorer.sh` generates valid JSON
 - ✅ Score order correct (high → low)
 - ✅ Heuristic weights produce reasonable ordering
@@ -98,6 +102,7 @@ Expected: Scores correlate with complexity; easiest first
 ---
 
 ### Phase 3: Matcher (U3)
+
 **Goal:** Verify one-shot Claude invocation; code block parsing.
 
 ```bash
@@ -121,6 +126,7 @@ Expected: Matcher produces trial.c with valid C syntax
 ```
 
 **Acceptance:**
+
 - ✅ `matcher.sh` produces trial.c in correct location
 - ✅ Code block parsing handles variations
 - ✅ Error responses don't crash (graceful exit)
@@ -129,6 +135,7 @@ Expected: Matcher produces trial.c with valid C syntax
 ---
 
 ### Phase 4: Build & Verify (U4)
+
 **Goal:** Verify compile + objdiff + commit flow; output capping.
 
 ```bash
@@ -146,6 +153,7 @@ Expected: Verified matches committed; failed attempts tracked
 ```
 
 **Acceptance:**
+
 - ✅ Build succeeds: git commit present, queue moved to matched
 - ✅ Build fails: error capped, queue moved to failed, attempt count incremented
 - ✅ Objdiff mismatch: no commit, attempt tracked
@@ -154,6 +162,7 @@ Expected: Verified matches committed; failed attempts tracked
 ---
 
 ### Phase 5: Vacuum Loop (U5)
+
 **Goal:** Verify autonomous processor loop; backoff; state persistence.
 
 ```bash
@@ -185,6 +194,7 @@ Expected: Vacuum loop runs autonomously; state persists
 ```
 
 **Acceptance:**
+
 - ✅ Loop processes pending functions in score order
 - ✅ Backoff triggers on 429 (mock/simulate)
 - ✅ State survives Ctrl-C + resume
@@ -194,6 +204,7 @@ Expected: Vacuum loop runs autonomously; state persists
 ---
 
 ### Phase 6: CLI & Init (U6)
+
 **Goal:** Verify user-facing CLI works; initialization correct.
 
 ```bash
@@ -219,6 +230,7 @@ Expected: User can run CLI commands successfully
 ```
 
 **Acceptance:**
+
 - ✅ `init-vacuum-state.sh` creates state/ and queue.json
 - ✅ `vacuum-cli.sh start` initializes and enters vacuum loop
 - ✅ `vacuum-cli.sh status` shows accurate counts
@@ -228,6 +240,7 @@ Expected: User can run CLI commands successfully
 ---
 
 ### Phase 7: Tests & Docs (U7)
+
 **Goal:** Comprehensive test coverage; user and developer documentation.
 
 ```bash
@@ -244,6 +257,7 @@ Expected: All tests pass; docs work
 ```
 
 **Acceptance:**
+
 - ✅ All tests pass locally (`./tests/vacuum_*_test.sh`)
 - ✅ Integration test: mock function match succeeds
 - ✅ Docs include working examples
@@ -423,4 +437,4 @@ for t in ./tests/vacuum_*_test.sh; do bash "$t" || exit 1; done
 
 - Cycle 3 plan: `docs/plans/2026-05-29-005-feat-autonomous-matching-loop-cycle3.md`
 - Cycles 1-2 complete: `feat/lfg-remote-pipeline-complete` branch
-- Chris Lewis blog: https://blog.chrislewis.au/the-unexpected-effectiveness-of-one-shot-decompilation-with-claude/
+- Chris Lewis blog: <https://blog.chrislewis.au/the-unexpected-effectiveness-of-one-shot-decompilation-with-claude/>

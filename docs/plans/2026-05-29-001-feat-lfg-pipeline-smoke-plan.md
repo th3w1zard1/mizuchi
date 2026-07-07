@@ -44,6 +44,7 @@ The current repository has no plan backlog or bounded feature stub for pipeline 
 **Dependencies:** None.
 
 **Files:**
+
 - scripts/lfg-smoke.sh
 - docs/lfg-smoke.md
 
@@ -52,6 +53,7 @@ The current repository has no plan backlog or bounded feature stub for pipeline 
 **Patterns to follow:** Existing script and docs conventions in this repository.
 
 **Test scenarios:**
+
 - Happy path: running the script exits 0 and prints a completion marker.
 - Error path: invalid invocation exits non-zero with clear usage output.
 
@@ -66,6 +68,7 @@ The current repository has no plan backlog or bounded feature stub for pipeline 
 **Dependencies:** U1.
 
 **Files:**
+
 - tests/lfg_smoke_test.sh
 
 **Approach:** Add a lightweight shell test that executes the harness and asserts marker output and exit code.
@@ -73,6 +76,7 @@ The current repository has no plan backlog or bounded feature stub for pipeline 
 **Patterns to follow:** Existing repository test naming/layout conventions.
 
 **Test scenarios:**
+
 - Happy path: harness marker is present and exit code is 0.
 - Edge case: missing required input produces documented failure behavior.
 

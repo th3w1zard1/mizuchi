@@ -1,0 +1,13 @@
+caseId: swkotor_FUN_0086d000_real
+functionName: FUN_0086d000
+targetObjectPath: target/swkotor-match/FUN_0086d000/target.obj
+candidateSourcePath: prompt:/candidate.c
+targetFamily: win32-msvc8-swkotor-bind
+binaryPath: /run/media/brunner56/MyBook/SteamLibrary/steamapps/common/swkotor/swkotor.exe
+binaryFunctionAddress: '0x0086d000'
+binarySection: .bind
+targetBytes: '558bec5dc3'
+compilerCommand: WINEPREFIX=/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/wine-swkotor-runtime-dump CL_OPT=/Od bash ./scripts/cl-compile.sh "{{cFilePath}}" "{{objFilePath}}" /Oy- /GS-
+proof: objdiff-0-code-only
+status: matched
+claimBoundary: first real high-level C function match only; does not imply whole-exe source recovery

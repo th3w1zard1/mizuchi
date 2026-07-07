@@ -11,7 +11,7 @@ global:
   # getContextScript: |
   #   python3 tools/m2ctx.py "$(echo "{{targetObjectPath}}" | sed 's|build/||; s|\.o$|.c|')"
   #   cat ctx.c
-  getContextScript: cat ctx.h
+  getContextScript: cat context/ctx.h
 
   maxRetries: 25
   outputDir: .

@@ -1,0 +1,13 @@
+caseId: swkotor_oss_entry0
+functionName: 'entry0'
+targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0000_entry0/target.bin'
+candidateSourcePath: prompt:/candidate.c
+targetFamily: byte-slice
+proof: task-byte-identical
+status: pending
+oneShotPackagePath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source'
+oneShotTaskPath: 'function-reconstruction-tasks/0000_entry0'
+oneShotTaskJson: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0000_entry0/task.json'
+targetBytesSha256: '3ff2bb3917fa19db04d602bedbe176d91dcc6b157b3792f9278442bef9a6554d'
+verifierCommand: |
+  bash ./scripts/verify-reconstruction-task.sh --task-dir '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0000_entry0' --verifier 'VERIFY_CANDIDATE.sh' --candidate "{{candidateSourcePath}}" --candidate-output "{{candidateOutputPath}}"

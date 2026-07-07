@@ -1,0 +1,985 @@
+import { Box, Text, useInput } from 'ink';
+import Spinner from 'ink-spinner';
+import { option } from 'pastel';
+import path from 'path';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { z } from 'zod';
+
+import {
+  buildPipelineConfig,
+  getConfigFilePath,
+  getPluginConfigFromFile,
+  loadConfigFile,
+  validatePaths,
+} from '~/cli/config.js';
+import { PluginManager } from '~/plugin-manager.js';
+import {
+  ClaudeRunnerConfig,
+  ClaudeRunnerPlugin,
+  claudeRunnerConfigSchema,
+} from '~/plugins/claude-runner/claude-runner-plugin.js';
+import { CompilerPlugin } from '~/plugins/compiler/compiler-plugin.js';
+import {
+  DecompPermuterConfig,
+  DecompPermuterPlugin,
+  decompPermuterConfigSchema,
+} from '~/plugins/decomp-permuter/decomp-permuter-plugin.js';
+import { GetContextPlugin } from '~/plugins/get-context/get-context-plugin.js';
+import { IntegratorConfig, IntegratorPlugin, integratorConfigSchema } from '~/plugins/integrator/integrator-plugin.js';
+import { M2cConfig, M2cPlugin, m2cConfigSchema } from '~/plugins/m2c/m2c-plugin.js';
+import { ObjdiffConfig, ObjdiffPlugin, objdiffConfigSchema } from '~/plugins/objdiff/objdiff-plugin.js';
+import { loadPrompts } from '~/prompt-loader.js';
+import {
+  type ReportPluginConfigs,
+  deleteFileIfExists,
+  generateHtmlReport,
+  generateHtmlReportAtomic,
+  saveJsonReport,
+  saveJsonReportAtomic,
+  transformToReport,
+} from '~/report-generator/index.js';
+import { BackgroundTaskCoordinator } from '~/shared/background-task-coordinator.js';
+import { CCompiler } from '~/shared/c-compiler/c-compiler.js';
+import type { CliPrompt, CliPromptChoice } from '~/shared/cli-prompt.js';
+import { PipelineConfig } from '~/shared/config';
+import { Objdiff } from '~/shared/objdiff.js';
+import type { PipelineEvent, PluginInfo } from '~/shared/pipeline-events.js';
+import { installSdkErrorHandlers } from '~/shared/sdk-error-handlers.js';
+import type { PipelineResults, PipelineRunResult, StatusStat } from '~/shared/types.js';
+
+export const options = z.object({
+  config: z
+    .string()
+    .optional()
+    .describe(option({ description: 'Path to mizuchi.yaml config file', alias: 'c' })),
+  prompts: z
+    .string()
+    .optional()
+    .describe(option({ description: 'Directory containing prompt folders', alias: 'p' })),
+  retries: z
+    .number()
+    .optional()
+    .describe(option({ description: 'Maximum retry attempts per prompt', alias: 'r' })),
+  output: z
+    .string()
+    .optional()
+    .describe(option({ description: 'Output directory for generated files and report', alias: 'o' })),
+});
+
+type Props = {
+  options: z.infer<typeof options>;
+};
+
+/**
+ * Plugin execution status for display
+ */
+interface PluginStatus {
+  id: string;
+  name: string;
+  status: 'pending' | 'running' | 'success' | 'failure' | 'skipped';
+  error?: string;
+  durationMs?: number;
+  logLines: string[];
+  stats: StatusStat[];
+}
+
+/**
+ * Current progress state for UI rendering
+ */
+interface ProgressState {
+  phase: 'loading' | 'initializing' | 'running' | 'complete' | 'error';
+  currentPhase: 'loading' | 'programmatic-phase' | 'ai-powered-phase' | 'post-match-phase';
+  config?: PipelineConfig;
+  plugins: PluginInfo[];
+  // Current prompt info
+  currentPrompt?: {
+    path: string;
+    functionName: string;
+    targetObjectPath: string;
+    index: number;
+    total: number;
+  };
+  // Current attempt info
+  currentAttempt?: {
+    number: number;
+    maxRetries: number;
+  };
+  // Plugin execution status for current attempt
+  pluginStatuses: PluginStatus[];
+  // Completed prompts summary
+  completedPrompts: Array<{
+    path: string;
+    functionName: string;
+    success: boolean;
+    attemptsUsed: number;
+  }>;
+  // Best objdiff difference count from AI-powered phase attempts
+  bestDifferenceCount?: number;
+  // Background tasks (e.g., permuter)
+  backgroundTasks: Array<{
+    taskId: string;
+    triggeredByAttempt: number;
+    status: 'running' | 'completed';
+    success?: boolean;
+  }>;
+  // Final results
+  results?: PipelineResults;
+  htmlReportPath?: string;
+  // Error message
+  errorMessage?: string;
+  // Active interactive prompt
+  activePrompt: {
+    message: string;
+    choices: readonly CliPromptChoice[];
+  } | null;
+}
+
+export default function Index({ options: opts }: Props) {
+  const [state, setState] = useState<ProgressState>({
+    phase: 'loading',
+    currentPhase: 'loading',
+    plugins: [],
+    pluginStatuses: [],
+    completedPrompts: [],
+    backgroundTasks: [],
+    activePrompt: null,
+  });
+
+  // Ref to store the resolve function for the active interactive prompt
+  const promptResolveRef = useRef<((value: string) => void) | null>(null);
+
+  // Create CLI prompt implementation (promise-bridge between async plugin code and React UI)
+  const cliPrompt: CliPrompt = useMemo(
+    () => ({
+      askChoice: <T extends string>(message: string, choices: readonly CliPromptChoice<T>[]) => {
+        return new Promise<T>((resolve) => {
+          promptResolveRef.current = resolve as (value: string) => void;
+          setState((prev) => ({
+            ...prev,
+            activePrompt: { message, choices: choices as readonly CliPromptChoice[] },
+          }));
+        });
+      },
+    }),
+    [],
+  );
+
+  const handlePromptSelect = useCallback((value: string) => {
+    const resolve = promptResolveRef.current;
+    promptResolveRef.current = null;
+    setState((prev) => ({ ...prev, activePrompt: null }));
+    resolve?.(value);
+  }, []);
+
+  const handleEvent = useCallback((event: PipelineEvent) => {
+    setState((prev) => {
+      switch (event.type) {
+        case 'pipeline-start':
+          return {
+            ...prev,
+            phase: 'running',
+            config: event.config,
+            plugins: event.plugins,
+          };
+
+        case 'plugin-registered':
+          return {
+            ...prev,
+            plugins: [...prev.plugins, event.plugin],
+          };
+
+        case 'prompt-start':
+          return {
+            ...prev,
+            currentPrompt: {
+              path: event.promptPath,
+              functionName: event.functionName,
+              targetObjectPath: event.targetObjectPath,
+              index: event.promptIndex,
+              total: event.totalPrompts,
+            },
+            bestDifferenceCount: undefined,
+            pluginStatuses: prev.plugins.map((p) => ({
+              id: p.id,
+              name: p.name,
+              status: 'pending' as const,
+              logLines: [],
+              stats: [],
+            })),
+          };
+
+        case 'setup-phase-start':
+          return {
+            ...prev,
+            pluginStatuses: [],
+          };
+
+        case 'programmatic-phase-start':
+          return {
+            ...prev,
+            currentPhase: 'programmatic-phase',
+            pluginStatuses: [],
+          };
+
+        case 'post-match-phase-start':
+          return {
+            ...prev,
+            currentPhase: 'post-match-phase',
+            pluginStatuses: [],
+          };
+
+        case 'attempt-start':
+          return {
+            ...prev,
+            currentPhase: 'ai-powered-phase',
+            currentAttempt: {
+              number: event.attemptNumber,
+              maxRetries: event.maxRetries,
+            },
+            // Reset plugin statuses for new attempt
+            pluginStatuses: prev.plugins.map((p) => ({
+              id: p.id,
+              name: p.name,
+              status: 'pending' as const,
+              logLines: [],
+              stats: [],
+            })),
+          };
+
+        case 'plugin-execution-start': {
+          const exists = prev.pluginStatuses.some((p) => p.id === event.pluginId);
+          if (exists) {
+            return {
+              ...prev,
+              pluginStatuses: prev.pluginStatuses.map((p) =>
+                p.id === event.pluginId ? { ...p, status: 'running' as const } : p,
+              ),
+            };
+          }
+          // During programmatic phase, add plugin status dynamically
+          return {
+            ...prev,
+            pluginStatuses: [
+              ...prev.pluginStatuses,
+              { id: event.pluginId, name: event.pluginName, status: 'running' as const, logLines: [], stats: [] },
+            ],
+          };
+        }
+
+        case 'plugin-execution-complete':
+          return {
+            ...prev,
+            pluginStatuses: prev.pluginStatuses.map((p) =>
+              p.id === event.pluginId
+                ? {
+                    ...p,
+                    status: event.status as 'success' | 'failure' | 'skipped',
+                    error: event.error,
+                    durationMs: event.durationMs,
+                    logLines: [],
+                    stats: [],
+                  }
+                : p,
+            ),
+          };
+
+        case 'plugin-status-update':
+          return {
+            ...prev,
+            pluginStatuses: prev.pluginStatuses.map((p) =>
+              p.id === event.pluginId
+                ? {
+                    ...p,
+                    logLines: event.logLines,
+                    stats: event.stats,
+                  }
+                : p,
+            ),
+          };
+
+        case 'attempt-complete': {
+          const newBest =
+            event.differenceCount !== undefined &&
+            (prev.bestDifferenceCount === undefined || event.differenceCount < prev.bestDifferenceCount)
+              ? event.differenceCount
+              : prev.bestDifferenceCount;
+          return {
+            ...prev,
+            bestDifferenceCount: newBest,
+          };
+        }
+
+        case 'prompt-complete':
+          return {
+            ...prev,
+            completedPrompts: [
+              ...prev.completedPrompts,
+              {
+                path: event.promptPath,
+                functionName: event.functionName,
+                success: event.success,
+                attemptsUsed: event.attemptsUsed,
+              },
+            ],
+            backgroundTasks: [],
+          };
+
+        case 'background-task-start':
+          return {
+            ...prev,
+            backgroundTasks: [
+              ...prev.backgroundTasks,
+              {
+                taskId: event.taskId,
+                triggeredByAttempt: event.triggeredByAttempt,
+                status: 'running' as const,
+              },
+            ],
+          };
+
+        case 'background-task-complete':
+          return {
+            ...prev,
+            backgroundTasks: prev.backgroundTasks.map((t) =>
+              t.taskId === event.taskId
+                ? {
+                    ...t,
+                    status: 'completed' as const,
+                    success: event.success,
+                  }
+                : t,
+            ),
+          };
+
+        case 'pipeline-complete':
+          return {
+            ...prev,
+            phase: 'complete',
+          };
+
+        default:
+          return prev;
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    runPipeline(opts, handleEvent, setState, cliPrompt);
+  }, [opts, handleEvent, cliPrompt]);
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      {/* Header */}
+      <Box marginBottom={1}>
+        <Text color="cyan" bold>
+          Mizuchi - Decompilation Pipeline Runner
+        </Text>
+      </Box>
+
+      {/* Loading phase */}
+      {state.phase === 'loading' && (
+        <Box>
+          <Text color="yellow">
+            <Spinner type="dots" /> Loading configuration...
+          </Text>
+        </Box>
+      )}
+
+      {/* Initializing phase */}
+      {state.phase === 'initializing' && (
+        <Box flexDirection="column">
+          <Text color="yellow">
+            <Spinner type="dots" /> Initializing plugins...
+          </Text>
+          {state.plugins.length > 0 && (
+            <Box marginTop={1} flexDirection="column">
+              {state.plugins.map((plugin) => (
+                <Text key={plugin.id} dimColor>
+                  {' '}
+                  + {plugin.name}
+                </Text>
+              ))}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Running phase */}
+      {state.phase === 'running' && (
+        <Box flexDirection="column">
+          {/* Config info */}
+          {state.config && (
+            <Box marginBottom={1} flexDirection="column">
+              <Text dimColor>Prompts: {state.config.promptsDir}</Text>
+              <Text dimColor>Max retries: {state.config.maxRetries}</Text>
+            </Box>
+          )}
+
+          {/* Current prompt */}
+          {state.currentPrompt && (
+            <Box flexDirection="column" marginBottom={1}>
+              <Text bold>
+                [{state.currentPrompt.index + 1}/{state.currentPrompt.total}] {state.currentPrompt.path}
+              </Text>
+              <Text dimColor> Function: {state.currentPrompt.functionName}</Text>
+            </Box>
+          )}
+
+          <Box marginBottom={1}>
+            {state.activePrompt ? (
+              <Text dimColor>Paused</Text>
+            ) : (
+              <Text color="yellow">
+                <Spinner type="dots" /> {state.currentPhase}
+              </Text>
+            )}
+          </Box>
+
+          {/* Current attempt */}
+          {state.currentPhase === 'ai-powered-phase' && state.currentAttempt && (
+            <Box marginBottom={1}>
+              <Text>
+                Attempt {state.currentAttempt.number}/{state.currentAttempt.maxRetries}
+              </Text>
+            </Box>
+          )}
+
+          {/* Plugin statuses */}
+          <Box flexDirection="column" marginLeft={2}>
+            {state.pluginStatuses.map((plugin) => (
+              <Box key={plugin.id} flexDirection="column">
+                <PluginStatusLine plugin={plugin} spinnersPaused={!!state.activePrompt} />
+
+                {plugin.stats.length > 0 && (
+                  <Box marginLeft={4}>
+                    <Text dimColor>{plugin.stats.map((s) => `${s.value} ${s.label}`).join('  ·  ')}</Text>
+                  </Box>
+                )}
+
+                {plugin.logLines.length > 0 && (
+                  <Box flexDirection="column" marginLeft={4}>
+                    {plugin.logLines.slice(-3).map((line, i) => (
+                      <Text key={i} dimColor>
+                        {line}
+                      </Text>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </Box>
+
+          {/* Best match from AI-powered phase */}
+          {state.bestDifferenceCount !== undefined && (
+            <Box marginTop={1}>
+              <Text dimColor>
+                Best match:{' '}
+                {state.bestDifferenceCount === 0 ? (
+                  <Text color="green">perfect match</Text>
+                ) : (
+                  <Text>{state.bestDifferenceCount} differences</Text>
+                )}
+              </Text>
+            </Box>
+          )}
+
+          {/* Background permuter status */}
+          {state.backgroundTasks.length > 0 && (
+            <Box marginTop={1}>
+              <Text dimColor>
+                Permuter: {state.backgroundTasks.filter((t) => t.status === 'running').length} running
+                {state.backgroundTasks.some((t) => t.status === 'completed' && t.success) && (
+                  <Text color="green"> | match found</Text>
+                )}
+              </Text>
+            </Box>
+          )}
+
+          {/* Interactive prompt (e.g., usage limit pause) */}
+          {state.activePrompt && <InteractivePrompt prompt={state.activePrompt} onSelect={handlePromptSelect} />}
+
+          {/* Completed prompts summary */}
+          {state.completedPrompts.length > 0 && (
+            <Box marginTop={1} flexDirection="column">
+              <Text dimColor>
+                Completed: {state.completedPrompts.filter((p) => p.success).length} succeeded,{' '}
+                {state.completedPrompts.filter((p) => !p.success).length} failed
+              </Text>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Complete phase */}
+      {state.phase === 'complete' && state.results && (
+        <PipelineSummary results={state.results} htmlReportPath={state.htmlReportPath} />
+      )}
+
+      {/* Error phase */}
+      {state.phase === 'error' && (
+        <Box flexDirection="column">
+          <Text color="red" bold>
+            Error
+          </Text>
+          <Text color="red">{state.errorMessage}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * Renders a single plugin's status
+ */
+function PluginStatusLine({ plugin, spinnersPaused }: { plugin: PluginStatus; spinnersPaused: boolean }) {
+  const getStatusIcon = () => {
+    switch (plugin.status) {
+      case 'pending':
+        return <Text dimColor>-</Text>;
+      case 'running':
+        return spinnersPaused ? (
+          <Text color="yellow">~</Text>
+        ) : (
+          <Text color="yellow">
+            <Spinner type="dots" />
+          </Text>
+        );
+      case 'success':
+        return <Text color="green">+</Text>;
+      case 'failure':
+        return <Text color="red">x</Text>;
+      case 'skipped':
+        return <Text dimColor>-</Text>;
+    }
+  };
+
+  const getStatusColor = (): string | undefined => {
+    switch (plugin.status) {
+      case 'pending':
+        return undefined;
+      case 'running':
+        return 'yellow';
+      case 'success':
+        return 'green';
+      case 'failure':
+        return 'red';
+      case 'skipped':
+        return undefined;
+    }
+  };
+
+  return (
+    <Box>
+      {getStatusIcon()}
+      <Text color={getStatusColor()} dimColor={plugin.status === 'pending' || plugin.status === 'skipped'}>
+        {' '}
+        [{plugin.id}]{' '}
+        {plugin.status === 'running'
+          ? 'Running...'
+          : plugin.status === 'failure'
+            ? plugin.error || 'Failed'
+            : plugin.status === 'skipped'
+              ? 'Skipped'
+              : plugin.status === 'success'
+                ? `Done (${plugin.durationMs}ms)`
+                : ''}
+      </Text>
+    </Box>
+  );
+}
+
+/**
+ * Renders an interactive choice prompt, pausing the pipeline until the user responds.
+ */
+function InteractivePrompt({
+  prompt,
+  onSelect,
+}: {
+  prompt: { message: string; choices: readonly CliPromptChoice[] };
+  onSelect: (value: string) => void;
+}) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useInput((_input, key) => {
+    if (key.upArrow) {
+      setSelectedIndex((prev) => Math.max(0, prev - 1));
+    } else if (key.downArrow) {
+      setSelectedIndex((prev) => Math.min(prompt.choices.length - 1, prev + 1));
+    } else if (key.return) {
+      onSelect(prompt.choices[selectedIndex]!.value);
+    }
+  });
+
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {prompt.message.split('\n').map((line, i) => (
+        <Text key={i} color="yellow">
+          {i === 0 ? '! ' : '  '}
+          {line}
+        </Text>
+      ))}
+
+      <Box flexDirection="column" marginTop={1} marginLeft={4}>
+        {prompt.choices.map((choice, i) => (
+          <Text key={choice.value} color={i === selectedIndex ? 'cyan' : undefined} bold={i === selectedIndex}>
+            {i === selectedIndex ? '> ' : '  '}
+            {choice.label}
+          </Text>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Renders the final summary
+ */
+function PipelineSummary({ results, htmlReportPath }: { results: PipelineResults; htmlReportPath?: string }) {
+  const { summary } = results;
+  const successColor = summary.successRate === 100 ? 'green' : summary.successRate >= 50 ? 'yellow' : 'red';
+
+  return (
+    <Box flexDirection="column">
+      <Text color="green" bold>
+        Pipeline Complete
+      </Text>
+
+      <Box marginTop={1} flexDirection="column">
+        <Text>
+          Total Prompts: <Text bold>{summary.totalPrompts}</Text>
+        </Text>
+
+        <Text>
+          Successful:{' '}
+          <Text bold color="green">
+            {summary.successfulPrompts}
+          </Text>
+        </Text>
+
+        <Text>
+          Success Rate:{' '}
+          <Text bold color={successColor}>
+            {summary.successRate.toFixed(1)}%
+          </Text>
+        </Text>
+
+        <Text>
+          Avg Attempts: <Text bold>{summary.avgAttempts.toFixed(1)}</Text>
+        </Text>
+
+        <Text>
+          Total Duration: <Text bold>{(summary.totalDurationMs / 1000).toFixed(1)}s</Text>
+        </Text>
+      </Box>
+
+      {/* Individual prompt results */}
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>Results:</Text>
+
+        {results.results.map((result) => (
+          <Box key={result.promptPath} marginLeft={1}>
+            <Text color={result.success ? 'green' : 'red'}>
+              {result.success ? '+' : 'x'} {result.functionName}
+            </Text>
+            <Text dimColor>
+              {' '}
+              ({result.attempts.length} attempt{result.attempts.length > 1 ? 's' : ''})
+            </Text>
+          </Box>
+        ))}
+
+        <Box marginTop={1}>
+          <Text dimColor>See the detailed report at: {path.resolve(htmlReportPath || '')}</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+async function runPipeline(
+  opts: z.infer<typeof options>,
+  onEvent: (event: PipelineEvent) => void,
+  setState: React.Dispatch<React.SetStateAction<ProgressState>>,
+  cliPrompt: CliPrompt,
+): Promise<void> {
+  installSdkErrorHandlers();
+
+  let claudePlugin: ClaudeRunnerPlugin | undefined;
+  let compilerPlugin: CompilerPlugin | undefined;
+  let getContextPlugin: GetContextPlugin | undefined;
+  let backgroundCoordinator: BackgroundTaskCoordinator | undefined;
+
+  try {
+    // Load configuration from file (if exists)
+    const configPath = getConfigFilePath(opts.config);
+    const fileConfig = await loadConfigFile(configPath);
+
+    if (!fileConfig) {
+      setState((prev) => ({
+        ...prev,
+        phase: 'error',
+        errorMessage: `Configuration file not found: ${configPath}`,
+      }));
+
+      setTimeout(() => {
+        process.exit(1);
+      }, 1);
+
+      return;
+    }
+
+    // Build configuration with CLI overrides
+    const pipelineConfig = buildPipelineConfig(fileConfig, {
+      prompts: opts.prompts,
+      retries: opts.retries,
+      output: opts.output,
+    });
+
+    const { errors: pathErrors } = await validatePaths(pipelineConfig);
+    if (pathErrors.length > 0) {
+      setState((prev) => ({
+        ...prev,
+        phase: 'error',
+        errorMessage: pathErrors.join('\n'),
+      }));
+
+      setTimeout(() => {
+        process.exit(1);
+      }, 1);
+
+      return;
+    }
+
+    // Load prompts
+    const { prompts, errors: loadPromptErrors } = await loadPrompts(pipelineConfig.promptsDir);
+    if (loadPromptErrors.length > 0) {
+      setState((prev) => ({
+        ...prev,
+        phase: 'error',
+        errorMessage: loadPromptErrors.map((e) => e.message).join('\n'),
+      }));
+
+      setTimeout(() => {
+        process.exit(1);
+      }, 1);
+
+      return;
+    }
+    if (prompts.length === 0) {
+      setState((prev) => ({
+        ...prev,
+        phase: 'error',
+        errorMessage: 'No valid prompt files found in the specified directory.',
+      }));
+
+      setTimeout(() => {
+        process.exit(1);
+      }, 1);
+
+      return;
+    }
+
+    setState((prev) => ({ ...prev, phase: 'initializing' }));
+
+    // Create plugin manager with event handler
+    const manager = new PluginManager(pipelineConfig, onEvent);
+
+    // Get plugin configurations
+    const claudeRunnerConfig: ClaudeRunnerConfig = getPluginConfigFromFile<ClaudeRunnerConfig>(
+      fileConfig,
+      'claude-runner',
+      claudeRunnerConfigSchema,
+    );
+
+    const objdiffConfig: ObjdiffConfig = getPluginConfigFromFile<ObjdiffConfig>(
+      fileConfig,
+      'objdiff',
+      objdiffConfigSchema,
+    );
+
+    // Create shared CCompiler and Objdiff instances
+    const cCompiler = new CCompiler(pipelineConfig.compilerScript, pipelineConfig.projectRoot);
+    const objdiff = new Objdiff(objdiffConfig.diffSettings);
+
+    // Create plugins
+    getContextPlugin = new GetContextPlugin(pipelineConfig.getContextScript, pipelineConfig.projectRoot);
+    claudePlugin = new ClaudeRunnerPlugin({
+      config: claudeRunnerConfig,
+      pipelineConfig,
+      cCompiler,
+      objdiff,
+      cliPrompt,
+    });
+    compilerPlugin = new CompilerPlugin(cCompiler);
+    const objdiffPlugin = new ObjdiffPlugin(objdiffConfig);
+
+    // Register setup phase plugins
+    manager.registerSetupPhase(getContextPlugin);
+
+    // Register plugins for the programmatic phase
+    const m2cConfig = getPluginConfigFromFile<M2cConfig>(fileConfig, 'm2c', m2cConfigSchema);
+    const decompPermuterConfig = getPluginConfigFromFile<DecompPermuterConfig>(
+      fileConfig,
+      'decomp-permuter',
+      decompPermuterConfigSchema,
+    );
+
+    if (m2cConfig.enable) {
+      const m2cPlugin = new M2cPlugin(m2cConfig);
+
+      if (decompPermuterConfig.enable) {
+        const decompPermuterPlugin = new DecompPermuterPlugin(decompPermuterConfig, cCompiler);
+        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, objdiffPlugin], [decompPermuterPlugin]);
+        backgroundCoordinator = new BackgroundTaskCoordinator([decompPermuterPlugin], onEvent);
+      } else {
+        manager.registerProgrammaticPhase([m2cPlugin, compilerPlugin, objdiffPlugin]);
+      }
+    }
+
+    // Set up background coordinator (when any background-capable plugin is registered).
+    // The coordinator owns the foreground abort signal — PluginManager wires it to
+    // plugins (e.g., Claude) at the start of each prompt via setForegroundAbortSignal().
+    if (backgroundCoordinator) {
+      manager.setBackgroundCoordinator(backgroundCoordinator);
+    }
+
+    // Register plugins for the ai-powered phase
+    manager.register(claudePlugin).register(compilerPlugin).register(objdiffPlugin);
+
+    // Register integrator plugin for the post-match phase (optional)
+    const integratorConfig = getPluginConfigFromFile<IntegratorConfig>(
+      fileConfig,
+      'integrator',
+      integratorConfigSchema,
+    );
+
+    if (integratorConfig.enable) {
+      const integratorPlugin = new IntegratorPlugin(integratorConfig, pipelineConfig);
+      manager.registerPostMatchPhase(integratorPlugin);
+    }
+
+    // Compute timestamp and file paths up front so partial and final files share the same timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const htmlPath = path.join(pipelineConfig.outputDir, `run-report-${timestamp}.html`);
+    const jsonPath = path.join(pipelineConfig.outputDir, `run-results-${timestamp}.json`);
+    const partialHtmlPath = path.join(pipelineConfig.outputDir, `partial-run-report-${timestamp}.html`);
+    const partialJsonPath = path.join(pipelineConfig.outputDir, `partial-run-results-${timestamp}.json`);
+
+    // Plugin configs for report transformation (shared between partial and final reports)
+    const pluginConfigs: ReportPluginConfigs = {
+      claudeRunner: {
+        ttftTimeoutMs: claudeRunnerConfig.ttftTimeoutMs,
+        stallThreshold: claudeRunnerConfig.stallThreshold,
+        model: claudeRunnerConfig.model ?? 'claude-sonnet-4-6',
+        softTimeout: claudeRunnerConfig.softTimeout,
+      },
+      compiler: {
+        compilerScript: pipelineConfig.compilerScript,
+      },
+    };
+
+    // Callback invoked after each prompt completes — writes partial reports atomically
+    const onPromptComplete = async (partialResults: PipelineRunResult[], totalPrompts: number) => {
+      const partialPipelineResults: PipelineResults = {
+        timestamp: new Date().toISOString(),
+        config: pipelineConfig,
+        results: partialResults,
+        summary: calculateSummary(partialResults),
+      };
+      const partialReport = transformToReport(partialPipelineResults, pluginConfigs, {
+        completedPrompts: partialResults.length,
+        totalPrompts,
+      });
+
+      try {
+        await saveJsonReportAtomic(partialReport, partialJsonPath);
+      } catch {
+        // Best-effort
+      }
+      try {
+        await generateHtmlReportAtomic(partialReport, partialHtmlPath);
+      } catch {
+        // Best-effort
+      }
+    };
+
+    // Run the pipeline
+    const results = await manager.runPipelines(prompts, onPromptComplete);
+
+    // Save cache after pipelines completes
+    await claudePlugin.saveCache();
+
+    await compilerPlugin.cleanup();
+    await getContextPlugin.cleanup();
+
+    // Transform results to report format
+    const report = transformToReport(results, pluginConfigs);
+
+    // Save final reports sequentially to ensure both complete even if one fails
+    try {
+      await saveJsonReport(report, jsonPath);
+    } catch {
+      // Silently handle JSON report errors
+    }
+
+    try {
+      await generateHtmlReport(report, htmlPath);
+    } catch {
+      // Silently handle HTML report errors
+    }
+
+    // Delete partial files now that final reports are written
+    await deleteFileIfExists(partialJsonPath);
+    await deleteFileIfExists(partialHtmlPath);
+
+    setState((prev) => ({ ...prev, phase: 'complete', results, htmlReportPath: htmlPath }));
+
+    setTimeout(() => {
+      const exitCode = results.summary.successRate === 100 ? 0 : 1;
+      process.exit(exitCode);
+    }, 1);
+  } catch (error) {
+    // Save cache before exiting so progress from completed prompts is not lost
+    try {
+      await claudePlugin?.saveCache();
+    } catch {
+      // Best-effort cache save
+    }
+    try {
+      await compilerPlugin?.cleanup();
+    } catch {
+      // Best-effort cleanup
+    }
+    try {
+      await getContextPlugin?.cleanup();
+    } catch {
+      // Best-effort cleanup
+    }
+    try {
+      await backgroundCoordinator?.cancelAll();
+    } catch {
+      // Best-effort cleanup
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    setState((prev) => ({ ...prev, phase: 'error', errorMessage: message }));
+
+    setTimeout(() => {
+      process.exit(1);
+    }, 1);
+  }
+}
+
+/**
+ * Calculate summary statistics from a list of pipeline run results.
+ * Used for partial reports (the PluginManager calculates this internally for final results).
+ */
+function calculateSummary(results: PipelineRunResult[]) {
+  const totalPrompts = results.length;
+  const successfulPrompts = results.filter((r) => r.success).length;
+  const successRate = totalPrompts > 0 ? (successfulPrompts / totalPrompts) * 100 : 0;
+  const avgAttempts = results.length > 0 ? results.reduce((sum, r) => sum + r.attempts.length, 0) / results.length : 0;
+  const totalDurationMs = results.reduce((sum, r) => sum + r.totalDurationMs, 0);
+
+  return { totalPrompts, successfulPrompts, successRate, avgAttempts, totalDurationMs };
+}

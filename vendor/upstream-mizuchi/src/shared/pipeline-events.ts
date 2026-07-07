@@ -1,0 +1,190 @@
+/**
+ * Pipeline Event Types
+ *
+ * Events emitted by the PluginManager during pipeline execution.
+ * Used by the UI layer to render progress updates.
+ */
+import { PipelineConfig } from './config';
+import type { StatusStat } from './types';
+
+/**
+ * Plugin information for display
+ */
+export interface PluginInfo {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/**
+ * Event emitted when pipeline starts
+ */
+export interface PipelineStartEvent {
+  type: 'pipeline-start';
+  config: PipelineConfig;
+  plugins: PluginInfo[];
+  promptCount: number;
+}
+
+/**
+ * Event emitted when a plugin is registered
+ */
+export interface PluginRegisteredEvent {
+  type: 'plugin-registered';
+  plugin: PluginInfo;
+}
+
+/**
+ * Event emitted when starting to process a prompt
+ */
+export interface PromptStartEvent {
+  type: 'prompt-start';
+  promptPath: string;
+  functionName: string;
+  targetObjectPath: string;
+  promptIndex: number;
+  totalPrompts: number;
+}
+
+/**
+ * Event emitted when starting an attempt
+ */
+export interface AttemptStartEvent {
+  type: 'attempt-start';
+  attemptNumber: number;
+  maxRetries: number;
+}
+
+/**
+ * Event emitted when a plugin starts executing
+ */
+export interface PluginExecutionStartEvent {
+  type: 'plugin-execution-start';
+  pluginId: string;
+  pluginName: string;
+}
+
+/**
+ * Event emitted when a plugin completes execution
+ */
+export interface PluginExecutionCompleteEvent {
+  type: 'plugin-execution-complete';
+  pluginId: string;
+  pluginName: string;
+  status: 'success' | 'failure' | 'skipped';
+  error?: string;
+  durationMs: number;
+}
+
+/**
+ * Event emitted when an attempt completes
+ */
+export interface AttemptCompleteEvent {
+  type: 'attempt-complete';
+  attemptNumber: number;
+  success: boolean;
+  willRetry: boolean;
+  /** Number of assembly differences from objdiff, if available */
+  differenceCount?: number;
+}
+
+/**
+ * Event emitted when a prompt completes processing
+ */
+export interface PromptCompleteEvent {
+  type: 'prompt-complete';
+  promptPath: string;
+  functionName: string;
+  success: boolean;
+  attemptsUsed: number;
+  durationMs: number;
+}
+
+/**
+ * Event emitted when pipeline completes
+ */
+export interface PipelineCompleteEvent {
+  type: 'pipeline-complete';
+  summary: {
+    totalPrompts: number;
+    successfulPrompts: number;
+    successRate: number;
+    avgAttempts: number;
+    totalDurationMs: number;
+  };
+}
+
+/**
+ * Event emitted when the setup phase starts
+ */
+export interface SetupPhaseStartEvent {
+  type: 'setup-phase-start';
+}
+
+/**
+ * Event emitted when the programmatic phase starts
+ */
+export interface ProgrammaticPhaseStartEvent {
+  type: 'programmatic-phase-start';
+}
+
+/**
+ * Event emitted when the post-match phase starts
+ */
+export interface PostMatchPhaseStartEvent {
+  type: 'post-match-phase-start';
+}
+
+/**
+ * Event emitted when a background task starts
+ */
+export interface BackgroundTaskStartEvent {
+  type: 'background-task-start';
+  taskId: string;
+  triggeredByAttempt: number;
+}
+
+/**
+ * Event emitted when a background task completes
+ */
+export interface BackgroundTaskCompleteEvent {
+  type: 'background-task-complete';
+  taskId: string;
+  success: boolean;
+  durationMs: number;
+}
+
+/**
+ * Event emitted when a plugin updates its live status lines
+ */
+export interface PluginStatusUpdateEvent {
+  type: 'plugin-status-update';
+  pluginId: string;
+  logLines: string[];
+  stats: StatusStat[];
+}
+
+/**
+ * Union type of all pipeline events
+ */
+export type PipelineEvent =
+  | PipelineStartEvent
+  | PluginRegisteredEvent
+  | PromptStartEvent
+  | SetupPhaseStartEvent
+  | ProgrammaticPhaseStartEvent
+  | PostMatchPhaseStartEvent
+  | AttemptStartEvent
+  | PluginExecutionStartEvent
+  | PluginExecutionCompleteEvent
+  | AttemptCompleteEvent
+  | PromptCompleteEvent
+  | PipelineCompleteEvent
+  | BackgroundTaskStartEvent
+  | BackgroundTaskCompleteEvent
+  | PluginStatusUpdateEvent;
+
+/**
+ * Event handler callback type
+ */
+export type PipelineEventHandler = (event: PipelineEvent) => void;

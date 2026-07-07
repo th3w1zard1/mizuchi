@@ -1,0 +1,6 @@
+functionName: 'fcn.00669bb9'
+targetObjectPath: '/run/media/brunner56/MyBook/Workspaces/Mizuchi/target/swkotor-one-shot-source/function-reconstruction-tasks/0015_fcn_00669bb9/target.bin'
+asm: |
+  fcn.00669bb9:
+      .byte 0x35, 0xc0, 0xa6, 0x4d, 0xa4, 0x57, 0x90, 0xfc, 0x32, 0xc2, 0x10, 0x2f
+      .byte 0xc6

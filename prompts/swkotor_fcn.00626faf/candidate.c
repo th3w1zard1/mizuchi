@@ -1,0 +1,12 @@
+/*
+ * Byte-accurate one-shot reconstruction candidate.
+ * This source is authoritative for the task-local .text bytes only.
+ * It is not a semantic decompilation claim.
+ * Task: fcn.00626faf
+ * Target SHA256: 76b8e67f6872f6170b75d423840118f13ee03c5b97780223ce00469b1588b65e
+ */
+__asm__(
+  ".section .text\n"
+  ".byte 0x22,0x95,0x00,0x83,0x2d,0x58,0xe0,0xfb,0x54,0xc3,0x91,0xf7,0x2a,0xb5,0x52,0x40\n"
+  ".byte 0xf0,0xfb,0x83,0x20,0x6c,0x02,0x74,0x30\n"
+);

@@ -4,6 +4,7 @@
 # Exit 0 = 0 differences (match); 1 = non-zero diff or tool error; 2 = usage.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 quiet=0
 target="" candidate=""
 
@@ -31,51 +32,23 @@ if [[ -z "$target" || -z "$candidate" ]]; then
   exit 2
 fi
 
-if ! command -v objdiff >/dev/null 2>&1; then
-  echo "objdiff-gate: objdiff not found on PATH" >&2
-  echo "Install: https://github.com/encounter/objdiff" >&2
-  exit 1
-fi
-
-for f in "$target" "$candidate"; do
-  if [[ ! -f "$f" ]]; then
-    echo "objdiff-gate: file not found: $f" >&2
-    exit 1
-  fi
-done
-
-out="$(mktemp)"
-trap 'rm -f "$out"' EXIT
-
 set +e
-objdiff diff "$target" "$candidate" >"$out" 2>&1
-status=$?
+report="$("$ROOT/scripts/lib/verify-objdiff.sh" "$target" "$candidate" 2>&1)"
+rc=$?
 set -e
 
-if [[ $status -ne 0 ]]; then
-  [[ "$quiet" -eq 0 ]] && cat "$out"
-  echo "objdiff-gate: objdiff exited $status" >&2
+[[ "$quiet" -eq 0 ]] && printf '%s\n' "$report"
+if [[ "$rc" -ne 0 ]]; then
+  message="$(jq -r '.message // empty' <<<"$report" 2>/dev/null || true)"
+  [[ -n "$message" ]] && echo "objdiff-gate: $message" >&2
   exit 1
 fi
 
-body="$(cat "$out")"
-[[ "$quiet" -eq 0 ]] && printf '%s\n' "$body"
-
-# Heuristics: treat explicit zero-diff wording as pass; any "N difference" with N>0 as fail.
-if grep -qiE '0 diff|no diff|identical|perfect match|0 differences' <<<"$body"; then
+status="$(jq -r '.status' <<<"$report")"
+if [[ "$status" == "matched" ]]; then
   exit 0
 fi
 
-if grep -qiE '[1-9][0-9]* diff|[1-9][0-9]* difference' <<<"$body"; then
-  echo "objdiff-gate: non-zero difference count reported" >&2
-  exit 1
-fi
-
-# Empty output with exit 0 — assume match (some objdiff versions).
-if [[ -z "${body//[[:space:]]/}" ]]; then
-  exit 0
-fi
-
-# Ambiguous — require explicit zero in output for automation safety.
-echo "objdiff-gate: could not confirm 0 differences from objdiff output" >&2
+differences="$(jq -r '.differences // -1' <<<"$report" 2>/dev/null || printf -- '-1')"
+echo "objdiff-gate: non-zero differences reported: $differences" >&2
 exit 1

@@ -103,7 +103,7 @@ def inspect_magic(path: Path) -> tuple[str, str]:
         cls = {1: "x86", 2: "x86_64"}.get(data[4], "unknown")
         return ("elf", cls)
     if data[:4] in {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}:
-        return ("macho", "unknown")
+        return ("macho", macho_machine(data))
     return ("unknown", "unknown")
 
 
@@ -120,3 +120,21 @@ def pe_machine(data: bytes) -> str:
         0x01C0: "arm",
         0xAA64: "arm64",
     }.get(machine, f"machine-0x{machine:04x}")
+
+
+def macho_machine(data: bytes) -> str:
+    if len(data) < 8:
+        return "unknown"
+    magic = data[:4]
+    endian = "little" if magic in {b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe"} else "big"
+    cputype = int.from_bytes(data[4:8], endian, signed=True)
+    cpu_arch_abi64 = 0x01000000
+    cpu_type_x86 = 7
+    cpu_type_arm = 12
+    base = cputype & ~cpu_arch_abi64
+    is_64 = bool(cputype & cpu_arch_abi64)
+    if base == cpu_type_x86:
+        return "x86_64" if is_64 else "x86"
+    if base == cpu_type_arm:
+        return "arm64" if is_64 else "arm"
+    return f"cputype-0x{cputype & 0xffffffff:08x}"

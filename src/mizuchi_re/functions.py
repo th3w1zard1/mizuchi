@@ -15,8 +15,11 @@ def discover_function_candidates(inventory: dict[str, Any]) -> dict[str, Any]:
         candidates = elf_function_candidates(inventory)
     elif fmt == "pe":
         candidates = pe_function_candidates(inventory)
+    elif fmt == "macho":
+        candidates = macho_function_candidates(inventory)
     else:
         candidates = []
+    candidates = dedupe_same_address_candidates(candidates)
     candidates = sorted(candidates, key=lambda row: (int(row.get("address") or row.get("rva") or 0), row.get("name", "")))
     return {
         "schema": "mizuchi.function-candidates.v1",
@@ -39,19 +42,11 @@ def analyze_function_candidates_with_objdump(existing: dict[str, Any], binary_pa
     )
     labels = parse_objdump_labels(proc.stdout)
     candidates = list(existing.get("candidates", []))
-    by_address = {int(row.get("address") or 0): row for row in candidates if row.get("address") is not None}
+    existing_addresses = {int(row.get("address") or 0) for row in candidates if row.get("address") is not None}
     added = 0
+    alias_labels = 0
     for label in labels:
         address = int(label["address"])
-        current = by_address.get(address)
-        if current is not None:
-            sources = set((current.get("evidence") or {}).get("sources") or [current.get("source")])
-            sources.add("objdump-label")
-            current["evidence"] = {"sources": sorted(str(item) for item in sources if item)}
-            if confidence_rank("medium") > confidence_rank(str(current.get("confidence"))):
-                current["confidence"] = "medium"
-                current["source"] = "objdump-label"
-            continue
         row = {
             "name": label["name"],
             "address": address,
@@ -60,10 +55,14 @@ def analyze_function_candidates_with_objdump(existing: dict[str, Any], binary_pa
             "confidence": "medium",
             "evidence": {"sources": ["objdump-label"], "section": label.get("section")},
         }
-        by_address[address] = row
         candidates.append(row)
-        added += 1
+        if address in existing_addresses:
+            alias_labels += 1
+        else:
+            existing_addresses.add(address)
+            added += 1
 
+    candidates = dedupe_same_address_candidates(candidates)
     candidates = sorted(candidates, key=lambda row: (int(row.get("address") or row.get("rva") or 0), row.get("name", "")))
     return {
         **existing,
@@ -75,6 +74,7 @@ def analyze_function_candidates_with_objdump(existing: dict[str, Any], binary_pa
             "returnCode": proc.returncode,
             "labelsFound": len(labels),
             "candidatesAdded": added,
+            "aliasLabelsAdded": alias_labels,
             "stderr": proc.stderr[-4000:],
         },
     }
@@ -119,10 +119,136 @@ def normalize_label_name(name: str, address: int) -> str:
     return cleaned or f"sub_{address:x}"
 
 
+def dedupe_same_address_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_address: dict[int, list[dict[str, Any]]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for row in candidates:
+        if row.get("source") == "executable-range":
+            passthrough.append(row)
+            continue
+        address = optional_int(row.get("address"))
+        if address is None:
+            passthrough.append(row)
+            continue
+        by_address.setdefault(address, []).append(row)
+
+    merged: list[dict[str, Any]] = list(passthrough)
+    for address, rows in by_address.items():
+        if len(rows) == 1:
+            merged.append(rows[0])
+            continue
+        ordered = sorted(rows, key=candidate_merge_priority)
+        primary = dict(ordered[0])
+        sources = sorted(
+            {
+                str(source)
+                for row in rows
+                for source in list((row.get("evidence") or {}).get("sources") or []) + ([row.get("source")] if row.get("source") else [])
+                if source
+            }
+        )
+        aliases = deduped_aliases_for_rows(ordered)
+        best_size = max((optional_int(row.get("size")) or 0 for row in rows), default=0)
+        if best_size > 0 and (optional_int(primary.get("size")) or 0) <= 0:
+            primary["size"] = best_size
+        primary["confidence"] = max((str(row.get("confidence") or "") for row in rows), key=confidence_rank, default=primary.get("confidence"))
+        evidence = dict(primary.get("evidence") or {})
+        evidence["sources"] = sources
+        evidence["aliases"] = aliases
+        evidence["deduplicatedAddress"] = f"0x{address:x}"
+        evidence["duplicateCount"] = len(aliases)
+        evidence["duplicateCandidateCount"] = len(rows)
+        primary["evidence"] = evidence
+        primary["aliasCount"] = len(aliases)
+        primary["aliasNames"] = [str(row.get("name")) for row in ordered if row.get("name") and row.get("name") != primary.get("name")]
+        merged.append(primary)
+    return merged
+
+
+def deduped_aliases_for_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    aliases: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for row in rows:
+        entries = [
+            {
+                "name": row.get("name"),
+                "source": row.get("source"),
+                "confidence": row.get("confidence"),
+                "size": row.get("size"),
+                "entry": row.get("entry"),
+            }
+        ]
+        for alias in (row.get("evidence") or {}).get("aliases") or []:
+            if isinstance(alias, dict):
+                entries.append(
+                    {
+                        "name": alias.get("name"),
+                        "source": alias.get("source"),
+                        "confidence": alias.get("confidence"),
+                        "size": alias.get("size"),
+                        "entry": alias.get("entry"),
+                    }
+                )
+        for entry in entries:
+            key = (
+                str(entry.get("name") or ""),
+                str(entry.get("source") or ""),
+                str(entry.get("confidence") or ""),
+                str(entry.get("entry") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            aliases.append(entry)
+    return aliases
+
+
+def candidate_merge_priority(row: dict[str, Any]) -> tuple[int, int, int, str]:
+    source = str(row.get("source") or "")
+    confidence = str(row.get("confidence") or "")
+    name = str(row.get("name") or "")
+    synthetic_name = name.startswith(("entry_", "range_"))
+    return (
+        source_priority(source),
+        -confidence_rank(confidence),
+        1 if synthetic_name else 0,
+        name,
+    )
+
+
+def source_priority(source: str) -> int:
+    priorities = {
+        "pe-export": 0,
+        "macho-symbol": 0,
+        "elf-symbol": 0,
+        "objdump-label": 1,
+        "x86-prologue": 2,
+        "x86-call-target": 3,
+        "x86-post-ret-alignment": 4,
+        "entrypoint": 5,
+    }
+    return priorities.get(source, 10)
+
+
+def optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value, 0)
+        except ValueError:
+            return None
+    return None
+
+
 def elf_function_candidates(inventory: dict[str, Any]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for sym in inventory.get("symbols", []):
-        if sym.get("type") != 2 or sym.get("sectionIndex") == 0 or not sym.get("value"):
+        if sym.get("type") != 2 or sym.get("sectionIndex") == 0 or sym.get("value") is None:
             continue
         candidates.append(
             {
@@ -164,6 +290,31 @@ def pe_function_candidates(inventory: dict[str, Any]) -> list[dict[str, Any]]:
                 "confidence": "medium",
             }
         )
+    for export in inventory.get("exports", []):
+        if export.get("forwarded"):
+            continue
+        rva = export.get("rva")
+        if rva is None:
+            continue
+        rva = int(rva)
+        name = str(export.get("name") or f"export_{int(export.get('ordinal') or rva):x}")
+        candidates.append(
+            {
+                "name": normalize_label_name(name, image_base + rva),
+                "rva": rva,
+                "address": image_base + rva,
+                "size": 0,
+                "source": "pe-export",
+                "confidence": "high",
+                "ordinal": export.get("ordinal"),
+                "evidence": {
+                    "sources": ["pe-export"],
+                    "name": export.get("name"),
+                    "ordinal": export.get("ordinal"),
+                    "nameRva": export.get("nameRva"),
+                },
+            }
+        )
     candidates.extend(x86_boundary_candidates(inventory, image_base=image_base))
 
     # Without symbols or disassembly, PE executable ranges are only regions to
@@ -184,6 +335,47 @@ def pe_function_candidates(inventory: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return candidates
+
+
+def macho_function_candidates(inventory: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for sym in inventory.get("symbols", []):
+        if sym.get("type") != 2 or sym.get("sectionIndex") == 0 or sym.get("value") is None:
+            continue
+        address = int(sym["value"])
+        candidates.append(
+            {
+                "name": normalize_label_name(strip_macho_symbol_prefix(str(sym.get("name") or f"sub_{address:x}")), address),
+                "address": address,
+                "rva": address,
+                "size": int(sym.get("size") or 0),
+                "source": "macho-symbol",
+                "confidence": "high" if int(sym.get("size") or 0) > 0 else "medium",
+                "symbolTable": sym.get("table"),
+                "section": sym.get("section"),
+                "segment": sym.get("segment"),
+            }
+        )
+
+    entry = inventory.get("entryVa")
+    if entry is not None and not any(int(row["address"]) == int(entry) for row in candidates):
+        candidates.append(
+            {
+                "name": f"entry_{int(entry):x}",
+                "address": int(entry),
+                "rva": int(entry),
+                "size": 0,
+                "source": "entrypoint",
+                "confidence": "medium",
+            }
+        )
+    return candidates
+
+
+def strip_macho_symbol_prefix(name: str) -> str:
+    if name.startswith("_") and len(name) > 1:
+        return name[1:]
+    return name
 
 
 def x86_boundary_candidates(inventory: dict[str, Any], *, image_base: int) -> list[dict[str, Any]]:

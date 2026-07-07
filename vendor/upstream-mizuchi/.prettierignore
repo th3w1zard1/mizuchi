@@ -1,0 +1,15 @@
+node_modules/
+dist/
+out/
+*.d.ts
+*.min.js
+CHANGELOG.md
+package-lock.json
+yarn.lock
+vendor/
+run-*/
+run-*.html
+run-*.json
+partial-run-*.html
+partial-run-*.json
+claude-cache*.json

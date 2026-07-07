@@ -6,8 +6,11 @@ import json
 import signal
 import shutil
 import subprocess
+import sys
 import time
+from contextlib import redirect_stdout
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
 from typing import Any, Callable
 
@@ -15,11 +18,14 @@ from .context_export import ExportConfig, export_context
 from .functions import analyze_function_candidates_with_objdump, discover_function_candidates, write_function_candidates
 from .inventory import build_binary_inventory, write_inventory
 from .sourcegen import generate_source_candidates
+from .source_export import export_recovered_source
+from .source_parity_synthesize import main as source_parity_synthesize_main
+from .source_plugin_runner import SourcePluginRunConfig, run_source_plugin_pipeline
 from .state import RunState, atomic_write_json, config_fingerprint, now
 from .strategy import build_strategy
 from .snapshot import snapshot_existing_recovery
 from .targets import TargetIdentity, identify_binary
-from .tools import inspect_capabilities, resolve_steamless_cli
+from .tools import inspect_capabilities, resolve_script_asset, resolve_steamless_cli
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +57,19 @@ class RecoveryConfig:
     function_facts_jsonl: Path | None = None
     source_task_limit: int = 500
     source_task_offset: int = 0
+    source_synthesis_engine: str = "legacy"
+    source_synthesis_mode: str = "clang"
+    source_synthesis_limit: int = 25
+    source_synthesis_max_variants: int = 4
+    source_synthesis_semantic_only: bool = False
+    source_synthesis_skip_boundary_suspect: bool = False
+    source_synthesis_verify_packaged_source: bool = False
+    source_synthesis_upgrade_packaged_source: bool = False
+    source_synthesis_strategies: tuple[str, ...] = ()
+    source_synthesis_source_qualities: tuple[str, ...] = ()
+    source_synthesis_vc_root: Path | None = None
+    source_synthesis_wine: str = "wine"
+    source_synthesis_wineprefix: Path | None = None
     steamless_cli: Path | None = None
     context_format: str = "json"
     context_binary_analysis: str = "standard"
@@ -81,6 +100,7 @@ class RecoveryRunner:
             Stage("discover-functions", "derive function-boundary candidates from symbols and executable ranges", (self.run_dir / "function-candidates.json",), RecoveryRunner.stage_discover_functions),
             Stage("analyze-functions", "enrich function candidates with tool-backed boundary analysis", (self.run_dir / "function-analysis.json",), RecoveryRunner.stage_analyze_functions),
             Stage("generate-source-candidates", "generate automatic source-candidate tasks from decompiler facts", (self.run_dir / "source-generation/summary.json",), RecoveryRunner.stage_generate_source_candidates),
+            Stage("synthesize-source-tasks", "compile and objdiff generated source tasks against bounded target slices", (self.run_dir / "source-synthesis/summary.json",), RecoveryRunner.stage_synthesize_source_tasks),
             Stage("plan-strategy", "derive recovery strategy and required proof inputs", (self.run_dir / "strategy.json",), RecoveryRunner.stage_plan_strategy),
             Stage("byte-authority", "optionally emit a byte-exact source authority package", (self.run_dir / "byte-authority/result.json",), RecoveryRunner.stage_byte_authority),
             Stage("legacy-adapter", "optionally dispatch compatible legacy target-specific adapters", (self.run_dir / "legacy-adapter.json",), RecoveryRunner.stage_legacy_adapter),
@@ -171,6 +191,19 @@ class RecoveryRunner:
             "functionFactsJsonl": str(self.config.function_facts_jsonl) if self.config.function_facts_jsonl else None,
             "sourceTaskLimit": self.config.source_task_limit,
             "sourceTaskOffset": self.config.source_task_offset,
+            "sourceSynthesisEngine": self.config.source_synthesis_engine,
+            "sourceSynthesisMode": self.config.source_synthesis_mode,
+            "sourceSynthesisLimit": self.config.source_synthesis_limit,
+            "sourceSynthesisMaxVariants": self.config.source_synthesis_max_variants,
+            "sourceSynthesisSemanticOnly": self.config.source_synthesis_semantic_only,
+            "sourceSynthesisSkipBoundarySuspect": self.config.source_synthesis_skip_boundary_suspect,
+            "sourceSynthesisVerifyPackagedSource": self.config.source_synthesis_verify_packaged_source,
+            "sourceSynthesisUpgradePackagedSource": self.config.source_synthesis_upgrade_packaged_source,
+            "sourceSynthesisStrategies": list(self.config.source_synthesis_strategies),
+            "sourceSynthesisSourceQualities": list(self.config.source_synthesis_source_qualities),
+            "sourceSynthesisVcRoot": str(self.config.source_synthesis_vc_root) if self.config.source_synthesis_vc_root else None,
+            "sourceSynthesisWine": self.config.source_synthesis_wine,
+            "sourceSynthesisWineprefix": str(self.config.source_synthesis_wineprefix) if self.config.source_synthesis_wineprefix else None,
             "steamlessCli": str(self.config.steamless_cli) if self.config.steamless_cli else None,
             "contextFormat": self.config.context_format,
             "contextBinaryAnalysis": self.config.context_binary_analysis,
@@ -401,7 +434,8 @@ class RecoveryRunner:
         inventory = json.loads((self.run_dir / "binary-inventory.json").read_text(encoding="utf-8"))
         functions = json.loads((self.run_dir / "function-candidates.json").read_text(encoding="utf-8"))
         source_generation = json.loads((self.run_dir / "source-generation/summary.json").read_text(encoding="utf-8"))
-        strategy = build_strategy(target, capabilities, inventory, functions, source_generation)
+        source_synthesis = json.loads((self.run_dir / "source-synthesis/summary.json").read_text(encoding="utf-8"))
+        strategy = build_strategy(target, capabilities, inventory, functions, source_generation, source_synthesis)
         atomic_write_json(self.run_dir / "strategy.json", strategy)
         return {
             "format": target.format,
@@ -426,6 +460,150 @@ class RecoveryRunner:
         atomic_write_json(self.run_dir / "source-generation/summary.json", summary)
         return summary
 
+    def stage_synthesize_source_tasks(self, _stage: Stage) -> dict[str, Any]:
+        out_dir = self.run_dir / "source-synthesis"
+        summary_path = out_dir / "summary.json"
+        mode = self.config.source_synthesis_mode
+        tasks_path = self.run_dir / "source-generation" / "tasks.jsonl"
+        if mode == "none":
+            summary = {
+                "schema": "mizuchi.source-parity-synthesis-summary.v1",
+                "status": "skipped",
+                "reason": "disabled with --source-synthesis none",
+                "sourceTasks": [str(tasks_path)],
+                "claimBoundary": "source synthesis skipped; no source parity claim",
+            }
+            atomic_write_json(summary_path, summary)
+            return summary
+        if not tasks_path.exists():
+            summary = {
+                "schema": "mizuchi.source-parity-synthesis-summary.v1",
+                "status": "skipped",
+                "reason": "source-generation/tasks.jsonl missing",
+                "sourceTasks": [str(tasks_path)],
+                "claimBoundary": "source synthesis skipped; no source parity claim",
+            }
+            atomic_write_json(summary_path, summary)
+            return summary
+        if self.config.source_synthesis_engine == "plugin":
+            (out_dir / "empty-queue.jsonl").parent.mkdir(parents=True, exist_ok=True)
+            (out_dir / "empty-queue.jsonl").write_text("", encoding="utf-8")
+            summary = run_source_plugin_pipeline(
+                SourcePluginRunConfig(
+                    queue=out_dir / "empty-queue.jsonl",
+                    source_tasks=[tasks_path],
+                    source_tasks_only=True,
+                    out_dir=out_dir,
+                    limit=self.config.source_synthesis_limit,
+                    max_variants_per_function=self.config.source_synthesis_max_variants,
+                    max_retries=self.config.source_synthesis_max_variants,
+                    strategies=set(self.config.source_synthesis_strategies) or None,
+                    source_qualities=set(self.config.source_synthesis_source_qualities) or None,
+                    compiler=compiler_for_source_synthesis_mode(mode),
+                    clang="clang-cl" if mode == "clang-cl" else "clang",
+                    dry_run=mode == "dry-run",
+                    semantic_only=self.config.source_synthesis_semantic_only or mode == "msvc",
+                    skip_boundary_suspect=self.config.source_synthesis_skip_boundary_suspect or mode == "msvc",
+                    clean=True,
+                    vc_root=self.config.source_synthesis_vc_root,
+                    wine=self.config.source_synthesis_wine,
+                    wineprefix=self.config.source_synthesis_wineprefix,
+                    timeout=self.config.stage_timeout,
+                )
+            )
+            export_summary = self.export_synthesized_source_slices(summary)
+            summary["runRootRecoveredSourceExport"] = export_summary
+            atomic_write_json(summary_path, summary)
+            return summary
+        if self.config.source_synthesis_engine != "legacy":
+            raise ValueError(f"unknown source synthesis engine: {self.config.source_synthesis_engine}")
+        argv = [
+            "--queue",
+            str(self.run_dir / "source-synthesis" / "empty-queue.jsonl"),
+            "--source-tasks",
+            str(tasks_path),
+            "--source-tasks-only",
+            "--remaining-features",
+            str(self.run_dir / "source-synthesis" / "empty-remaining-features.jsonl"),
+            "--retrieval",
+            str(self.run_dir / "source-synthesis" / "empty-retrieval.jsonl"),
+            "--out-dir",
+            str(out_dir),
+            "--limit",
+            str(self.config.source_synthesis_limit),
+            "--max-variants-per-function",
+            str(self.config.source_synthesis_max_variants),
+            "--timeout",
+            str(self.config.stage_timeout),
+        ]
+        if mode == "dry-run":
+            argv.append("--dry-run")
+        elif mode == "clang":
+            argv.extend(["--compiler", "clang"])
+        elif mode == "clang-cl":
+            argv.extend(["--compiler", "clang-cl", "--clang", "clang-cl"])
+        elif mode == "msvc":
+            argv.extend(["--compiler", "msvc"])
+            argv.append("--semantic-only")
+            argv.append("--skip-boundary-suspect")
+        else:
+            raise ValueError(f"unknown source synthesis mode: {mode}")
+        if self.config.source_synthesis_semantic_only and "--semantic-only" not in argv:
+            argv.append("--semantic-only")
+        if self.config.source_synthesis_skip_boundary_suspect and "--skip-boundary-suspect" not in argv:
+            argv.append("--skip-boundary-suspect")
+        if self.config.source_synthesis_verify_packaged_source:
+            argv.append("--verify-packaged-source")
+        if self.config.source_synthesis_upgrade_packaged_source:
+            argv.append("--upgrade-packaged-source")
+        if self.config.source_synthesis_strategies:
+            argv.extend(["--strategies", ",".join(self.config.source_synthesis_strategies)])
+        for quality in self.config.source_synthesis_source_qualities:
+            argv.extend(["--source-quality", quality])
+        if self.config.source_synthesis_vc_root:
+            argv.extend(["--vc-root", str(self.config.source_synthesis_vc_root)])
+        if self.config.source_synthesis_wine:
+            argv.extend(["--wine", self.config.source_synthesis_wine])
+        if self.config.source_synthesis_wineprefix:
+            argv.extend(["--wineprefix", str(self.config.source_synthesis_wineprefix)])
+        (out_dir / "empty-queue.jsonl").parent.mkdir(parents=True, exist_ok=True)
+        for empty in ("empty-queue.jsonl", "empty-remaining-features.jsonl", "empty-retrieval.jsonl"):
+            (out_dir / empty).write_text("", encoding="utf-8")
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            rc = source_parity_synthesize_main(argv)
+        raw_stdout = stdout.getvalue()
+        (out_dir / "synthesis.stdout").write_text(raw_stdout, encoding="utf-8")
+        if rc != 0:
+            raise subprocess.CalledProcessError(rc, ["source_parity_synthesize", *argv], output=raw_stdout)
+        if summary_path.exists():
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        else:
+            summary = json.loads(raw_stdout)
+        export_summary = self.export_synthesized_source_slices(summary)
+        summary["recoveredSourceExport"] = export_summary
+        atomic_write_json(summary_path, summary)
+        return summary
+
+    def export_synthesized_source_slices(self, synthesis_summary: dict[str, Any]) -> dict[str, Any]:
+        summaries = []
+        for key in ("codeSliceMatchesPath", "sourceShapeMatchesPath", "acceptedPath"):
+            value = synthesis_summary.get(key)
+            if value:
+                summaries.append(Path(str(value)))
+        if not summaries:
+            return {
+                "schema": "mizuchi.recovered-source-export.v1",
+                "status": "skipped",
+                "reason": "source synthesis did not publish match JSONL paths",
+                "claimBoundary": "no recovered source export was produced",
+            }
+        return export_recovered_source(
+            summaries,
+            out_dir=self.run_dir / "recovered-source",
+            source_name="source_slices.c",
+        )
+
     def stage_byte_authority(self, _stage: Stage) -> dict[str, Any]:
         target = self.load_target()
         out_dir = self.run_dir / "byte-authority"
@@ -434,9 +612,12 @@ class RecoveryRunner:
             summary = {"status": "skipped", "reason": "enable with --byte-authority", "claimBoundary": "no semantic source claim"}
             atomic_write_json(result_path, summary)
             return summary
+        one_shot_script = resolve_script_asset(ROOT, "one-shot-source.py")
+        if one_shot_script is None:
+            raise FileNotFoundError("one-shot-source.py is not available in checkout scripts or installed package data")
         cmd = [
-            "python3",
-            str(ROOT / "scripts/one-shot-source.py"),
+            sys.executable,
+            str(one_shot_script),
             "--binary",
             str(target.binary_path),
             "--out",
@@ -487,6 +668,10 @@ class RecoveryRunner:
             "functionCandidates": json.loads((self.run_dir / "function-candidates.json").read_text(encoding="utf-8")),
             "functionAnalysis": json.loads((self.run_dir / "function-analysis.json").read_text(encoding="utf-8")),
             "sourceGeneration": json.loads((self.run_dir / "source-generation/summary.json").read_text(encoding="utf-8")),
+            "sourceSynthesis": json.loads((self.run_dir / "source-synthesis/summary.json").read_text(encoding="utf-8")),
+            "recoveredSource": json.loads((self.run_dir / "recovered-source/simple_matches.manifest.json").read_text(encoding="utf-8"))
+            if (self.run_dir / "recovered-source/simple_matches.manifest.json").exists()
+            else {"status": "missing", "claimBoundary": "no recovered source manifest exists"},
             "strategy": json.loads((self.run_dir / "strategy.json").read_text(encoding="utf-8")),
             "byteAuthority": json.loads((self.run_dir / "byte-authority/result.json").read_text(encoding="utf-8")),
             "legacyAdapter": json.loads((self.run_dir / "legacy-adapter.json").read_text(encoding="utf-8")),
@@ -498,6 +683,14 @@ class RecoveryRunner:
         self.state.data["report"] = str(self.run_dir / "report.json")
         self.state.save()
         return {"report": str(self.run_dir / "report.json"), "fullSourceParity": False}
+
+
+def compiler_for_source_synthesis_mode(mode: str) -> str:
+    if mode == "dry-run":
+        return "clang"
+    if mode in {"clang", "clang-cl", "msvc"}:
+        return mode
+    raise ValueError(f"unknown source synthesis mode: {mode}")
 
 
 def command_error(exc: subprocess.CalledProcessError) -> str:

@@ -4,6 +4,14 @@ Cursor workspace for **matching decompilation** on reverse-engineered game binar
 
 ## Quick start
 
+0. Install/run the package entry point directly:
+   - `uvx --from git+https://<repo_url> mizuchi-cli <folder-or-binary>`
+   - Local checkout equivalent: `uvx --from . mizuchi-cli <folder-or-binary>`
+   - Check install/package assets: `uvx --from . mizuchi-cli self-check --json`
+   - See upstream surface mapping: `uvx --from . mizuchi-cli upstream-status`
+   - This runs the generic recovery orchestrator with byte-authority packaging enabled, source-task generation enabled, and the upstream-style plugin synthesis engine selected by default.
+   - Outputs land under `target/mizuchi-cli/<target-id>/`: `report.json`, `byte-authority/`, `source-generation/`, `source-synthesis/`, and run-root `recovered-source/` when verified source slices exist.
+   - Use `--stop-after plan-strategy` for a quick planning/package-setup pass, `--source-synthesis none` to skip compiler/object gates, or `--source-synthesis msvc --source-synthesis-vc-root <vc-root>` for MSVC-gated source matching.
 1. Enable plugin **matching-decompilation-re** in Cursor → Settings → Plugins  
    Path: `~/.cursor/plugins/local/matching-decompilation-re/`
 2. Read `AGENTS.md` for commands, skills, and invariants.

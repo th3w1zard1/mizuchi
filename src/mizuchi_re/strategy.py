@@ -13,6 +13,7 @@ def build_strategy(
     inventory: dict[str, Any] | None = None,
     functions: dict[str, Any] | None = None,
     source_generation: dict[str, Any] | None = None,
+    source_synthesis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     tools = capabilities.get("tools", {})
     local = capabilities.get("localSurfaces", {})
@@ -20,6 +21,7 @@ def build_strategy(
     inventory = inventory or {}
     functions = functions or {}
     source_generation = source_generation or {}
+    source_synthesis = source_synthesis or {}
     inventory_summary = inventory.get("summary", {})
     function_summary = functions.get("summary", {})
     required_semantic_inputs = [
@@ -49,6 +51,26 @@ def build_strategy(
     high_confidence_candidates = int((function_summary.get("byConfidence") or {}).get("high") or 0)
     medium_confidence_candidates = int((function_summary.get("byConfidence") or {}).get("medium") or 0)
     generated_sources = int(source_generation.get("generatedSourceCandidates") or 0)
+    semantic_sources = int(source_generation.get("semanticSourceCandidates") or 0)
+    nonsemantic_bootstrap_sources = int(source_generation.get("nonSemanticBootstrapCandidates") or 0)
+    high_level_sources = int(source_generation.get("highLevelSourceCandidates") or 0)
+    inline_asm_sources = int(source_generation.get("inlineAsmSourceCandidates") or 0)
+    byte_emission_sources = int(source_generation.get("byteEmissionSourceCandidates") or 0)
+    synthesized_sources = int(source_synthesis.get("generatedCandidates") or 0)
+    semantic_synthesized_sources = int(source_synthesis.get("semanticGeneratedCandidates") or 0)
+    nonsemantic_synthesized_sources = int(source_synthesis.get("nonSemanticBootstrapCandidates") or 0)
+    code_slice_matches = int(source_synthesis.get("codeSliceMatchedCandidates") or 0)
+    semantic_code_slice_matches = int(source_synthesis.get("semanticCodeSliceMatchedCandidates") or 0)
+    nonsemantic_code_slice_matches = int(source_synthesis.get("nonSemanticCodeSliceMatchedCandidates") or 0)
+    semantic_mismatches = int(source_synthesis.get("semanticMismatchedCandidates") or 0)
+    source_shape_searches = int(source_synthesis.get("sourceShapeSearches") or 0)
+    source_shape_search_matches = int(source_synthesis.get("sourceShapeSearchMatches") or 0)
+    accepted_synthesis_matches = int(source_synthesis.get("acceptedCandidates") or 0)
+    target_slices = int(source_generation.get("targetSlices") or 0)
+    function_fact_artifacts = source_generation.get("functionFactArtifacts") or {}
+    compiler_profile_artifacts = source_generation.get("compilerProfileArtifacts") or {}
+    normalized_facts = int(function_fact_artifacts.get("factCount") or 0)
+    compiler_profile_status = str(compiler_profile_artifacts.get("status") or "missing")
     inventory_decisions = [
         {
             "input": "code ranges",
@@ -73,13 +95,67 @@ def build_strategy(
         {
             "input": "automatic source candidates",
             "value": generated_sources,
-            "effect": "compiler/objdiff verification can start on generated decompiler/model output" if generated_sources else "source generation is blocked until decompiler/model/programmatic candidate output exists",
+            "effect": (
+                f"{high_level_sources} high-level C candidate(s), {inline_asm_sources} inline-asm C candidate(s), {byte_emission_sources} byte-emission assembly candidate(s), {nonsemantic_bootstrap_sources} nonsemantic bootstrap candidate(s)"
+                if generated_sources
+                else "source generation is blocked until decompiler/model/programmatic candidate output exists"
+            ),
+        },
+        {
+            "input": "synthesized source candidates",
+            "value": synthesized_sources,
+            "effect": (
+                f"{semantic_synthesized_sources} semantic candidate(s), {nonsemantic_synthesized_sources} nonsemantic bootstrap candidate(s) entered compile/objdiff"
+                if synthesized_sources
+                else "generated source tasks have not produced compiler-verifiable candidates yet"
+            ),
+        },
+        {
+            "input": "code-slice objdiff matches",
+            "value": code_slice_matches,
+            "effect": (
+                f"{semantic_code_slice_matches} semantic match(es), {nonsemantic_code_slice_matches} nonsemantic bootstrap match(es)"
+                if code_slice_matches
+                else "no generated source has matched bounded target bytes yet"
+            ),
+        },
+        {
+            "input": "semantic source mismatches",
+            "value": semantic_mismatches,
+            "effect": (
+                f"semantic candidates compile but do not match current compiler/profile bytes; {source_shape_searches} source-shape search(es), {source_shape_search_matches} source-shape match(es)"
+                if semantic_mismatches
+                else "no semantic compiler/profile mismatches recorded"
+            ),
+        },
+        {
+            "input": "target slices",
+            "value": target_slices,
+            "effect": "candidate generation has exact code bytes for bounded functions" if target_slices else "matching work is still missing exact function byte slices",
+        },
+        {
+            "input": "normalized function facts",
+            "value": normalized_facts,
+            "effect": "agent context can include structured prototypes, calls, globals, stack, and control-flow evidence" if normalized_facts else "agent context is still mostly raw binary/decompiler text",
+        },
+        {
+            "input": "compiler profile artifacts",
+            "value": compiler_profile_status,
+            "effect": "compiler/flag evidence can rank source candidates" if compiler_profile_status == "available" else "compiler/flag ranking is still underconstrained",
         },
     ]
     source_status = str(source_generation.get("status") or "missing")
-    if generated_sources:
+    if accepted_synthesis_matches:
+        match_status = "target-object-objdiff-match"
+    elif semantic_code_slice_matches:
+        match_status = "semantic-code-slice-evidence"
+    elif code_slice_matches:
+        match_status = "nonsemantic-code-slice-evidence"
+    elif semantic_synthesized_sources and semantic_mismatches:
+        match_status = "semantic-source-needs-compiler-profile"
+    elif generated_sources:
         match_status = "needs-verification"
-    elif source_status in {"blocked", "queued-no-source", "missing"}:
+    elif not generated_sources and source_status in {"blocked", "queued-no-source", "missing"}:
         match_status = "needs-automatic-source-generation"
     elif high_confidence_candidates:
         match_status = "ready-for-symbol-slices"
@@ -116,9 +192,57 @@ def build_strategy(
         "sourceGenerationSummary": {
             "status": source_generation.get("status"),
             "generatedSourceCandidates": source_generation.get("generatedSourceCandidates"),
+            "semanticSourceCandidates": source_generation.get("semanticSourceCandidates"),
+            "nonSemanticBootstrapCandidates": source_generation.get("nonSemanticBootstrapCandidates"),
+            "highLevelSourceCandidates": source_generation.get("highLevelSourceCandidates"),
+            "inlineAsmSourceCandidates": source_generation.get("inlineAsmSourceCandidates"),
+            "byteEmissionSourceCandidates": source_generation.get("byteEmissionSourceCandidates"),
+            "generatedByLanguage": source_generation.get("generatedByLanguage"),
+            "semanticByLanguage": source_generation.get("semanticByLanguage"),
+            "generatedBySourceQuality": source_generation.get("generatedBySourceQuality"),
+            "generatedByRule": source_generation.get("generatedByRule"),
+            "semanticByRule": source_generation.get("semanticByRule"),
+            "sourceCoverageArtifacts": source_generation.get("sourceCoverageArtifacts"),
             "taskCount": source_generation.get("taskCount"),
+            "targetSlices": source_generation.get("targetSlices"),
+            "functionFactArtifacts": function_fact_artifacts,
+            "compilerProfileArtifacts": compiler_profile_artifacts,
             "blockers": source_generation.get("blockers", []),
         },
+        "sourceSynthesisSummary": {
+            "status": source_synthesis.get("status"),
+            "compiler": source_synthesis.get("compiler"),
+            "generatedCandidates": source_synthesis.get("generatedCandidates"),
+            "semanticGeneratedCandidates": source_synthesis.get("semanticGeneratedCandidates"),
+            "nonSemanticBootstrapCandidates": source_synthesis.get("nonSemanticBootstrapCandidates"),
+            "attemptedCandidates": source_synthesis.get("attemptedCandidates"),
+            "acceptedCandidates": source_synthesis.get("acceptedCandidates"),
+            "codeSliceMatchedCandidates": source_synthesis.get("codeSliceMatchedCandidates"),
+            "semanticCodeSliceMatchedCandidates": source_synthesis.get("semanticCodeSliceMatchedCandidates"),
+            "nonSemanticCodeSliceMatchedCandidates": source_synthesis.get("nonSemanticCodeSliceMatchedCandidates"),
+            "semanticMismatchedCandidates": source_synthesis.get("semanticMismatchedCandidates"),
+            "verifyPackagedSource": source_synthesis.get("verifyPackagedSource"),
+            "generatedBySourceQuality": source_synthesis.get("generatedBySourceQuality"),
+            "attemptedBySourceQuality": source_synthesis.get("attemptedBySourceQuality"),
+            "semanticCodeSliceMatchedBySourceQuality": source_synthesis.get("semanticCodeSliceMatchedBySourceQuality"),
+            "semanticMismatchedBySourceQuality": source_synthesis.get("semanticMismatchedBySourceQuality"),
+            "compileFailedBySourceQuality": source_synthesis.get("compileFailedBySourceQuality"),
+            "errorBySourceQuality": source_synthesis.get("errorBySourceQuality"),
+            "sourceShapeSearches": source_synthesis.get("sourceShapeSearches"),
+            "sourceShapeSearchMatches": source_synthesis.get("sourceShapeSearchMatches"),
+            "sourceTasks": source_synthesis.get("sourceTasks"),
+            "promotionTargetsPath": source_synthesis.get("promotionTargetsPath"),
+        },
+        "verificationLadder": [
+            {"tier": "candidate-queued", "acceptedSource": False},
+            {"tier": "function-facts-normalized", "acceptedSource": False},
+            {"tier": "target-slice-acquired", "acceptedSource": False},
+            {"tier": "source-generated-unverified", "acceptedSource": False},
+            {"tier": "object-compilable", "acceptedSource": False},
+            {"tier": "code-slice-match", "acceptedSource": False},
+            {"tier": "relocation-aware-slice-match", "acceptedSource": False},
+            {"tier": "target-object-objdiff-match", "acceptedSource": True},
+        ],
         "inventoryDecisions": inventory_decisions,
         "methodology": "plan-first evidence pipeline: identify target, infer compiler/toolchain, recover boundaries/types, generate candidates, verify with objdiff, then assemble/relink only after per-slice proof",
         "requiredSemanticInputs": required_semantic_inputs,

@@ -1,0 +1,1480 @@
+{
+  "blobCount": 181,
+  "claimBoundary": "This verifies the upstream source tree is vendored for reference. Submodule gitlinks record upstream commits but their contents are not expanded by git archive.",
+  "files": [
+    {
+      "mode": "100644",
+      "object": "95e643dda73d24cc6c9d3154f243f1d6b81b2536",
+      "path": ".dependency-cruiser.cjs",
+      "present": true,
+      "sha256": "22f231fe2d5e6096f799fbe24649d69410d9aa78cf62c5bc79a5471823426783",
+      "vendoredPath": "vendor/upstream-mizuchi/.dependency-cruiser.cjs"
+    },
+    {
+      "mode": "100644",
+      "object": "9aa7eea46b055936bfbb6a5227e7d11bbba0c807",
+      "path": ".github/workflows/ci.yml",
+      "present": true,
+      "sha256": "2d1ad145f61e475e7f6aff6f3bad75163175c1680160bc6be24e66d71fbbeb3e",
+      "vendoredPath": "vendor/upstream-mizuchi/.github/workflows/ci.yml"
+    },
+    {
+      "mode": "100644",
+      "object": "455b3f95425aa231b87e91489919cc93f30d7c48",
+      "path": ".gitignore",
+      "present": true,
+      "sha256": "cd6767d66acdd4767086b389bebcb8014d93dedad000f8d98d6814e97f6ecb7b",
+      "vendoredPath": "vendor/upstream-mizuchi/.gitignore"
+    },
+    {
+      "mode": "100644",
+      "object": "1cba1550fb84b5b4ef7122acf7168c6a6ac48d04",
+      "path": ".gitmodules",
+      "present": true,
+      "sha256": "d0a2d67f33e7dd2cc00d09ba6d4cd9c1473f11ac67f2542141d541a6350d8100",
+      "vendoredPath": "vendor/upstream-mizuchi/.gitmodules"
+    },
+    {
+      "mode": "100644",
+      "object": "8963cca4b3f57be859708eaf088b56840c1e0686",
+      "path": ".prettierignore",
+      "present": true,
+      "sha256": "8fc01c3cd171324295ee8d5d3be94617f540478257349c89b2624ef55b44b868",
+      "vendoredPath": "vendor/upstream-mizuchi/.prettierignore"
+    },
+    {
+      "mode": "100644",
+      "object": "c6071114d1db3415771f41dcf0d7e8d37d31585d",
+      "path": ".prettierrc.json",
+      "present": true,
+      "sha256": "32a57f803a8acbd3508c27154c08e2d663d62daf300e0e086412863f260c5861",
+      "vendoredPath": "vendor/upstream-mizuchi/.prettierrc.json"
+    },
+    {
+      "mode": "100644",
+      "object": "1b6457c5cacb4b180f03a70d7893fa88140139b9",
+      "path": ".vscode/settings.json",
+      "present": true,
+      "sha256": "5aa562689f172d1ad1863cbba54ded4e2aaeda4a9aad484b1405991738bae907",
+      "vendoredPath": "vendor/upstream-mizuchi/.vscode/settings.json"
+    },
+    {
+      "mode": "100644",
+      "object": "74dfa6f505860a0ac092b077b218490f790172b0",
+      "path": "CLAUDE.md",
+      "present": true,
+      "sha256": "098b3ee355a335aec76d99b479898d2d33d415d725a8f4df0f784eb6bb129915",
+      "vendoredPath": "vendor/upstream-mizuchi/CLAUDE.md"
+    },
+    {
+      "mode": "100644",
+      "object": "30da33046066ad9832ab02cba99f7a9cd2416a02",
+      "path": "DEVELOPMENT.md",
+      "present": true,
+      "sha256": "e7ae25e1acfbbc498b1f83b4cc61a36afec6c1cc7927181c1c1dbc3328c2d3bb",
+      "vendoredPath": "vendor/upstream-mizuchi/DEVELOPMENT.md"
+    },
+    {
+      "mode": "100644",
+      "object": "914be1b39c5332aa89f11187b74dfbddb923ca0f",
+      "path": "LICENSE",
+      "present": true,
+      "sha256": "fa75d7a9801e369514a28ac130c9a9d39625aaf31ef5500c99022ed54dc572c9",
+      "vendoredPath": "vendor/upstream-mizuchi/LICENSE"
+    },
+    {
+      "mode": "100644",
+      "object": "52ac610b22373c05414322f01c7cf973957351a7",
+      "path": "README.md",
+      "present": true,
+      "sha256": "ac0f303a33a3e5ecc19aa077a2126649aa7f8350437818c904ea8cc3726a4da1",
+      "vendoredPath": "vendor/upstream-mizuchi/README.md"
+    },
+    {
+      "mode": "100644",
+      "object": "6b64f2a0b186e723eb6e570c719f6349bf67eb71",
+      "path": "docs/integrator-plugin.md",
+      "present": true,
+      "sha256": "4010d263fdec9118712ff15ffff7201c710c31606b8ddb7c983d2376f2b934c7",
+      "vendoredPath": "vendor/upstream-mizuchi/docs/integrator-plugin.md"
+    },
+    {
+      "mode": "100644",
+      "object": "8cf65579a9ee6ee08ef63614f73ced92da8132e9",
+      "path": "eslint.config.mjs",
+      "present": true,
+      "sha256": "717c36637cba2186ea2b22c77a25c20de3f42c33de718d99f10a8e4434942022",
+      "vendoredPath": "vendor/upstream-mizuchi/eslint.config.mjs"
+    },
+    {
+      "mode": "100644",
+      "object": "7e33c90f92787d707d84a37e07e971f48d63ce74",
+      "path": "media/branding/logo.png",
+      "present": true,
+      "sha256": "ad723984ca7dc6c39d55719c6c9f6303430d8d6b8e40fec70c85309ddb9c5b1d",
+      "vendoredPath": "vendor/upstream-mizuchi/media/branding/logo.png"
+    },
+    {
+      "mode": "100644",
+      "object": "2de848068c966fa09118366229db80518f9d2b67",
+      "path": "media/docs/pipeline-flow.excalidraw",
+      "present": true,
+      "sha256": "810f5243df9fb46dbbbeb1359dfcd4551520f579609f157f180437042cbcad43",
+      "vendoredPath": "vendor/upstream-mizuchi/media/docs/pipeline-flow.excalidraw"
+    },
+    {
+      "mode": "100644",
+      "object": "08270e7a8309cc4987acdeedb4372d8fe47b8b69",
+      "path": "media/docs/pipeline-flow.png",
+      "present": true,
+      "sha256": "52ffec8752db50961f26426f270a4f75c53becb1527cba14b99599bccef7c9de",
+      "vendoredPath": "vendor/upstream-mizuchi/media/docs/pipeline-flow.png"
+    },
+    {
+      "mode": "100644",
+      "object": "ea3b888d7a68eef15d95aee9eb73c484d7946b05",
+      "path": "mizuchi.example.yaml",
+      "present": true,
+      "sha256": "d680a4127600ef877b23f073243498eeca5348586ff7763852cd5fa0900aaf1e",
+      "vendoredPath": "vendor/upstream-mizuchi/mizuchi.example.yaml"
+    },
+    {
+      "mode": "100644",
+      "object": "e361069928886ad37968bb502c4a2d7eef2fefdd",
+      "path": "package-lock.json",
+      "present": true,
+      "sha256": "d16bc06a0ad570075db05ba3c1fcbaf9ec98c792edb47e9a8f86530e6b977788",
+      "vendoredPath": "vendor/upstream-mizuchi/package-lock.json"
+    },
+    {
+      "mode": "100644",
+      "object": "10b9c42665cd865341a37b06b943f1d57f73a1f8",
+      "path": "package.json",
+      "present": true,
+      "sha256": "b6d6f6ea665279650a659bf8fbaf50c8b0b0d25a863caa81975afb92f5d97730",
+      "vendoredPath": "vendor/upstream-mizuchi/package.json"
+    },
+    {
+      "mode": "100644",
+      "object": "3d6a30884b3ee948bcdd17883748675ac2e7b5f8",
+      "path": "rollup.config.js",
+      "present": true,
+      "sha256": "2bebdacc64a66a61f47b28d72988d9bffc6e6329adae041dcbc3d1505b67c45b",
+      "vendoredPath": "vendor/upstream-mizuchi/rollup.config.js"
+    },
+    {
+      "mode": "100755",
+      "object": "c031b24294f4d62cf4fc2593de372a0af6c58372",
+      "path": "scripts/setup-decomp-permuter.sh",
+      "present": true,
+      "sha256": "ef9bf96610e27b74c7976dd9401579bb8d713baff50b7b2666731a2733fe89ea",
+      "vendoredPath": "vendor/upstream-mizuchi/scripts/setup-decomp-permuter.sh"
+    },
+    {
+      "mode": "100755",
+      "object": "f2c28f78e6460ba9846729eb5ba823ffc4915a74",
+      "path": "scripts/setup-m2c.sh",
+      "present": true,
+      "sha256": "cd4f94049a7a2172e659d5e7a1f29fd6d589f0779ab052b25dc9331b0d2d2af8",
+      "vendoredPath": "vendor/upstream-mizuchi/scripts/setup-m2c.sh"
+    },
+    {
+      "mode": "100644",
+      "object": "3ee2450571d9aa47ebfcfd3a7ee7d41a30e80533",
+      "path": "src/cli.ts",
+      "present": true,
+      "sha256": "6cdfebcc36cfef2ba8c487537842214a0b51ee4c3789b97b8f448f22ff486346",
+      "vendoredPath": "vendor/upstream-mizuchi/src/cli.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1775cb631b7aac79c1cb34333e95f1bc5c4d81ef",
+      "path": "src/cli/config.spec.ts",
+      "present": true,
+      "sha256": "9c044f02924d4f4922273d1db22b741ce971601a352e19d3ff09e8d859e6ece7",
+      "vendoredPath": "vendor/upstream-mizuchi/src/cli/config.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "ea58ff999e7f53d419626699fcd24bd7fba2aa3b",
+      "path": "src/cli/config.ts",
+      "present": true,
+      "sha256": "1c8e624cf9331669b64095829651474f70ca491c6d87b05528525340f5fcc5a5",
+      "vendoredPath": "vendor/upstream-mizuchi/src/cli/config.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "9f56095c58f994113af76af2471b15546bae958e",
+      "path": "src/commands/atlas.tsx",
+      "present": true,
+      "sha256": "4f5c4ffac084068618553c2be5e0db690c7797f81fb39bf4c9af09e7588e43a5",
+      "vendoredPath": "vendor/upstream-mizuchi/src/commands/atlas.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "0bebe7b0907a702b56b9e5c091b94596f2302c50",
+      "path": "src/commands/index-codebase.tsx",
+      "present": true,
+      "sha256": "b8e7c4d8fc09eff92078ba1ed185ade93ad948d7355e83b41e9a8b54b89de9ca",
+      "vendoredPath": "vendor/upstream-mizuchi/src/commands/index-codebase.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "98d6ce69eea2045c93e0ec12d8b0997f443d279f",
+      "path": "src/commands/run.tsx",
+      "present": true,
+      "sha256": "12f5bdcd3b86d0c7bd1b74e53cc268401a1b8d437fad160d018dd3f8c8080e27",
+      "vendoredPath": "vendor/upstream-mizuchi/src/commands/run.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "a527849b9ef95756f7dfac34f9436a18581f7e75",
+      "path": "src/decomp-atlas-server/server.ts",
+      "present": true,
+      "sha256": "49747d1ab44476a9f3c04fc6721f85aa47de34b3f2ca6401c1388e6f756f8117",
+      "vendoredPath": "vendor/upstream-mizuchi/src/decomp-atlas-server/server.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "4ce2395e121f779e9a5a6c9df7aef67074aa610a",
+      "path": "src/plugin-manager.spec.ts",
+      "present": true,
+      "sha256": "0acdd11908a57bd9fa1a2d191c37f0fae9b89416e8010b6e6fb66ee21df3be3f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugin-manager.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "f0f48a23a80b372a840557f76404ac4bf20a5156",
+      "path": "src/plugin-manager.ts",
+      "present": true,
+      "sha256": "adf6b0b326975d649f4fb8fb11b58fcbb2d488dad1b20d69ec8dadaef284bde9",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugin-manager.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "89afb879c467512bd4ca968795ca6163e672423a",
+      "path": "src/plugins/claude-runner/claude-runner-plugin.spec.ts",
+      "present": true,
+      "sha256": "da81016d438c1418b63b03c741656da41362afb2a13953d0c35b96f44df00e57",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/claude-runner/claude-runner-plugin.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "706f3f9e9790bb89d2d688e750c83ea6a2187bd8",
+      "path": "src/plugins/claude-runner/claude-runner-plugin.ts",
+      "present": true,
+      "sha256": "2cc1ef555b1eb079f745e2d84be02962a62d7a6a4263142d063f0f468e6ded09",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/claude-runner/claude-runner-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "d6abbf53d2148ff194994f6ab934054aebc5b28e",
+      "path": "src/plugins/claude-runner/errors.ts",
+      "present": true,
+      "sha256": "2c87ae15f1b59606073387fa1e4f8a8f1d07bd790a7e35c54c8f746d03c4034e",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/claude-runner/errors.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "961d62b5affd8bca99747ea99e0f001ff946219a",
+      "path": "src/plugins/compiler/compiler-plugin.spec.ts",
+      "present": true,
+      "sha256": "c88fe08bd3422543cf4f93fccf9615cacc52df0e06f4b0417fdccf92e7365d45",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/compiler/compiler-plugin.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "d7ed510622a5489dba0fb1654f7e366c2bab641f",
+      "path": "src/plugins/compiler/compiler-plugin.ts",
+      "present": true,
+      "sha256": "c96c9a4b22d7ab4383cb664d77c15359e27dc645e2e2e0491de73215587e191f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/compiler/compiler-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "10c7099135ab9a5fad1ba64a1efb8d8126172437",
+      "path": "src/plugins/decomp-permuter/decomp-permuter-plugin.spec.ts",
+      "present": true,
+      "sha256": "9a931908dde3e131f312e48c40e45e08c47c179f75d8ee3e44e902f5b8553f35",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/decomp-permuter/decomp-permuter-plugin.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1e114a3b9317998696c770d57fd653e1f8999511",
+      "path": "src/plugins/decomp-permuter/decomp-permuter-plugin.ts",
+      "present": true,
+      "sha256": "5ffdd62782e4dfd9f615aababc0b7daeb984772724f75235a0fe6c11bb82d72d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/decomp-permuter/decomp-permuter-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "482c7ede263f605de5ac7594d5f917e56b263d5e",
+      "path": "src/plugins/get-context/get-context-plugin.spec.ts",
+      "present": true,
+      "sha256": "792bdcc82d4deb5d65c824f3ddd41adf6dc187fd6028cab59f37072e2cf08605",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/get-context/get-context-plugin.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "504696e7788a3a680f66c0bab03d031d885ac2fe",
+      "path": "src/plugins/get-context/get-context-plugin.ts",
+      "present": true,
+      "sha256": "0627063564b4aa7ff68317bb46295f84cc499dabc0ee01ee28fb34acc7210397",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/get-context/get-context-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "e1577652f5be2ae953ef413fb247f29590d9ec3d",
+      "path": "src/plugins/integrator/build-fixer.spec.ts",
+      "present": true,
+      "sha256": "db8e3cf550c438670535bc48d12982badcdb2e977432d96832ab3befcb8af5e6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/integrator/build-fixer.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1f533b5be12ebddaab1b9788357354ccd403c5b5",
+      "path": "src/plugins/integrator/build-fixer.ts",
+      "present": true,
+      "sha256": "76e2a629fe5496d08af070d42fcbe243a4ea51b69dc1c30963c4a1782131218a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/integrator/build-fixer.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "f42e6f423ff9e20fab160dd87461f8654b7f290d",
+      "path": "src/plugins/integrator/integrator-helpers.spec.ts",
+      "present": true,
+      "sha256": "97c5e84c5f11adb4718d85b05f0d205b2601843121128a8402a87c17ca4edab5",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/integrator/integrator-helpers.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1118e0efe74751f330a057cb6787bf8ddf9de8c5",
+      "path": "src/plugins/integrator/integrator-helpers.ts",
+      "present": true,
+      "sha256": "96f18365a2685de44f19cec7d520502d0001d27407f6a49351ea616ea1404310",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/integrator/integrator-helpers.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "b6861c6a5d469e03a45b11cf9122bb43c2a7b51d",
+      "path": "src/plugins/integrator/integrator-plugin.spec.ts",
+      "present": true,
+      "sha256": "8588578f173eaa1341eb26b1bfefde37d18d72bacd12cbf1df28294d9ef1fab1",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/integrator/integrator-plugin.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "288549d23537cdf81d3d87480e5c9fe146856ca2",
+      "path": "src/plugins/integrator/integrator-plugin.ts",
+      "present": true,
+      "sha256": "90a69ffab0364610ad8ab9ecb6cab0595902d4df3dc230a158ce4385408a4ac9",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/integrator/integrator-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "911f79adefe7a7d89fb0aa52d447ccee0bcb0b3c",
+      "path": "src/plugins/m2c/m2c-plugin.spec.ts",
+      "present": true,
+      "sha256": "90d5714f89165c18051093f7432894f906e8be78556f19007139bd717cfe85c6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/m2c/m2c-plugin.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "c7f8a9c239623119b134a68961ba211c7418e831",
+      "path": "src/plugins/m2c/m2c-plugin.ts",
+      "present": true,
+      "sha256": "4ccac510ae800c15b6a27a8bdcedde93ded97eaa7be4e816e96ffa5af1bcc60a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/m2c/m2c-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "d5f1b297c71cc6825619a77cd1224925efdcc68f",
+      "path": "src/plugins/objdiff/objdiff-plugin.spec.ts",
+      "present": true,
+      "sha256": "60192ff4ad5a8010eb8757e0cb4d9ba2d9becb8235b9ab6ba5387c32df7dea9f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/objdiff/objdiff-plugin.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "0dd6877f1e318ef793353ecdc409120c5e787448",
+      "path": "src/plugins/objdiff/objdiff-plugin.ts",
+      "present": true,
+      "sha256": "2585db0460a26a7da5d8ed3d6d64548a47f41e63ef1a01f744198464245377a9",
+      "vendoredPath": "vendor/upstream-mizuchi/src/plugins/objdiff/objdiff-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "6e4937104d91b40612495aa073ba11a9613d4a90",
+      "path": "src/prompt-loader.spec.ts",
+      "present": true,
+      "sha256": "5c2e452ddc87267b86ef2c93b5db8ac316b0cc6b5834cf25328da9ae834e5267",
+      "vendoredPath": "vendor/upstream-mizuchi/src/prompt-loader.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "c72afc262cf95d1d906281aa75cdcbbb1b20b74e",
+      "path": "src/prompt-loader.ts",
+      "present": true,
+      "sha256": "e89168718bc652156cee80f84917a4d7e00d814bce8031e5ef3e5e70ced58380",
+      "vendoredPath": "vendor/upstream-mizuchi/src/prompt-loader.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "8bd1395bf7dc209888a219ba8c1b79dc54dd12a6",
+      "path": "src/report-generator/index.ts",
+      "present": true,
+      "sha256": "7fc94c65e1345fba5113833670827c49b2fdd98b7dadf77aee60f41080799b00",
+      "vendoredPath": "vendor/upstream-mizuchi/src/report-generator/index.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "047cdb09a9b4ca30d1d8e25d4216a6d3e268eb9f",
+      "path": "src/report-generator/report-generator.spec.ts",
+      "present": true,
+      "sha256": "d751c113e0530edf5a6f98fa1ae168fa13e3f3de137afeb6a844dd016057bc03",
+      "vendoredPath": "vendor/upstream-mizuchi/src/report-generator/report-generator.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "c557f293696b6d9866c233992390365ee6ce7d4c",
+      "path": "src/report-generator/transform.ts",
+      "present": true,
+      "sha256": "c12057540742fd4a0f376ad9dc694ef5d3a0236868efaaa6338bfd69c322bfd6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/report-generator/transform.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "83d1df4f919ef7625d2b6aca6973c753351644a3",
+      "path": "src/report-generator/types.ts",
+      "present": true,
+      "sha256": "6096fe3d59c3fc9a60383c382b1ee1c214ca6466fc8ce84d1c76c7e0957f45c5",
+      "vendoredPath": "vendor/upstream-mizuchi/src/report-generator/types.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "a6ef37ede37a16ae27a4427f0801edb2713e9f7f",
+      "path": "src/shared/background-task-coordinator.ts",
+      "present": true,
+      "sha256": "a5bf989df7ecbea83970533b53f6314848df407a4de327a5acaaf04b9d36a34b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/background-task-coordinator.ts"
+    },
+    {
+      "mode": "100755",
+      "object": "0a717c44c7365f9df65dc2b71b2c78f3b7c18624",
+      "path": "src/shared/c-compiler/__fixtures__/arm/agbcc/agbcc-linux-x86",
+      "present": true,
+      "sha256": "a2752e3e7e0a2f88fa182cacce68f77297064d0ef0e31e67d583e38caeb69d09",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/arm/agbcc/agbcc-linux-x86"
+    },
+    {
+      "mode": "100755",
+      "object": "d58e2e5a589ae964a9b222a67b46968ed064fa9d",
+      "path": "src/shared/c-compiler/__fixtures__/arm/agbcc/agbcc-mac-arm64",
+      "present": true,
+      "sha256": "6b28149c7a5d5951dbb2ad11306e99a74bc5ee14537a1450536b129496495046",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/arm/agbcc/agbcc-mac-arm64"
+    },
+    {
+      "mode": "100644",
+      "object": "1ceed9fc8122a408d217d0af72be12570b136607",
+      "path": "src/shared/c-compiler/__fixtures__/index.ts",
+      "present": true,
+      "sha256": "ee96a1c888971855a7e4258d36258ba2192e870d3d83ed5cdf77b478af04c5b9",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/index.ts"
+    },
+    {
+      "mode": "100755",
+      "object": "5354eb04ae1d180be28ef77aaaf8533e2203019d",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/ar",
+      "present": true,
+      "sha256": "f547ecfc0d047e6f4da092dc0c8ddec306fd5f776f1225111627376429553982",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/ar"
+    },
+    {
+      "mode": "100755",
+      "object": "1791f7bca1e0c15fa41c6c518650df5bf3e17c7c",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/as",
+      "present": true,
+      "sha256": "ae891fb014e2f959e278bc51ae2fd47256b36955f752bbe4a38790ea4381139d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/as"
+    },
+    {
+      "mode": "100755",
+      "object": "edab2f06c8efe38f2aa1cf5237870d6d56f35e34",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/c++filt",
+      "present": true,
+      "sha256": "f2041fc2983f4947d42797760f7964434bb04bd5e185dd97ef8bb6b20c0a6fae",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/c++filt"
+    },
+    {
+      "mode": "100755",
+      "object": "c2bd1fb3bf1e46342d7c9d7265e3f138a4ef1821",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cc1",
+      "present": true,
+      "sha256": "28cfa07804df7b40d5a13a525dc63eb2fa12f1b0133dc737950dce59611d3972",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cc1"
+    },
+    {
+      "mode": "100755",
+      "object": "a53865cc5658a0d9d13ebad5cd00028bade29c1a",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cc1plus",
+      "present": true,
+      "sha256": "f7937193aefb65227610428775d2964e482153f9535a9bf0dbf562cc63615458",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cc1plus"
+    },
+    {
+      "mode": "100755",
+      "object": "0e808528b28c11a737515ac500ab1691c2ac7d24",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cccp",
+      "present": true,
+      "sha256": "61c1756ddbc47eaaa086cce5a7e3e455cecabd220d5a709be98874f55472545e",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cccp"
+    },
+    {
+      "mode": "100755",
+      "object": "0e808528b28c11a737515ac500ab1691c2ac7d24",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cpp",
+      "present": true,
+      "sha256": "61c1756ddbc47eaaa086cce5a7e3e455cecabd220d5a709be98874f55472545e",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/cpp"
+    },
+    {
+      "mode": "100755",
+      "object": "7364d9a324a834a7fa467d0b2291b1a7c8babb34",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/g++",
+      "present": true,
+      "sha256": "e03832adfe56d7e02de85b4f3b1143cf2dee32de0e8e12dfb7795cded30e74c7",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/g++"
+    },
+    {
+      "mode": "100755",
+      "object": "b2aa86d3be7f50f68961b477ead5be7c3956a122",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/gcc",
+      "present": true,
+      "sha256": "181803fe0a8406ed21f8470d09f77fe2c91044941b8c18eb30432b82bf9f41e1",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/gcc"
+    },
+    {
+      "mode": "100755",
+      "object": "6554a393199411799c44e55c150f7edee07f9c17",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/objcopy",
+      "present": true,
+      "sha256": "0845ad8d6f3304ef5456b5397372572df3b5738decef623ba879dbf1e209e37c",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/objcopy"
+    },
+    {
+      "mode": "100755",
+      "object": "d263f7b9020910a812cb88184feed0b85684f979",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/strip",
+      "present": true,
+      "sha256": "068e8ba591bc7f9705c113797218861cf25aebe37192128d530ee92d4bb5bd08",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/linux-x86/strip"
+    },
+    {
+      "mode": "100755",
+      "object": "b37fceb2fef34f490a441c79643f4963ecbd7885",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/ar",
+      "present": true,
+      "sha256": "6e395ee8e4716ca2a416649289c5c6498927bdf84e47ed150fd8e00fda4abb35",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/ar"
+    },
+    {
+      "mode": "100755",
+      "object": "89e16b946862d61e5fc7564b23fa437d2f070a2c",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/as",
+      "present": true,
+      "sha256": "c506dac9fd341f53ff61be050c224e99dfd03bd5bfdbd1192a42b3083bb63a03",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/as"
+    },
+    {
+      "mode": "100755",
+      "object": "85b76f1ee3b7f8549970b0d4e482a3da2e7192a9",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/c++filt",
+      "present": true,
+      "sha256": "d4d8d2a7474834784202624c04bf74d0dfa7408234042fc8ab601d6f6df3530c",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/c++filt"
+    },
+    {
+      "mode": "100755",
+      "object": "f424f3093632a23342d95e5bbff1551f6aa8dbae",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cc1",
+      "present": true,
+      "sha256": "62f356812dfe86988b2fea22c477bd05cbdf5ba3dbcf805ceee79174e51f1ec8",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cc1"
+    },
+    {
+      "mode": "100755",
+      "object": "92da53caab072b8058ca9550599d67b404286346",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cc1plus",
+      "present": true,
+      "sha256": "c2a6a06e8131c99ac69d92cc247361da73e4351af9b7ff84077bdd99dc9274d3",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cc1plus"
+    },
+    {
+      "mode": "100755",
+      "object": "c22d40710c621132ebf5c69ce2f4b3fce66546fa",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cccp",
+      "present": true,
+      "sha256": "722fb8a342ae90bc0ddc2e99283be872b57efff74732f241af2c5b1faa3d138b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cccp"
+    },
+    {
+      "mode": "100755",
+      "object": "c22d40710c621132ebf5c69ce2f4b3fce66546fa",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cpp",
+      "present": true,
+      "sha256": "722fb8a342ae90bc0ddc2e99283be872b57efff74732f241af2c5b1faa3d138b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/cpp"
+    },
+    {
+      "mode": "100755",
+      "object": "20bc92574fb6f11bbcf393af0c9a320cbfaf2182",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/g++",
+      "present": true,
+      "sha256": "f302f3db76fc3b7d12cb15c0c04a77791b98208285c93fcf39dc43a793f0e102",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/g++"
+    },
+    {
+      "mode": "100755",
+      "object": "552da202b93e1aee3fd7aea36f3bef64525e7872",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/gcc",
+      "present": true,
+      "sha256": "f27e8c46a49be1e4ece8dec1eee6201fab635bbc11f6fa8239f7de14a5b9cbe8",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/gcc"
+    },
+    {
+      "mode": "100755",
+      "object": "7f84bcde3c5e677bbc7a2ccb6765aac1b4da1b72",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/objcopy",
+      "present": true,
+      "sha256": "c2860476b857f3e93130a8281cf577636d601ff3e24990d50be526f962f3dec0",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/objcopy"
+    },
+    {
+      "mode": "100755",
+      "object": "a87b76544fffb1042472b5ed93785aa4fbf626e6",
+      "path": "src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/strip",
+      "present": true,
+      "sha256": "1f1ac82921a6560bd0efe6074a9e5a02f4ca95341c0f1cc27ab48df122fff76d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/__fixtures__/mips/gcc_kmc/mac-x86/strip"
+    },
+    {
+      "mode": "100644",
+      "object": "b879b1e576bdcf3e5702a930a3e8258ac2de555a",
+      "path": "src/shared/c-compiler/c-compiler.spec.ts",
+      "present": true,
+      "sha256": "73fa7c9ad3ed74bd1dc4aa9b39bfd611c30ba9f01dfa5a04f539d2aa7e113310",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/c-compiler.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "f586a6a01d1e8c69bb1d2327d70210fbcdd2321e",
+      "path": "src/shared/c-compiler/c-compiler.ts",
+      "present": true,
+      "sha256": "5e5e31659050b108711fe68e425f07c57b84ac792e48a40bcf9a939cf5367080",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/c-compiler/c-compiler.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "b2575e8a549980f006d348366ae2182254744660",
+      "path": "src/shared/capped-output.spec.ts",
+      "present": true,
+      "sha256": "ac0545469c9300f6d278a8d7a10a0c0115d6022ff09228fc431e6ddb9e5fb51f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/capped-output.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "08f399425e4f5907543b2956ec4f89eb5c4405e2",
+      "path": "src/shared/capped-output.ts",
+      "present": true,
+      "sha256": "0ba5b5c85a06f5ee05fd0fe2173fbb1d4be185b07e3602dfa96e7132e2a45118",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/capped-output.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "bb486f642d818d6ed0de55b214509c5334204f9f",
+      "path": "src/shared/cli-prompt.ts",
+      "present": true,
+      "sha256": "11ce22192d99e686f4fe30f2ec365f40687bc39f061aaf1ecce65fd007aca6c4",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/cli-prompt.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "2d3710cc181f19b26fdb45d7cca5203d88f0e433",
+      "path": "src/shared/config.ts",
+      "present": true,
+      "sha256": "85ec59fa0bbe96070fe0f3398c4a8cfc90f6d33999779b400bc955df331eda97",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/config.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "2c3b5fd94dc6f3cdce67cefa390dd78aba505488",
+      "path": "src/shared/decomp-permuter.spec.ts",
+      "present": true,
+      "sha256": "10153b5f90e4f3362c1253a2ed5432bd57841ba7b5a5ad409d223f9d40b1bcac",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/decomp-permuter.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1eaa4a997205c4502097c002aa4c642a86c34402",
+      "path": "src/shared/decomp-permuter.ts",
+      "present": true,
+      "sha256": "ff60338205312c1b04ce3ee31d018cf9365b6503a458d36993f95730c8460d88",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/decomp-permuter.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "b9238a1d0ea96ed4c3f309b927d848284930444b",
+      "path": "src/shared/errors.ts",
+      "present": true,
+      "sha256": "c4b49210a8694bcd49a77e909a22f6d8aa3774749020cc9586715b28963f8612",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/errors.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "53199036c198f5947b93e8c0a6be9da115d31bf0",
+      "path": "src/shared/indexer/asm-utils.spec.ts",
+      "present": true,
+      "sha256": "ac12567c2624a2e7c93a1fe91fed52bbac84b9e2a59edb52fd99e62339a397ab",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/asm-utils.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "cd692dd37093febb45a4db3c8b47eea1371fb1bc",
+      "path": "src/shared/indexer/asm-utils.ts",
+      "present": true,
+      "sha256": "c1adc69e4b5bb7a49c5bab719c22ea0415fb68b9ac16096b09e2b4efcf2c78a8",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/asm-utils.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "ea3d6edfa83fa5526e5214daa5ba52cc2d905fab",
+      "path": "src/shared/indexer/embed-server.py",
+      "present": true,
+      "sha256": "c2b7f566a7abfc0be44fe5ea9c629ebbc1464cb40d915d2761ea05b04801f7a2",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/embed-server.py"
+    },
+    {
+      "mode": "100644",
+      "object": "4dded2f491fc764d963b235f1c3a815000e83a50",
+      "path": "src/shared/indexer/embedder.spec.ts",
+      "present": true,
+      "sha256": "b8711c5d24e14cbfdaae8342318815f8b35f37b15447288f53e3d2546965a6b6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/embedder.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "8fe0b242defd8611449a6814831a5b4c3476506d",
+      "path": "src/shared/indexer/embedder.ts",
+      "present": true,
+      "sha256": "7d20f08f60eb4d794a7d4352729fd31eb2f5a4af6de8884abc722e2b0f8b2ce6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/embedder.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "91eca30781e8cc3e1b9b9c035ffd2eab4cdd1a7a",
+      "path": "src/shared/indexer/index.ts",
+      "present": true,
+      "sha256": "af5c1dacada5cc1434e074bb14d0b08cc71f962a1518ddd5797a9c64dafefff7",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/index.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "0ecdd229791795644e639eba5d85b3e3802d014b",
+      "path": "src/shared/indexer/indexer.spec.ts",
+      "present": true,
+      "sha256": "183301313f3c635f42049b62e30117012e89ac3a48dfb4ab931a932c8fd7e953",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/indexer.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "f7a6991d926c1674cbec8c724911fdf30b36b265",
+      "path": "src/shared/indexer/indexer.ts",
+      "present": true,
+      "sha256": "0c46f52c6bafd963a21b80dbf75accb3034069f622e43eff777521ac8c71dc3d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/indexer/indexer.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "2c366477b55dd8a24b825977b4bd9ed3791b02b5",
+      "path": "src/shared/m2c.spec.ts",
+      "present": true,
+      "sha256": "31830610b8a0928445888aa3abe90a92d7d66f113b6996959f191941489ea292",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/m2c.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "f098542512095a7e2a0b923d5a5d814ed2f3a620",
+      "path": "src/shared/m2c.ts",
+      "present": true,
+      "sha256": "5189c8e4763d37a2e3aa7ad8a9aa4e3ba61bd2c7ba6c6cd08ec82ea8070b9074",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/m2c.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "c619d846ff6027f9bf1f8e4b59fb9982c37498ce",
+      "path": "src/shared/map-file/map-file.spec.ts",
+      "present": true,
+      "sha256": "800c60baeb89af7414f0189494f224144ccd3b5cba5d0570b0236ba5b3494d4c",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/map-file/map-file.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1a9568dc2f31e331e7dd7177684006bb05f4aabc",
+      "path": "src/shared/map-file/map-file.ts",
+      "present": true,
+      "sha256": "c3fdd8c2386f45e857a112c8f7a0e025f6d863fabddb46b2401236f43e8795f3",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/map-file/map-file.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "5a1317e980d243a085deded905fca0c3774bccc2",
+      "path": "src/shared/mizuchi-db/asm-metrics.spec.ts",
+      "present": true,
+      "sha256": "e53b12d61696a3e929c3b47b6a9beac50887b72b25338373411b296877ec4626",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/mizuchi-db/asm-metrics.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "b825bfb71000a81882d8b2411514883e80e3dd7f",
+      "path": "src/shared/mizuchi-db/asm-metrics.ts",
+      "present": true,
+      "sha256": "a6594b095bb614f032c00d514ec1a7f796a9d6d7b03f068dd6dba5433a60867a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/mizuchi-db/asm-metrics.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "100358e1c8b6ae33919b67b3afeaceba207b3566",
+      "path": "src/shared/mizuchi-db/logistic-regression.spec.ts",
+      "present": true,
+      "sha256": "ee19a3609514475c4824986d071f355ce5548ac3d3b490e7c7b261607f7c0a08",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/mizuchi-db/logistic-regression.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "d9d6b12b7c5454bb515ad1e965b548e784214093",
+      "path": "src/shared/mizuchi-db/logistic-regression.ts",
+      "present": true,
+      "sha256": "768e75fd6324a07d066fa7c651b2bfe86ca5d96bac49c8354339d9b9a757b47a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/mizuchi-db/logistic-regression.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "d0bc8fe6306a4f5e8de32cda121e9086b111b7f5",
+      "path": "src/shared/mizuchi-db/mizuchi-db.spec.ts",
+      "present": true,
+      "sha256": "7ba18abbf2be9bdb4ff8426f0634225e9f7c8912a4d34795deaeb90e7c26ff55",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/mizuchi-db/mizuchi-db.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "f4ed2b96338548c6b9a7ef5e2651e9601bc44cf1",
+      "path": "src/shared/mizuchi-db/mizuchi-db.ts",
+      "present": true,
+      "sha256": "28ec37f8f4376bf652faedaebe7edc23840b2a2deea9fd7bce1f42d819fb3a63",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/mizuchi-db/mizuchi-db.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "5fefc57f95ab39a21dbc2115b08170567273f8d1",
+      "path": "src/shared/mock-plugin.ts",
+      "present": true,
+      "sha256": "fc50919d7f672515f3bd97a2418c966d052cba5bcd006196fb0946596e24ab29",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/mock-plugin.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "9f37e1f7d977284828ba0c6aa6fb2299e839962a",
+      "path": "src/shared/objdiff.ts",
+      "present": true,
+      "sha256": "449cda61e10bdf7f01157d89f833b3ae971da9a893a5d8f1ffcf36a56e4da60f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/objdiff.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1bfe0abb6b228cbf354066a18fcf84bd000d8a30",
+      "path": "src/shared/pipeline-events.ts",
+      "present": true,
+      "sha256": "d55d40cc579490370adaa2686afb488e71db25ccda2f3fb6260285a25e24b129",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/pipeline-events.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "cafdef81c1dd9f8cdfeab05024907e997883fc58",
+      "path": "src/shared/prompt-builder/ast-grep-utils.ts",
+      "present": true,
+      "sha256": "6585df17c06040ac936d9db9745b5691ea25ad2dcd48a32f3b9787ae12260269",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/prompt-builder/ast-grep-utils.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "a9650109db17c69f018b23b74cb00297174992f9",
+      "path": "src/shared/prompt-builder/codebase-context.ts",
+      "present": true,
+      "sha256": "9261dead841b319b39e2a4be3b7ccde1c26a439f5be8f6ee7af4aa6fffa7272f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/prompt-builder/codebase-context.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "113596fb3ab60654ec61dd0076b74e4f1c4bcb71",
+      "path": "src/shared/prompt-builder/craft-prompt.spec.ts",
+      "present": true,
+      "sha256": "f9e7b9eade10f9c3c34abb0e06bc1856c0eb2f4ad43e3dd99324ef2a56222ff3",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/prompt-builder/craft-prompt.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "077ba1dccdb81a17bcbb0836e005405099ed46cb",
+      "path": "src/shared/prompt-builder/craft-prompt.ts",
+      "present": true,
+      "sha256": "bd9e462cffc47a669e154c83146fe8313af0e962fb0f243209767206f689767d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/prompt-builder/craft-prompt.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "5698506ef382c9888e4da57b86e65fe53e68509c",
+      "path": "src/shared/prompt-builder/prompt-builder.spec.ts",
+      "present": true,
+      "sha256": "31913265af09e2788dda7d345e07e9187b1f098070a03c5d54830c4165765b09",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/prompt-builder/prompt-builder.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "3044f7bf47fb0ad5eeb6f15d2be28799f513cdf2",
+      "path": "src/shared/prompt-builder/prompt-builder.ts",
+      "present": true,
+      "sha256": "c5e7778bceaf2af6267e20e8d8b03a6bd0109e52f074702fd9760eef291c1701",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/prompt-builder/prompt-builder.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "0271e786160c8a274eeeae4f4eea5633670228d7",
+      "path": "src/shared/prompt-builder/prompt-settings.ts",
+      "present": true,
+      "sha256": "d68fd1dffc0b91742a76d6db902b5170549069d0d5885712093b99dafcbc3d9f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/prompt-builder/prompt-settings.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "3a0ff4dfd598c582a404f6c17dc3f9d1aebfa6a8",
+      "path": "src/shared/sdk-error-handlers.spec.ts",
+      "present": true,
+      "sha256": "8d0d0aeb3f1a7325056eb5bfc171b910b352398610ea9dfd4e62a27244b155c9",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/sdk-error-handlers.spec.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "49823e88a98b197d1710c5cff8533de3bce2a6a7",
+      "path": "src/shared/sdk-error-handlers.ts",
+      "present": true,
+      "sha256": "ad2224f27e3f24e8f67ee1e0f546f2f6af70b2ae85b026472b4d62f98c834648",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/sdk-error-handlers.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "0add7cc0ee2ca1c36b58b3c70fc76a4639827926",
+      "path": "src/shared/sdk-types.ts",
+      "present": true,
+      "sha256": "c1cd9aeec3ba7db780e1555f65a5aa4d0364244b056002fbf360c6b27f4fa7af",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/sdk-types.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "345f6c23ca26c2a1f3e5130e8875a11a9f4b46e7",
+      "path": "src/shared/test-utils.ts",
+      "present": true,
+      "sha256": "c7c5452f2f2318745e02c48eb145568cb5f55b81b5a407fa9a1c4e7c39b5152a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/test-utils.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "5b4a403f75b5ac40ea6b869924ccf74205223842",
+      "path": "src/shared/types.ts",
+      "present": true,
+      "sha256": "bae67a8042a7c67bd8cb3b058371d0602b0185677bf874743d6a408ad9d71fe0",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/types.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "93c918a001e93f036b60582d6d4973c5fb85fb56",
+      "path": "src/shared/utils.tsx",
+      "present": true,
+      "sha256": "e1d14d06ed99d2f6110c6b62a14fe158598f94574f485c3ea1a813454c36c538",
+      "vendoredPath": "vendor/upstream-mizuchi/src/shared/utils.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "279b46dff3190e902dfc0c071728d7b8eed3091c",
+      "path": "src/ui/decomp-atlas/App.tsx",
+      "present": true,
+      "sha256": "87f90b3a4bf024f72d9ddbd7ac90e3331d6c25f00a90976d42c9ff476bc23a00",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/App.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "b293f1a427d41d836a8a5623ad3adf718411c7db",
+      "path": "src/ui/decomp-atlas/MizuchiDbContext.tsx",
+      "present": true,
+      "sha256": "9d5c5cd178cddbf9ea3faefad881886f2e9e4c98d40b01fdbcf23ecb541e9873",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/MizuchiDbContext.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "0aa0dde0eacfe804947b33392d9bace6662e1e46",
+      "path": "src/ui/decomp-atlas/api-client.ts",
+      "present": true,
+      "sha256": "65a643b58bbfa882dd603ad43562cf9d141b4b4dfcaafdd9cda8bd65786673e2",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/api-client.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "7c7f279a5dafb937b390dfbbbfcba478a0a6531c",
+      "path": "src/ui/decomp-atlas/components/FunctionDetails.tsx",
+      "present": true,
+      "sha256": "152f4661ceacca66e99bd6a1ff8854966d3d72527b984d1da600e7efb3b1367c",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/components/FunctionDetails.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "7f98c333626d371caae9b1062f79d5594056ada8",
+      "path": "src/ui/decomp-atlas/components/FunctionScoring.tsx",
+      "present": true,
+      "sha256": "91a55434408feb851c7f3cfa95596c5b66d75d1eb1fe4297d9d7d9dfed082b2a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/components/FunctionScoring.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "e781454eaacac245ea8693b18e61ead224e526ff",
+      "path": "src/ui/decomp-atlas/components/Main.tsx",
+      "present": true,
+      "sha256": "771ed7bbfab7bc8dd160901e4325df125d0fa679bd157b18588cc87693c2abc5",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/components/Main.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "5dff1258435de4c7cd49fe902b1e9cf42dc6b112",
+      "path": "src/ui/decomp-atlas/components/PromptBuilder.tsx",
+      "present": true,
+      "sha256": "836f5a3838bf1cb422e1c1cc605d08bb7d283cf43a231eae91fff2e6edc5c859",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/components/PromptBuilder.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "57f0545a18577108efd81bbbcc13b978733dbfab",
+      "path": "src/ui/decomp-atlas/components/ScatterChart.tsx",
+      "present": true,
+      "sha256": "dcc00eaa1973b5f5e711799c826e82a377664c7ce0f40e68b69caa66ece3155a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/components/ScatterChart.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "7959f95158748e00faddcf28f2eb36994f2d152e",
+      "path": "src/ui/decomp-atlas/components/Sidebar.tsx",
+      "present": true,
+      "sha256": "60b7150ced1410a2a84622c99f1c2917f503cbb2306e3c84217d646ef25d7c25",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/components/Sidebar.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "fe8e9cc10339acd946ba0df4c45ea5057be46155",
+      "path": "src/ui/decomp-atlas/dev-server.ts",
+      "present": true,
+      "sha256": "e1464038461a2f84ce7d43cd67d380c67d8a36985880dd8d78fd038d51f0ee4b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/dev-server.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "4a774b5b582148c53e700a0f9a29638738081d8d",
+      "path": "src/ui/decomp-atlas/global.d.ts",
+      "present": true,
+      "sha256": "2078cf55d6af3ab7876c0dad320f04abf27b5778827850ec7d1fc52cbb5829d2",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/global.d.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "0b92cfe12788fadd8f0d41f073cc6e16ad0bdf5a",
+      "path": "src/ui/decomp-atlas/index.html",
+      "present": true,
+      "sha256": "6bda77d6e1c8da33683921fd12a0efbe2baa238200cc1683d89a6de79cdc35aa",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/index.html"
+    },
+    {
+      "mode": "100644",
+      "object": "1d9871024019643f14d9e51715c85a3b9004559e",
+      "path": "src/ui/decomp-atlas/main.tsx",
+      "present": true,
+      "sha256": "aaebfe6d047598c8c71db9902b0847c15e95c9fca80f4570a66d99ec7804134c",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/main.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "b91c4748d856037d1f01d2e50208437cdf1fa255",
+      "path": "src/ui/decomp-atlas/postcss.config.js",
+      "present": true,
+      "sha256": "75d1965dc3efb17919600bfc2e57e625d914d4a931d6d562d89d610a713eef4d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/postcss.config.js"
+    },
+    {
+      "mode": "100644",
+      "object": "801b82a65d04467465f8d841d1c08f0c1d117635",
+      "path": "src/ui/decomp-atlas/tsconfig.json",
+      "present": true,
+      "sha256": "6eb90e45b687a5bfbb4f262ba0bd1632ad360cd8dacbdbf4ca898f364528498b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/tsconfig.json"
+    },
+    {
+      "mode": "100644",
+      "object": "499657540d7027a0743818df28883ef97661e605",
+      "path": "src/ui/decomp-atlas/umap.worker.ts",
+      "present": true,
+      "sha256": "b11b97a69bd7d59a5cad4ebe519a7cc566f5953a9824d61cc19b275febe20d04",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/umap.worker.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "5f0852ba108fb257fb2e2f49b677e581083bf987",
+      "path": "src/ui/decomp-atlas/vite.config.ts",
+      "present": true,
+      "sha256": "fab8b21acb3707e0ccb2720d389ecb144a3eeea0d8f9c05d4e6e490f433a203f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/decomp-atlas/vite.config.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "f58c36877d8604d7393005a7b56dfe4ca9851fe2",
+      "path": "src/ui/run-report/App.tsx",
+      "present": true,
+      "sha256": "0dcbbeda1324a52d5aa3d139078be5a0d63bd0a8d427f073ed5462bf9cbd19ff",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/App.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "91e3e1261a892275ee06156fd25f60f7baccb95e",
+      "path": "src/ui/run-report/components/AnsiCodeBlock.tsx",
+      "present": true,
+      "sha256": "637121ef1b0cf5287c72b6038153d45d166d4384ccc6a597ef418d626727c3f0",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/AnsiCodeBlock.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "e4b1cbe63b8f631da26313c14bce86a82e7ac495",
+      "path": "src/ui/run-report/components/AttemptContent.tsx",
+      "present": true,
+      "sha256": "2210cd716f19b4dbfcc9740c8addc942594215a243e2ab4a7491c8e6fd0c42f6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/AttemptContent.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "861913a88ce3257746eeec09492a2f1aea5eda3b",
+      "path": "src/ui/run-report/components/AttemptsChart.tsx",
+      "present": true,
+      "sha256": "43375d8abe877ed1140ac2588330fae7cf023240563ee8ad091f0abec52841cb",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/AttemptsChart.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "72422a934474eea9613d163663fe75b515b494cd",
+      "path": "src/ui/run-report/components/BestResultCode.tsx",
+      "present": true,
+      "sha256": "039875b0f70e098eb1e1ab6bf67fcb2920d2c385add86fece0d5b15997bd3633",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/BestResultCode.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "6780112c7e05b7c3b71d01c629ea8380b61d02fb",
+      "path": "src/ui/run-report/components/ChatSection.tsx",
+      "present": true,
+      "sha256": "955d0ceedd910a7eb00251d6c6b05ce302e899358d1240e0324dac79daedaf20",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/ChatSection.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "115a19bf121ac5f18c01b55cb18c4b22304766a6",
+      "path": "src/ui/run-report/components/CodeBlock.tsx",
+      "present": true,
+      "sha256": "a17f77b409e3ec3b0a2451304587aa62135a83082d7d526485d3d5955720dcf6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/CodeBlock.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "c9aeed2a7b80d349679cf1148d3d87bd04d7fd9d",
+      "path": "src/ui/run-report/components/Filters.tsx",
+      "present": true,
+      "sha256": "d6b0fdd65afdacdf7d8aacc388e807287a8e08b3ddf329b5d2ed8f0de308f4e0",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/Filters.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "7a9f335374bb82e58b3aa0ac639588fa7d7b7f48",
+      "path": "src/ui/run-report/components/PluginDetails.tsx",
+      "present": true,
+      "sha256": "d6e80a4feea1b67b456f2a4626ef9676ea124b7d1f8d8e8338e5a0724ae470e7",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/PluginDetails.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "d19bda4f04da9ca479c0c66c9556b3eb8244dbfa",
+      "path": "src/ui/run-report/components/PluginFlow.tsx",
+      "present": true,
+      "sha256": "56c0d8f21031b9c73fbc4c11e753165ed5f7315a1dc59c3fd194bcc4995e2eec",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/PluginFlow.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "348b071535f3ef1bfc8fe11d7ac034478a1e7859",
+      "path": "src/ui/run-report/components/PromptResult.tsx",
+      "present": true,
+      "sha256": "2bfb7a033def6fccd0af39b241d516c5b365185971cb38433e0123a14a287c6a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/PromptResult.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "c575d61df022030a550c2dae844f4c3a4223692a",
+      "path": "src/ui/run-report/components/SideMenu.tsx",
+      "present": true,
+      "sha256": "577fbc03ef5894335beab2bad45c3d5ae095cd9f01df0513014af55594b7d11b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/SideMenu.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "dc21143752d0fbeea363e0cfec0f67c064b90005",
+      "path": "src/ui/run-report/components/Summary.tsx",
+      "present": true,
+      "sha256": "853d667e45976951c86d0f92aa7c2c3b783c1063ae58a16a839db850656e9ec1",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/Summary.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "221c9d6ac8d00540e8a3e31efb745427d6cae7bc",
+      "path": "src/ui/run-report/components/TimelineChart.tsx",
+      "present": true,
+      "sha256": "2c72ea5bc8fdbf695e0b2ed9470b2f70c1b261b874618228c99ce73864e6043b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/components/TimelineChart.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "c4a8b7e7309b359256db1622b78307f97895e14d",
+      "path": "src/ui/run-report/dev-server.ts",
+      "present": true,
+      "sha256": "ab15576b522e3dc36d30e4c026999801c194e72f1b5689648b19c502d7829105",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/dev-server.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "79185160b0c8cdbdbe650089971fdd107e1aac60",
+      "path": "src/ui/run-report/global.d.ts",
+      "present": true,
+      "sha256": "1e2f9e666635377e03e7be30ca6c3602d599b3a6bb35b4d7870aa6d2add25dfb",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/global.d.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "1f46138957b91cea52642c69ac1df979b303d73a",
+      "path": "src/ui/run-report/index.html",
+      "present": true,
+      "sha256": "79b459e2882e84f49f1893beef1df8b94d457629d78a4880c8976ccba6667263",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/index.html"
+    },
+    {
+      "mode": "100644",
+      "object": "ff7568835560824c16ca81a87422738faff8a530",
+      "path": "src/ui/run-report/main.tsx",
+      "present": true,
+      "sha256": "a81b37c7a90ec15540176d76bb8a2b5773bd6a565b27e33a79e75d0ba36e9854",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/main.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "b91c4748d856037d1f01d2e50208437cdf1fa255",
+      "path": "src/ui/run-report/postcss.config.js",
+      "present": true,
+      "sha256": "75d1965dc3efb17919600bfc2e57e625d914d4a931d6d562d89d610a713eef4d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/postcss.config.js"
+    },
+    {
+      "mode": "100644",
+      "object": "8edb9febd083ebb47d446021146c8bfacb88a355",
+      "path": "src/ui/run-report/styles.css",
+      "present": true,
+      "sha256": "b85d107cd737433d922900f2ec2a8ead38c7075d88d2eceb905d641c5834cb14",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/styles.css"
+    },
+    {
+      "mode": "100644",
+      "object": "801b82a65d04467465f8d841d1c08f0c1d117635",
+      "path": "src/ui/run-report/tsconfig.json",
+      "present": true,
+      "sha256": "6eb90e45b687a5bfbb4f262ba0bd1632ad360cd8dacbdbf4ca898f364528498b",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/tsconfig.json"
+    },
+    {
+      "mode": "100644",
+      "object": "8597c92476ec11778210a9ced0e1d116d7314ee0",
+      "path": "src/ui/run-report/utils/ansi-to-html.ts",
+      "present": true,
+      "sha256": "78800b0676b62a8e4200a4396aa93c8ee1da1c4ae7c213be708d12ef66150d9f",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/utils/ansi-to-html.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "074a41f8b48185bd81d5eb55aa07ee93c268c299",
+      "path": "src/ui/run-report/vite.config.ts",
+      "present": true,
+      "sha256": "75dd2695f204eb37cccd19b64d7fca540553d063c4f4e32bf0954a4f42ff6817",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/run-report/vite.config.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "3e4c415cd7aa81d1caa0e5d539944d6333532048",
+      "path": "src/ui/shared/assets/logo.d.png.ts",
+      "present": true,
+      "sha256": "510253c2503f1f4599f99e184d5cf6c28b8dcd976410428ad95fb9e7f3f77f86",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/assets/logo.d.png.ts"
+    },
+    {
+      "mode": "100644",
+      "object": "7e33c90f92787d707d84a37e07e971f48d63ce74",
+      "path": "src/ui/shared/assets/logo.png",
+      "present": true,
+      "sha256": "ad723984ca7dc6c39d55719c6c9f6303430d8d6b8e40fec70c85309ddb9c5b1d",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/assets/logo.png"
+    },
+    {
+      "mode": "100644",
+      "object": "c31c44a5f65a3afa4ab189366d24cbd18c5b578a",
+      "path": "src/ui/shared/components/CodeBlock.tsx",
+      "present": true,
+      "sha256": "252aea4f663325cd3c85170791ada42e7e8250724ff820b99f9196cede0ef2fc",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/CodeBlock.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "a8bd9bd58e50daaa4a095488ebbf890e15a4c13d",
+      "path": "src/ui/shared/components/CollapsiblePanel.tsx",
+      "present": true,
+      "sha256": "fd440185c00d0a19d3b5e13c4b98cc015f6e07a10a00b05822b3c979269b4c30",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/CollapsiblePanel.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "70445697b397b9a7d03dbb31de08df8170ded52a",
+      "path": "src/ui/shared/components/CopyButton.tsx",
+      "present": true,
+      "sha256": "c7795f94db98ec7bcf84c55bf833764edf224d2f0f11c28db75874d74498ea46",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/CopyButton.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "d54f58c91777f47d49adcea0b864ac42eb52d8e3",
+      "path": "src/ui/shared/components/FileLoader.tsx",
+      "present": true,
+      "sha256": "6d5e8f52f7a92a916f8aa6eb3bf31a583321cb3fe96968ea07a833a7a47963dd",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/FileLoader.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "e27e5359e51439c47f1c7a699f469b28bc450096",
+      "path": "src/ui/shared/components/Header.tsx",
+      "present": true,
+      "sha256": "c2c8ec121068a6cac29972005adc72dcd956faae6d80b70196030a07deb2473a",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/Header.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "2f16db49900a50794f01960f3aea5b771d79f5b7",
+      "path": "src/ui/shared/components/Icon.tsx",
+      "present": true,
+      "sha256": "61148ef41b97fd3965bcf4c38989a3ce838040dc877b223fd3b582f08dcaf11c",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/Icon.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "e9c4d2af9c38ddbdfdb9be6837811d890f07a73f",
+      "path": "src/ui/shared/components/Table.tsx",
+      "present": true,
+      "sha256": "07b79432e5891ebdf38e00eba28c5790ad300aab8d0a3f48d5ccd2003394acec",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/Table.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "579bc46df714dfe799fd5ae7d44d5c50e033c50f",
+      "path": "src/ui/shared/components/Tabs.tsx",
+      "present": true,
+      "sha256": "5d6a0ee70c1d24e98499261124d223fb87a61e062b07ebc23babc12387484d13",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/Tabs.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "02a808f26b4685c2d724a0b1f4c9de0f9428bf03",
+      "path": "src/ui/shared/components/WithTooltip.tsx",
+      "present": true,
+      "sha256": "2d60220baabb9babfcc8f4ff714cc9cbf0ee6bd664e0876dabefb790ec0c1bd6",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/components/WithTooltip.tsx"
+    },
+    {
+      "mode": "100644",
+      "object": "6e9c1fb9e8f1016cdc331b4c6cae0a442e340e54",
+      "path": "src/ui/shared/postcss.config.js",
+      "present": true,
+      "sha256": "269f6bcfba7639225aac389e9766b5563c6c3c6de976db3772db92389c775fbb",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/postcss.config.js"
+    },
+    {
+      "mode": "100644",
+      "object": "2d798ec25ab4e63509bde4d673501a39107bdff3",
+      "path": "src/ui/shared/styles.css",
+      "present": true,
+      "sha256": "811353d7f85794b0c784ec6b941d8136781b43e672e5e9d89ad75150780cc350",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/styles.css"
+    },
+    {
+      "mode": "100644",
+      "object": "4817f13662a12b934d213deda305eefae6601086",
+      "path": "src/ui/shared/tailwind.config.js",
+      "present": true,
+      "sha256": "b25f52577520681526622430c718c83d1908e5b1411aca1cf7ad9ad5c6f6ecb8",
+      "vendoredPath": "vendor/upstream-mizuchi/src/ui/shared/tailwind.config.js"
+    },
+    {
+      "mode": "100644",
+      "object": "406e8b372026d969a7f46b66c91f15d03fd74e44",
+      "path": "tsconfig.json",
+      "present": true,
+      "sha256": "0874a98dd552360257fb9c215dd8e41681d253d72ac19e3472a1d57e61557188",
+      "vendoredPath": "vendor/upstream-mizuchi/tsconfig.json"
+    },
+    {
+      "mode": "100644",
+      "object": "03caac752a2ddce03e6265bc6d53a1568f7b041a",
+      "path": "vitest.config.ts",
+      "present": true,
+      "sha256": "bbb88229a7a96d6524b3864035c3ddcbef215e29bbc90be2a8a411b15113399f",
+      "vendoredPath": "vendor/upstream-mizuchi/vitest.config.ts"
+    }
+  ],
+  "gitlinkCount": 2,
+  "gitlinks": [
+    {
+      "mode": "160000",
+      "object": "ec2efeebb33e2b1de81e39fbf7cbe3cd97350472",
+      "path": "vendor/decomp-permuter",
+      "present": true,
+      "type": "commit",
+      "vendoredPath": "vendor/upstream-mizuchi/vendor/decomp-permuter"
+    },
+    {
+      "mode": "160000",
+      "object": "a21c1dcd7255b176c032bb932f521846e98d4372",
+      "path": "vendor/m2c",
+      "present": true,
+      "type": "commit",
+      "vendoredPath": "vendor/upstream-mizuchi/vendor/m2c"
+    }
+  ],
+  "missingBlobCount": 0,
+  "presentBlobCount": 181,
+  "schema": "mizuchi.upstream-vendor-audit.v1",
+  "upstream": "https://github.com/macabeus/mizuchi",
+  "upstreamCommit": "218ecfe220ec9559ec914657f882b4e617cffe43",
+  "upstreamRef": "refs/heads/main",
+  "vendoredRoot": "vendor/upstream-mizuchi"
+}

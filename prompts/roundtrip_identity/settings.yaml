@@ -1,0 +1,6 @@
+functionName: roundtrip_identity
+targetObjectPath: prompts/roundtrip_identity/build/target.o
+asm: |
+  roundtrip_identity:
+      leal    7(%rdi,%rdi,2), %eax
+      ret

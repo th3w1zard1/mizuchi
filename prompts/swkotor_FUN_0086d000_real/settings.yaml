@@ -1,0 +1,7 @@
+functionName: FUN_0086d000
+targetObjectPath: target/swkotor-match/FUN_0086d000/target.obj
+asm: |
+  0086d000: PUSH EBP
+  0086d001: MOV EBP,ESP
+  0086d003: POP EBP
+  0086d004: RET

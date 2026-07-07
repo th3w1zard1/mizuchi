@@ -1,0 +1,10 @@
+caseId: roundtrip_identity
+functionName: roundtrip_identity
+targetObjectPath: prompts/roundtrip_identity/build/target.o
+targetSourcePath: prompt:/target.c
+candidateSourcePath: prompt:/candidate.c
+targetFamily: elf-x86_64
+binaryPath: prompt:/build/target.o
+compilerCommand: bash ./scripts/compile-local-fixture.sh "{{cFilePath}}" "{{objFilePath}}"
+proof: byte-identical-object
+status: matched
