@@ -28,3 +28,45 @@ print("legacy stage migration ok")
 PY
 
 echo "source_parity_one_shot_self_check_test: ok"
+
+python3 - <<'PY'
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path("src").resolve()))
+from mizuchi_re.source_parity_one_shot import write_report, ProfileConfig, ROOT
+
+with tempfile.TemporaryDirectory() as td:
+    report_path = Path(td) / "report.json"
+    profile = ProfileConfig.for_slug("swkotor")
+    write_report(
+        profile,
+        {
+            "binaryPath": "/fake.bin",
+            "binarySha256": "cafebabe",
+            "stages": {
+                "synthesize-candidates": {
+                    "synthesisLimit": 3,
+                    "synthesisMaxAttemptsPerFunction": 2,
+                    "synthesisMaxAttemptsPerFunctionPolicy": "adaptive",
+                    "synthesisAttemptLimitPolicy": "adaptive",
+                    "synthesisAttemptLimitDistribution": {"1": 2},
+                    "synthesisAttemptLimitReasonDistribution": {"boundary-suspect": 2},
+                }
+            },
+        },
+        report_path,
+    )
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert data["synthesisLimit"] == 3
+    assert data["synthesisMaxAttemptsPerFunction"] == 2
+    assert data["synthesisMaxAttemptsPerFunctionPolicy"] == "adaptive"
+    assert data["synthesisAttemptLimitPolicy"] == "adaptive"
+    assert data["synthesisAttemptLimitDistribution"] == {"1": 2}
+    assert data["synthesisAttemptLimitReasonDistribution"] == {"boundary-suspect": 2}
+    # Verify report is under target path namespace when run normally.
+    assert report_path.parent == Path(td)
+print("source_parity_one_shot_report_fields_test: ok")
+PY
