@@ -2056,6 +2056,63 @@ def x86_64_two_args_min_max(row: dict[str, Any], c_name: str, data: bytes) -> li
     ]
 
 
+X86_64_TWO_ARG_ABSDIFF_OPS: dict[bytes, tuple[str, str, str, str]] = {
+    b"\x89\xf0\x29\xf8\x29\xf7\x0f\x43\xc7\xc3": (
+        "x86-64-two-args-absdiff-cdecl",
+        "unsigned int",
+        "cmovae",
+        "mov-eax-esi-sub-eax-edi-sub-edi-esi-cmovae-eax-edi-ret",
+    ),
+    b"\x89\xf8\x29\xf0\x29\xfe\x0f\x4d\xc6\xc3": (
+        "x86-64-two-args-int-absdiff-cdecl",
+        "int",
+        "cmovge",
+        "mov-eax-edi-sub-eax-esi-sub-esi-edi-cmovge-eax-esi-ret",
+    ),
+}
+
+
+def x86_64_two_args_absdiff(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_TWO_ARG_ABSDIFF_OPS.get(body)
+    if decoded is None:
+        return []
+    rule, value_type, cmov, pattern = decoded
+    expression = "a > b ? a - b : b - a"
+    source = header(rule, row) + "\n".join(
+        [
+            f"{value_type} {c_name}({value_type} a, {value_type} b) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=rule,
+            variant=f"sysv-o2-register-args-{'uint' if value_type == 'unsigned int' else 'int'}-absdiff-cmov",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=value_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArgs": ["edi", "esi"],
+                "valueType": value_type,
+                "returnType": value_type,
+                "expression": expression,
+                "cmov": cmov,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_TWO_ARG_MIN_MAX_OPS64: dict[bytes, tuple[str, str, str, str, str]] = {
     b"\x48\x89\xf0\x48\x39\xf7\x48\x0f\x42\xc7\xc3": ("uint64-min", "<", "unsigned long long", "cmovb", "mov-rax-rsi-cmp-rdi-rsi-cmovb-rax-rdi-ret"),
     b"\x48\x89\xf0\x48\x39\xf7\x48\x0f\x47\xc7\xc3": ("uint64-max", ">", "unsigned long long", "cmova", "mov-rax-rsi-cmp-rdi-rsi-cmova-rax-rdi-ret"),
@@ -18776,6 +18833,7 @@ GENERATORS = [
     x86_64_arg_srem_magic,
     x86_64_return_first_arg64,
     x86_64_return_second_arg,
+    x86_64_two_args_absdiff,
     x86_64_two_args_binary_op64,
     x86_64_two_args_min_max64,
     x86_64_two_args_absdiff64,
@@ -18823,6 +18881,7 @@ GENERATORS = [
     x86_64_two_args_affine_lea,
     x86_64_two_args_affine_lea64,
     x86_64_two_args_binary_op,
+    x86_64_two_args_absdiff,
     x86_64_two_args_binary_op64,
     x86_64_two_args_min_max,
     x86_64_two_args_min_max64,
