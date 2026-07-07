@@ -1509,6 +1509,53 @@ def x86_64_arg_unary_op(row: dict[str, Any], c_name: str, data: bytes) -> list[G
     ]
 
 
+X86_64_ARG_CAST_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x40\x0f\xb6\xc7\xc3": ("u8", "unsigned int", "unsigned int", "(unsigned char)value", "movzx-eax-dil-ret"),
+    b"\x40\x0f\xbe\xc7\xc3": ("i8", "int", "int", "(signed char)value", "movsx-eax-dil-ret"),
+    b"\x0f\xb7\xc7\xc3": ("u16", "unsigned int", "unsigned int", "(unsigned short)value", "movzx-eax-di-ret"),
+    b"\x0f\xbf\xc7\xc3": ("i16", "int", "int", "(short)value", "movsx-eax-di-ret"),
+}
+
+
+def x86_64_arg_cast(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_CAST_OPS.get(body)
+    if decoded is None:
+        return []
+    suffix, value_type, return_type, expression, pattern = decoded
+    source = header(f"x86-64-arg-cast-{suffix}-cdecl", row) + "\n".join(
+        [
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg-cast-{suffix}-cdecl",
+            variant=f"sysv-o2-register-arg-cast-{suffix}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=return_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "edi",
+                "valueType": value_type,
+                "returnType": return_type,
+                "expression": expression,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_imm8_compare(data: bytes, *, signed: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     if (
@@ -13723,6 +13770,7 @@ GENERATORS = [
     x86_64_arg_shift_imm8,
     x86_64_arg_imm8_binary_op,
     x86_64_arg_unary_op,
+    x86_64_arg_cast,
     x86_64_arg_unsigned_imm8_compare,
     x86_64_arg_signed_imm8_compare,
     x86_64_two_args_unsigned_compare,

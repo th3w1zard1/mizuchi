@@ -1727,6 +1727,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
         x86_64_arg_unary_op_candidate,
+        x86_64_arg_cast_candidate,
         x86_64_arg_unsigned_imm8_compare_candidate,
         x86_64_arg_signed_imm8_compare_candidate,
         x86_64_two_args_unsigned_compare_candidate,
@@ -4648,6 +4649,56 @@ def x86_64_arg_unary_op_candidate(task: dict[str, Any], data: bytes) -> dict[str
             "bodyBytes": len(body),
             "registerArg": "edi",
             "operator": operator,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG_CAST_OPS: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x40\x0f\xb6\xc7\xc3": ("u8", "unsigned int", "unsigned int", "(unsigned char)value", "movzx-eax-dil-ret"),
+    b"\x40\x0f\xbe\xc7\xc3": ("i8", "int", "int", "(signed char)value", "movsx-eax-dil-ret"),
+    b"\x0f\xb7\xc7\xc3": ("u16", "unsigned int", "unsigned int", "(unsigned short)value", "movzx-eax-di-ret"),
+    b"\x0f\xbf\xc7\xc3": ("i16", "int", "int", "(short)value", "movsx-eax-di-ret"),
+}
+
+
+def x86_64_arg_cast_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG_CAST_OPS.get(body)
+    if decoded is None:
+        return None
+    suffix, value_type, return_type, expression, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 argument {suffix} cast pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return {expression};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg-cast-{suffix}-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "edi",
+            "valueType": value_type,
+            "returnType": return_type,
+            "expression": expression,
             "pattern": pattern,
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
