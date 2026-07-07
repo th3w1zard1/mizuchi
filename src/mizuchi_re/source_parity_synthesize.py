@@ -1358,6 +1358,61 @@ def x86_64_add_two_args(row: dict[str, Any], c_name: str, data: bytes) -> list[G
     ]
 
 
+X86_64_THREE_ARGS_ARITHMETIC_PATTERNS: dict[bytes, tuple[str, str, str]] = {
+    b"\x8d\x04\x37\x01\xd0\xc3": ("add-add", "a + b + c", "lea-eax-rdi-rsi-add-eax-edx-ret"),
+    b"\x29\xf7\x8d\x04\x17\xc3": ("sub-add", "a - b + c", "sub-edi-esi-lea-eax-rdi-rdx-ret"),
+    b"\x89\xf8\x01\xd6\x29\xf0\xc3": ("sub-sum", "a - b - c", "mov-eax-edi-add-esi-edx-sub-eax-esi-ret"),
+    b"\x89\xd0\x01\xf7\x29\xf8\xc3": ("sub-sum-reversed", "c - (a + b)", "mov-eax-edx-add-edi-esi-sub-eax-edi-ret"),
+    b"\x0f\xaf\xfe\x8d\x04\x17\xc3": ("mul-add", "a * b + c", "imul-edi-esi-lea-eax-rdi-rdx-ret"),
+    b"\x89\xf8\x0f\xaf\xc6\x29\xd0\xc3": ("mul-sub", "a * b - c", "mov-eax-edi-imul-eax-esi-sub-eax-edx-ret"),
+    b"\x89\xd0\x0f\xaf\xfe\x29\xf8\xc3": ("sub-mul", "c - a * b", "mov-eax-edx-imul-edi-esi-sub-eax-edi-ret"),
+}
+
+
+def decode_x86_64_three_args_arithmetic(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_THREE_ARGS_ARITHMETIC_PATTERNS.get(body)
+    if decoded is None:
+        return None
+    suffix, expression, pattern = decoded
+    return {"suffix": suffix, "expression": expression, "pattern": pattern}
+
+
+def x86_64_three_args_arithmetic(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_three_args_arithmetic(data)
+    if decoded is None:
+        return []
+    source = header("x86-64-three-args-arithmetic-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-three-args-arithmetic-cdecl",
+            variant=f"sysv-o2-three-arg-{decoded['suffix']}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "expression": decoded["expression"],
+                "registerArgs": ["edi", "esi", "edx"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def format_x86_64_two_args_affine_expression(coeff_a: int, coeff_b: int, immediate: int) -> str:
     terms: list[str] = []
     if coeff_a == 1:
@@ -18287,6 +18342,7 @@ GENERATORS = [
     immediate_return_stdcall,
     x86_64_return_first_arg,
     x86_64_add_two_args,
+    x86_64_three_args_arithmetic,
     x86_64_two_args_affine_lea,
     x86_64_two_args_binary_op,
     x86_64_two_args_min_max,

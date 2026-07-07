@@ -1725,6 +1725,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_return_first_arg64_candidate,
         x86_64_return_second_arg_candidate,
         x86_64_add_two_args_candidate,
+        x86_64_three_args_arithmetic_candidate,
         x86_64_two_args_affine_lea_candidate,
         x86_64_two_args_binary_op_candidate,
         x86_64_two_args_binary_op64_candidate,
@@ -4572,6 +4573,63 @@ def x86_64_add_two_args_candidate(task: dict[str, Any], data: bytes) -> dict[str
             "rule": "x86-64-add-two-args-cdecl",
             "bodyBytes": len(body),
             "registerArgs": ["edi", "esi"],
+            "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_THREE_ARGS_ARITHMETIC_PATTERNS: dict[bytes, tuple[str, str, str]] = {
+    b"\x8d\x04\x37\x01\xd0\xc3": ("add-add", "a + b + c", "lea-eax-rdi-rsi-add-eax-edx-ret"),
+    b"\x29\xf7\x8d\x04\x17\xc3": ("sub-add", "a - b + c", "sub-edi-esi-lea-eax-rdi-rdx-ret"),
+    b"\x89\xf8\x01\xd6\x29\xf0\xc3": ("sub-sum", "a - b - c", "mov-eax-edi-add-esi-edx-sub-eax-esi-ret"),
+    b"\x89\xd0\x01\xf7\x29\xf8\xc3": ("sub-sum-reversed", "c - (a + b)", "mov-eax-edx-add-edi-esi-sub-eax-edi-ret"),
+    b"\x0f\xaf\xfe\x8d\x04\x17\xc3": ("mul-add", "a * b + c", "imul-edi-esi-lea-eax-rdi-rdx-ret"),
+    b"\x89\xf8\x0f\xaf\xc6\x29\xd0\xc3": ("mul-sub", "a * b - c", "mov-eax-edi-imul-eax-esi-sub-eax-edx-ret"),
+    b"\x89\xd0\x0f\xaf\xfe\x29\xf8\xc3": ("sub-mul", "c - a * b", "mov-eax-edx-imul-edi-esi-sub-eax-edi-ret"),
+}
+
+
+def decode_x86_64_three_args_arithmetic(data: bytes) -> dict[str, str] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_THREE_ARGS_ARITHMETIC_PATTERNS.get(body)
+    if decoded is None:
+        return None
+    suffix, expression, pattern = decoded
+    return {"suffix": suffix, "expression": expression, "pattern": pattern}
+
+
+def x86_64_three_args_arithmetic_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_three_args_arithmetic(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 three-argument {decoded['suffix']} pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int a, unsigned int b, unsigned int c) {{",
+            f"    return {decoded['expression']};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-three-args-arithmetic-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "expression": decoded["expression"],
+            "pattern": decoded["pattern"],
+            "registerArgs": ["edi", "esi", "edx"],
             "framePointer": False,
         },
         "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
