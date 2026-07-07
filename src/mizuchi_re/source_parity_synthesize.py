@@ -2671,6 +2671,10 @@ def decode_x86_64_arg_mask(data: bytes) -> dict[str, Any] | None:
             "operator": "!=",
             "immediate": 0,
             "expression": "value != 0",
+            "valueType": "unsigned int",
+            "returnType": "unsigned int",
+            "trueLiteral": "0xffffffffu",
+            "falseLiteral": "0u",
             "pattern": "xor-eax-neg-edi-sbb-eax-eax-ret",
         }
     if len(body) == 8 and body[:4] == b"\x31\xc0\x83\xff" and body[6:] == b"\xc0\xc3":
@@ -2682,6 +2686,10 @@ def decode_x86_64_arg_mask(data: bytes) -> dict[str, Any] | None:
                 "operator": "<",
                 "immediate": immediate,
                 "expression": f"value < 0x{immediate:02x}u",
+                "valueType": "unsigned int",
+                "returnType": "unsigned int",
+                "trueLiteral": "0xffffffffu",
+                "falseLiteral": "0u",
                 "pattern": "xor-eax-cmp-edi-imm8-sbb-eax-eax-ret",
             }
     if len(body) == 9 and body[:4] == b"\x31\xc0\x83\xff" and body[5:8] == b"\x83\xd0\xff" and body[8] == 0xC3:
@@ -2691,8 +2699,46 @@ def decode_x86_64_arg_mask(data: bytes) -> dict[str, Any] | None:
             "operator": ">=",
             "immediate": immediate,
             "expression": f"value >= 0x{immediate:02x}u",
+            "valueType": "unsigned int",
+            "returnType": "unsigned int",
+            "trueLiteral": "0xffffffffu",
+            "falseLiteral": "0u",
             "pattern": "xor-eax-cmp-edi-imm8-adc-eax-minus-one-ret",
         }
+    if len(body) == 11 and body[:4] == b"\x31\xc0\x83\xff" and body[5] == 0x0F and body[7:] == b"\xc0\xf7\xd8\xc3":
+        raw_immediate = body[4]
+        setcc_opcode = body[6]
+        if setcc_opcode in {0x94, 0x95}:
+            suffix, operator, setcc = X86_64_UNSIGNED_COMPARE_SETCC[setcc_opcode]
+            return {
+                "suffix": f"uint-{suffix}-imm8",
+                "operator": operator,
+                "immediate": raw_immediate,
+                "expression": f"value {operator} 0x{raw_immediate:02x}u",
+                "valueType": "unsigned int",
+                "returnType": "unsigned int",
+                "trueLiteral": "0xffffffffu",
+                "falseLiteral": "0u",
+                "setcc": setcc,
+                "pattern": f"xor-eax-cmp-edi-imm8-{setcc}-al-neg-eax-ret",
+            }
+        decoded_signed = X86_64_SIGNED_COMPARE_SETCC.get(setcc_opcode)
+        if decoded_signed is not None:
+            suffix, operator, setcc = decoded_signed
+            signed_immediate = raw_immediate if raw_immediate < 0x80 else raw_immediate - 0x100
+            return {
+                "suffix": f"int-{suffix}-imm8",
+                "operator": operator,
+                "immediate": signed_immediate,
+                "rawImmediate": raw_immediate,
+                "expression": f"value {operator} {signed_immediate}",
+                "valueType": "int",
+                "returnType": "int",
+                "trueLiteral": "-1",
+                "falseLiteral": "0",
+                "setcc": setcc,
+                "pattern": f"xor-eax-cmp-edi-imm8-{setcc}-al-neg-eax-ret",
+            }
     return None
 
 
@@ -2703,10 +2749,14 @@ def x86_64_arg_mask(row: dict[str, Any], c_name: str, data: bytes) -> list[Gener
     if decoded is None:
         return []
     expression = str(decoded["expression"])
+    value_type = str(decoded["valueType"])
+    return_type = str(decoded["returnType"])
+    true_literal = str(decoded["trueLiteral"])
+    false_literal = str(decoded["falseLiteral"])
     source = header(f"x86-64-arg-{decoded['suffix']}-mask-cdecl", row) + "\n".join(
         [
-            f"unsigned int {c_name}(unsigned int value) {{",
-            f"    return {expression} ? 0xffffffffu : 0u;",
+            f"{return_type} {c_name}({value_type} value) {{",
+            f"    return {expression} ? {true_literal} : {false_literal};",
             "}",
             "",
         ]
@@ -2726,8 +2776,11 @@ def x86_64_arg_mask(row: dict[str, Any], c_name: str, data: bytes) -> list[Gener
                 "registerArg": "edi",
                 "operator": decoded["operator"],
                 "immediate": int(decoded["immediate"]),
+                "valueType": value_type,
+                "returnType": return_type,
                 "trueValue": "0xffffffff",
                 "falseValue": "0x00000000",
+                "setcc": decoded.get("setcc"),
                 "framePointer": False,
                 "targetFormat": row.get("targetFormat"),
             },
