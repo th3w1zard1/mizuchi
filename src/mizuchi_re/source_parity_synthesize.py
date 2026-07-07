@@ -2268,6 +2268,64 @@ def x86_64_arg_udiv_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[
     ]
 
 
+def decode_x86_64_arg_urem_pow2(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 6 or body[:3] != b"\x89\xf8\x83" or body[3] != 0xE0 or body[5] != 0xC3:
+        return None
+    mask = body[4]
+    if mask <= 1:
+        return None
+    divisor = mask + 1
+    if divisor & (divisor - 1):
+        return None
+    return {
+        "shift": divisor.bit_length() - 1,
+        "divisor": divisor,
+        "mask": mask,
+        "pattern": "mov-eax-edi-and-eax-pow2-minus-one-ret",
+    }
+
+
+def x86_64_arg_urem_pow2(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_urem_pow2(data)
+    if decoded is None:
+        return []
+    divisor = int(decoded["divisor"])
+    mask = int(decoded["mask"])
+    source = header("x86-64-arg-urem-pow2-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value % {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg-urem-pow2-cdecl",
+            variant=f"sysv-o2-register-arg-urem-{divisor}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": "%",
+                "shift": int(decoded["shift"]),
+                "divisor": divisor,
+                "mask": f"0x{mask:08x}",
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_UDIV_MAGIC_OPS: dict[tuple[int, int], tuple[int, str]] = {
     (0xAAAAAAAB, 0x21): (3, "mov-ecx-edi-mov-eax-magic-imul-rax-rcx-shr-rax-33-ret"),
     (0xCCCCCCCD, 0x22): (5, "mov-ecx-edi-mov-eax-magic-imul-rax-rcx-shr-rax-34-ret"),
@@ -16321,6 +16379,7 @@ GENERATORS = [
     x86_64_arg64_unary_op,
     x86_64_arg64_neg_cmov,
     x86_64_arg_udiv_magic,
+    x86_64_arg_urem_pow2,
     x86_64_arg_urem_magic,
     x86_64_arg_sdiv_pow2,
     x86_64_arg_srem_pow2,

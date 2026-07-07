@@ -1739,6 +1739,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg64_bitmask_bool_candidate,
         x86_64_arg_bitmask_bool_candidate,
         x86_64_arg_udiv_pow2_candidate,
+        x86_64_arg_urem_pow2_candidate,
         x86_64_arg_udiv_magic_candidate,
         x86_64_arg_urem_magic_candidate,
         x86_64_arg_sdiv_pow2_candidate,
@@ -5485,6 +5486,67 @@ def x86_64_arg_udiv_pow2_candidate(task: dict[str, Any], data: bytes) -> dict[st
             "operator": "/",
             "shift": int(decoded["shift"]),
             "divisor": divisor,
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_urem_pow2(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) != 6 or body[:3] != b"\x89\xf8\x83" or body[3] != 0xE0 or body[5] != 0xC3:
+        return None
+    mask = body[4]
+    if mask <= 1:
+        return None
+    divisor = mask + 1
+    if divisor & (divisor - 1):
+        return None
+    return {
+        "shift": divisor.bit_length() - 1,
+        "divisor": divisor,
+        "mask": mask,
+        "pattern": "mov-eax-edi-and-eax-pow2-minus-one-ret",
+    }
+
+
+def x86_64_arg_urem_pow2_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_urem_pow2(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    divisor = int(decoded["divisor"])
+    mask = int(decoded["mask"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 unsigned power-of-two remainder pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value % {divisor}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-arg-urem-pow2-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "operator": "%",
+            "shift": int(decoded["shift"]),
+            "divisor": divisor,
+            "mask": f"0x{mask:08x}",
             "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),
