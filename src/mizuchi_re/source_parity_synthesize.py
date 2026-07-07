@@ -2257,6 +2257,108 @@ def x86_64_arg_imm8_binary_op(row: dict[str, Any], c_name: str, data: bytes) -> 
     ]
 
 
+X86_64_ARG_IMM32_BINARY64_OPS: dict[int, tuple[str, str]] = {
+    0x25: ("and", "&"),
+    0x0D: ("or", "|"),
+    0x35: ("xor", "^"),
+}
+
+
+def decode_x86_64_arg_imm32_binary_op64(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 8 and body[:3] == b"\x48\x8d\x87" and body[7] == 0xC3:
+        raw_immediate = int.from_bytes(body[3:7], "little", signed=False)
+        signed_immediate = int.from_bytes(body[3:7], "little", signed=True)
+        if signed_immediate == 0:
+            return None
+        suffix = "add" if signed_immediate > 0 else "sub"
+        operator = "+" if signed_immediate > 0 else "-"
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": abs(signed_immediate),
+            "rawImmediate": raw_immediate,
+            "signedImmediate": signed_immediate,
+            "immediateBits": 32,
+            "pattern": "lea-rax-rdi-disp32-ret",
+        }
+    if len(body) == 10 and body[:3] == b"\x48\x89\xf8" and body[3] == 0x48 and body[9] == 0xC3:
+        decoded = X86_64_ARG_IMM32_BINARY64_OPS.get(body[4])
+        if decoded is None or decoded[0] == "and":
+            return None
+        raw_immediate = int.from_bytes(body[5:9], "little", signed=False)
+        if raw_immediate == 0:
+            return None
+        suffix, operator = decoded
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": raw_immediate,
+            "rawImmediate": raw_immediate,
+            "signedImmediate": int.from_bytes(body[5:9], "little", signed=True),
+            "immediateBits": 32,
+            "pattern": "mov-rax-rdi-rex-accum-op-rax-imm32-ret",
+        }
+    if len(body) == 9 and body[:3] == b"\x48\x89\xf8" and body[8] == 0xC3:
+        decoded = X86_64_ARG_IMM32_BINARY64_OPS.get(body[3])
+        if decoded is None or decoded[0] != "and":
+            return None
+        raw_immediate = int.from_bytes(body[4:8], "little", signed=False)
+        suffix, operator = decoded
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": raw_immediate,
+            "rawImmediate": raw_immediate,
+            "signedImmediate": int.from_bytes(body[4:8], "little", signed=True),
+            "immediateBits": 32,
+            "pattern": "mov-rax-rdi-and-eax-imm32-ret",
+        }
+    return None
+
+
+def x86_64_arg_imm32_binary_op64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_imm32_binary_op64(data)
+    if decoded is None:
+        return []
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    immediate = int(decoded["immediate"])
+    source = header(f"x86-64-arg64-{suffix}-imm32-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return value {operator} 0x{immediate:08x}ull;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg64-{suffix}-imm32-cdecl",
+            variant=f"sysv-o2-register-arg64-{suffix}-imm32",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "rdi",
+                "operator": operator,
+                "immediate": f"0x{immediate:08x}",
+                "immediateBits": int(decoded["immediateBits"]),
+                "rawImmediate": int(decoded["rawImmediate"]),
+                "signedImmediate": int(decoded["signedImmediate"]),
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_UNARY_OPS: dict[bytes, tuple[str, str, str]] = {
     b"\x89\xf8\xf7\xd8\xc3": ("neg", "-", "mov-eax-edi-neg-eax-ret"),
     b"\x89\xf8\xf7\xd0\xc3": ("not", "~", "mov-eax-edi-not-eax-ret"),
@@ -15084,6 +15186,7 @@ GENERATORS = [
     bounded_leading_return_slice_masm,
     extended_terminal_body_masm,
     short_direct_call_ret_masm,
+    x86_64_arg_imm32_binary_op64,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
     byte_field_and_stack_byte,

@@ -1738,6 +1738,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_rotate_candidate,
         x86_64_arg_shift_imm8_candidate,
         x86_64_arg_imm8_binary_op_candidate,
+        x86_64_arg_imm32_binary_op64_candidate,
         x86_64_arg_unary_op_candidate,
         x86_64_arg_neg_cmov_candidate,
         x86_64_arg_cast_candidate,
@@ -5448,6 +5449,111 @@ def x86_64_arg_imm8_binary_op_candidate(task: dict[str, Any], data: bytes) -> di
             "operator": operator,
             "immediate": f"0x{immediate:0{immediate_digits}x}",
             "immediateBits": immediate_bits,
+            "rawImmediate": int(decoded["rawImmediate"]),
+            "signedImmediate": int(decoded["signedImmediate"]),
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_ARG_IMM32_BINARY64_OPS: dict[int, tuple[str, str]] = {
+    0x25: ("and", "&"),
+    0x0D: ("or", "|"),
+    0x35: ("xor", "^"),
+}
+
+
+def decode_x86_64_arg_imm32_binary_op64(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 8 and body[:3] == b"\x48\x8d\x87" and body[7] == 0xC3:
+        raw_immediate = int.from_bytes(body[3:7], "little", signed=False)
+        signed_immediate = int.from_bytes(body[3:7], "little", signed=True)
+        if signed_immediate == 0:
+            return None
+        suffix = "add" if signed_immediate > 0 else "sub"
+        operator = "+" if signed_immediate > 0 else "-"
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": abs(signed_immediate),
+            "rawImmediate": raw_immediate,
+            "signedImmediate": signed_immediate,
+            "immediateBits": 32,
+            "pattern": "lea-rax-rdi-disp32-ret",
+        }
+    if len(body) == 10 and body[:3] == b"\x48\x89\xf8" and body[3] == 0x48 and body[9] == 0xC3:
+        decoded = X86_64_ARG_IMM32_BINARY64_OPS.get(body[4])
+        if decoded is None or decoded[0] == "and":
+            return None
+        raw_immediate = int.from_bytes(body[5:9], "little", signed=False)
+        if raw_immediate == 0:
+            return None
+        suffix, operator = decoded
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": raw_immediate,
+            "rawImmediate": raw_immediate,
+            "signedImmediate": int.from_bytes(body[5:9], "little", signed=True),
+            "immediateBits": 32,
+            "pattern": "mov-rax-rdi-rex-accum-op-rax-imm32-ret",
+        }
+    if len(body) == 9 and body[:3] == b"\x48\x89\xf8" and body[8] == 0xC3:
+        decoded = X86_64_ARG_IMM32_BINARY64_OPS.get(body[3])
+        if decoded is None or decoded[0] != "and":
+            return None
+        raw_immediate = int.from_bytes(body[4:8], "little", signed=False)
+        suffix, operator = decoded
+        return {
+            "suffix": suffix,
+            "operator": operator,
+            "immediate": raw_immediate,
+            "rawImmediate": raw_immediate,
+            "signedImmediate": int.from_bytes(body[4:8], "little", signed=True),
+            "immediateBits": 32,
+            "pattern": "mov-rax-rdi-and-eax-imm32-ret",
+        }
+    return None
+
+
+def x86_64_arg_imm32_binary_op64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_imm32_binary_op64(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    immediate = int(decoded["immediate"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit argument {suffix} immediate pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return value {operator} 0x{immediate:08x}ull;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg64-{suffix}-imm32-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "rdi",
+            "operator": operator,
+            "immediate": f"0x{immediate:08x}",
+            "immediateBits": 32,
             "rawImmediate": int(decoded["rawImmediate"]),
             "signedImmediate": int(decoded["signedImmediate"]),
             "pattern": decoded["pattern"],
