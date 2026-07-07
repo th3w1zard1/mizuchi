@@ -1744,6 +1744,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_signed_zero_compare_candidate,
         x86_64_arg_nonzero_const_select_candidate,
         x86_64_arg_nonzero_cmov_const_select_candidate,
+        x86_64_arg_mask_candidate,
         x86_64_arg_nonzero_candidate,
         x86_64_arg_zero_candidate,
         x86_64_framed_zero_return_candidate,
@@ -5863,6 +5864,81 @@ def x86_64_arg_nonzero_cmov_const_select_candidate(task: dict[str, Any], data: b
             "falseValue": f"0x{false_value:08x}",
             "immediate": f"0x{int(decoded['immediate']):08x}",
             "cmov": decoded["cmov"],
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_mask(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x31\xc0\xf7\xdf\x19\xc0\xc3":
+        return {
+            "suffix": "nonzero",
+            "operator": "!=",
+            "immediate": 0,
+            "expression": "value != 0",
+            "pattern": "xor-eax-neg-edi-sbb-eax-eax-ret",
+        }
+    if len(body) == 8 and body[:4] == b"\x31\xc0\x83\xff" and body[6:] == b"\xc0\xc3":
+        immediate = body[4]
+        opcode = body[5]
+        if opcode == 0x19:
+            return {
+                "suffix": "uint-lt-imm8",
+                "operator": "<",
+                "immediate": immediate,
+                "expression": f"value < 0x{immediate:02x}u",
+                "pattern": "xor-eax-cmp-edi-imm8-sbb-eax-eax-ret",
+            }
+    if len(body) == 9 and body[:4] == b"\x31\xc0\x83\xff" and body[5:8] == b"\x83\xd0\xff" and body[8] == 0xC3:
+        immediate = body[4]
+        return {
+            "suffix": "uint-ge-imm8",
+            "operator": ">=",
+            "immediate": immediate,
+            "expression": f"value >= 0x{immediate:02x}u",
+            "pattern": "xor-eax-cmp-edi-imm8-adc-eax-minus-one-ret",
+        }
+    return None
+
+
+def x86_64_arg_mask_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_mask(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    expression = str(decoded["expression"])
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 argument {decoded['suffix']} all-bits mask pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {expression} ? 0xffffffffu : 0u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-arg-{decoded['suffix']}-mask-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "operator": decoded["operator"],
+            "immediate": int(decoded["immediate"]),
+            "trueValue": "0xffffffff",
+            "falseValue": "0x00000000",
             "pattern": decoded["pattern"],
             "framePointer": False,
             "targetFormat": task.get("targetFormat"),

@@ -2663,6 +2663,78 @@ def x86_64_arg_nonzero_cmov_const_select(row: dict[str, Any], c_name: str, data:
     ]
 
 
+def decode_x86_64_arg_mask(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body == b"\x31\xc0\xf7\xdf\x19\xc0\xc3":
+        return {
+            "suffix": "nonzero",
+            "operator": "!=",
+            "immediate": 0,
+            "expression": "value != 0",
+            "pattern": "xor-eax-neg-edi-sbb-eax-eax-ret",
+        }
+    if len(body) == 8 and body[:4] == b"\x31\xc0\x83\xff" and body[6:] == b"\xc0\xc3":
+        immediate = body[4]
+        opcode = body[5]
+        if opcode == 0x19:
+            return {
+                "suffix": "uint-lt-imm8",
+                "operator": "<",
+                "immediate": immediate,
+                "expression": f"value < 0x{immediate:02x}u",
+                "pattern": "xor-eax-cmp-edi-imm8-sbb-eax-eax-ret",
+            }
+    if len(body) == 9 and body[:4] == b"\x31\xc0\x83\xff" and body[5:8] == b"\x83\xd0\xff" and body[8] == 0xC3:
+        immediate = body[4]
+        return {
+            "suffix": "uint-ge-imm8",
+            "operator": ">=",
+            "immediate": immediate,
+            "expression": f"value >= 0x{immediate:02x}u",
+            "pattern": "xor-eax-cmp-edi-imm8-adc-eax-minus-one-ret",
+        }
+    return None
+
+
+def x86_64_arg_mask(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_mask(data)
+    if decoded is None:
+        return []
+    expression = str(decoded["expression"])
+    source = header(f"x86-64-arg-{decoded['suffix']}-mask-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return {expression} ? 0xffffffffu : 0u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=f"x86-64-arg-{decoded['suffix']}-mask-cdecl",
+            variant=f"sysv-o2-register-arg-{decoded['suffix']}-mask",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "operator": decoded["operator"],
+                "immediate": int(decoded["immediate"]),
+                "trueValue": "0xffffffff",
+                "falseValue": "0x00000000",
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def x86_64_arg_nonzero(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
     body = strip_alignment_padding(data)
     if body != b"\x31\xc0\x85\xff\x0f\x95\xc0\xc3":
@@ -14653,6 +14725,7 @@ GENERATORS = [
     x86_64_arg_signed_zero_compare,
     x86_64_arg_nonzero_const_select,
     x86_64_arg_nonzero_cmov_const_select,
+    x86_64_arg_mask,
     x86_64_arg_nonzero,
     x86_64_arg_zero,
     framed_zero_return,
