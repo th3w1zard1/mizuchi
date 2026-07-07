@@ -29,6 +29,8 @@ base_patterns = [
     ("and", "89f821f0c3", "x86-64-two-args-and-cdecl", "unsigned int a, unsigned int b", "a & b"),
     ("or", "89f809f0c3", "x86-64-two-args-or-cdecl", "unsigned int a, unsigned int b", "a | b"),
     ("xor", "89f831f0c3", "x86-64-two-args-xor-cdecl", "unsigned int a, unsigned int b", "a ^ b"),
+    ("shr1", "89f8d1e8c3", "x86-64-arg-shr-imm8-cdecl", "unsigned int value", "value >> 1"),
+    ("sar1", "89f8d1f8c3", "x86-64-arg-sar-imm8-cdecl", "int value", "value >> 1"),
     ("shr", "89f8c1e803c3", "x86-64-arg-shr-imm8-cdecl", "unsigned int value", "value >> 3"),
     ("sar", "89f8c1f803c3", "x86-64-arg-sar-imm8-cdecl", "int value", "value >> 3"),
 ]
@@ -83,21 +85,24 @@ PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m mizuchi_re.source_p
   --source-tasks-only \
   --out-dir "$TMP_DIR/out" \
   --compiler clang \
-  --limit 14 \
+  --limit 18 \
   --max-variants-per-function 1 \
   --timeout 30 >/dev/null
 
-jq -e '.compiler == "clang" and .generatedCandidates == 14 and .attemptedCandidates == 14 and .semanticCodeSliceMatchedCandidates == 14 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 14 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 14' "$TMP_DIR/out/summary.json" >/dev/null
+jq -e '.compiler == "clang" and .generatedCandidates == 18 and .attemptedCandidates == 18 and .semanticCodeSliceMatchedCandidates == 18 and .semanticMismatchedCandidates == 0 and .compileFailedCandidates == 0 and .errorCandidates == 0 and .generatedBySourceQuality["high-level-c"] == 18 and .semanticCodeSliceMatchedBySourceQuality["high-level-c"] == 18' "$TMP_DIR/out/summary.json" >/dev/null
 jq -s -e '
-  length == 14 and
-  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 14 and
+  length == 18 and
+  ([.[] | select(.status == "code-slice-matched" and .differences == 0)] | length) == 18 and
   ([.[] | select(.rule == "x86-64-two-args-sub-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-mul-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-and-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-or-cdecl")] | length) == 2 and
   ([.[] | select(.rule == "x86-64-two-args-xor-cdecl")] | length) == 2 and
-  ([.[] | select(.rule == "x86-64-arg-shr-imm8-cdecl")] | length) == 2 and
-  ([.[] | select(.rule == "x86-64-arg-sar-imm8-cdecl")] | length) == 2
+  ([.[] | select(.rule == "x86-64-arg-shr-imm8-cdecl")] | length) == 4 and
+  ([.[] | select(.rule == "x86-64-arg-sar-imm8-cdecl")] | length) == 4 and
+  ([.[] | select(.generationEvidence.shift == 1)] | length) == 4 and
+  ([.[] | select(.generationEvidence.pattern == "mov-eax-edi-shift-one-ret")] | length) == 4 and
+  ([.[] | select(.generationEvidence.shift == 3)] | length) == 4
 ' "$TMP_DIR/out/attempts.jsonl" >/dev/null
 
 echo "ok"

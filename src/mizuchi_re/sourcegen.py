@@ -4790,18 +4790,31 @@ X86_64_ARG_SHIFT_IMM8_OPS: dict[int, tuple[str, str, str, str]] = {
     0xF8: ("sar", ">>", "int", "int"),
 }
 
+X86_64_ARG_SHIFT_ONE_OPS: dict[int, tuple[str, str, str, str]] = {
+    0xE8: ("shr", ">>", "unsigned int", "unsigned int"),
+    0xF8: ("sar", ">>", "int", "int"),
+}
+
 
 def x86_64_arg_shift_imm8_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
     if not is_x86_64_task(task):
         return None
     body = strip_alignment_padding(data)
-    if len(body) != 6 or body[:3] != b"\x89\xf8\xc1" or body[-1] != 0xC3:
-        return None
-    decoded = X86_64_ARG_SHIFT_IMM8_OPS.get(body[3])
-    if decoded is None:
-        return None
-    shift = body[4]
-    if not 2 <= shift <= 31:
+    pattern = "mov-eax-edi-shift-imm8-ret"
+    if len(body) == 6 and body[:3] == b"\x89\xf8\xc1" and body[-1] == 0xC3:
+        decoded = X86_64_ARG_SHIFT_IMM8_OPS.get(body[3])
+        if decoded is None:
+            return None
+        shift = body[4]
+        if not 2 <= shift <= 31:
+            return None
+    elif len(body) == 5 and body[:3] == b"\x89\xf8\xd1" and body[-1] == 0xC3:
+        decoded = X86_64_ARG_SHIFT_ONE_OPS.get(body[3])
+        if decoded is None:
+            return None
+        shift = 1
+        pattern = "mov-eax-edi-shift-one-ret"
+    else:
         return None
     suffix, operator, value_type, return_type = decoded
     c_name = c_identifier(str(task.get("name") or "recovered_function"))
@@ -4829,6 +4842,7 @@ def x86_64_arg_shift_imm8_candidate(task: dict[str, Any], data: bytes) -> dict[s
             "registerArg": "edi",
             "operator": operator,
             "shift": shift,
+            "pattern": pattern,
             "valueType": value_type,
             "returnType": return_type,
             "framePointer": False,
