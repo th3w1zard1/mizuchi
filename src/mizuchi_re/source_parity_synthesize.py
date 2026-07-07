@@ -1263,6 +1263,74 @@ def x86_64_return_first_arg(row: dict[str, Any], c_name: str, data: bytes) -> li
     ]
 
 
+def x86_64_return_first_arg64(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    body = strip_alignment_padding(data)
+    if body != b"\x48\x89\xf8\xc3":
+        return []
+    source = header("x86-64-return-first-arg64-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            "    return value;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-return-first-arg64-cdecl",
+            variant="sysv-o2-register-arg64",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={"pattern": "mov-rax-rdi-ret", "registerArg": "rdi", "framePointer": False, "targetFormat": row.get("targetFormat")},
+        )
+    ]
+
+
+X86_64_RETURN_SECOND_ARG_OPS: dict[bytes, tuple[str, str, str, str, list[str]]] = {
+    b"\x89\xf0\xc3": ("x86-64-return-second-arg-cdecl", "unsigned int", "esi", "mov-eax-esi-ret", ["edi", "esi"]),
+    b"\x48\x89\xf0\xc3": ("x86-64-return-second-arg64-cdecl", "unsigned long long", "rsi", "mov-rax-rsi-ret", ["rdi", "rsi"]),
+}
+
+
+def x86_64_return_second_arg(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_RETURN_SECOND_ARG_OPS.get(body)
+    if decoded is None:
+        return []
+    rule, value_type, register_arg, pattern, register_args = decoded
+    source = header(rule, row) + "\n".join(
+        [
+            f"{value_type} {c_name}({value_type} a, {value_type} b) {{",
+            "    return b;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=rule,
+            variant=f"sysv-o2-register-{register_arg}-return",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type=value_type,
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": register_arg,
+                "registerArgs": register_args,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def x86_64_add_two_args(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
     body = strip_alignment_padding(data)
     if body != b"\x8d\x04\x37\xc3":
@@ -15785,6 +15853,8 @@ GENERATORS = [
     x86_64_arg64_shift_imm8,
     x86_64_arg64_zero_nonzero,
     x86_64_arg64_bitmask_bool,
+    x86_64_return_first_arg64,
+    x86_64_return_second_arg,
     x86_64_two_args_binary_op64,
     x86_64_two_args_min_max64,
     x86_64_two_args_unsigned_compare64,

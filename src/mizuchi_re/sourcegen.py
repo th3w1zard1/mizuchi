@@ -1722,6 +1722,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         immediate_return_candidate,
         immediate_return_stdcall_candidate,
         x86_64_return_first_arg_candidate,
+        x86_64_return_first_arg64_candidate,
+        x86_64_return_second_arg_candidate,
         x86_64_add_two_args_candidate,
         x86_64_two_args_affine_lea_candidate,
         x86_64_two_args_binary_op_candidate,
@@ -4414,6 +4416,85 @@ def x86_64_return_first_arg_candidate(task: dict[str, Any], data: bytes) -> dict
             "bodyBytes": len(body),
             "registerArg": "edi",
             "framePointer": False,
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def x86_64_return_first_arg64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if body != b"\x48\x89\xf8\xc3":
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 64-bit first-argument return pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            "    return value;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "x86-64-return-first-arg64-cdecl",
+            "bodyBytes": len(body),
+            "registerArg": "rdi",
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_RETURN_SECOND_ARG_OPS: dict[bytes, tuple[str, str, str, str]] = {
+    b"\x89\xf0\xc3": ("x86-64-return-second-arg-cdecl", "unsigned int", "esi", "mov-eax-esi-ret"),
+    b"\x48\x89\xf0\xc3": ("x86-64-return-second-arg64-cdecl", "unsigned long long", "rsi", "mov-rax-rsi-ret"),
+}
+
+
+def x86_64_return_second_arg_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    decoded = X86_64_RETURN_SECOND_ARG_OPS.get(body)
+    if decoded is None:
+        return None
+    rule, value_type, register_arg, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86_64 second-argument return pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{value_type} {c_name}({value_type} a, {value_type} b) {{",
+            "    return b;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": rule,
+            "bodyBytes": len(body),
+            "registerArg": register_arg,
+            "registerArgs": ["edi", "esi"] if register_arg == "esi" else ["rdi", "rsi"],
+            "valueType": value_type,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
         },
         "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
     }
