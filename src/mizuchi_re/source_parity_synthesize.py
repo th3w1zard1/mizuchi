@@ -1535,6 +1535,54 @@ def x86_64_arg_lea_multiply(row: dict[str, Any], c_name: str, data: bytes) -> li
     ]
 
 
+X86_64_ARG64_LEA_MULTIPLY_OPS: dict[bytes, tuple[int, str]] = {
+    b"\x48\x8d\x04\x3f\xc3": (2, "lea-rax-rdi-rdi-ret"),
+    b"\x48\x8d\x04\x7f\xc3": (3, "lea-rax-rdi-rdi2-ret"),
+    b"\x48\x8d\x04\xbd\x00\x00\x00\x00\xc3": (4, "lea-rax-rdi4-ret"),
+    b"\x48\x8d\x04\xbf\xc3": (5, "lea-rax-rdi-rdi4-ret"),
+    b"\x48\x8d\x04\xfd\x00\x00\x00\x00\xc3": (8, "lea-rax-rdi8-ret"),
+    b"\x48\x8d\x04\xff\xc3": (9, "lea-rax-rdi-rdi8-ret"),
+}
+
+
+def x86_64_arg64_lea_multiply(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    body = strip_alignment_padding(data)
+    decoded = X86_64_ARG64_LEA_MULTIPLY_OPS.get(body)
+    if decoded is None:
+        return []
+    multiplier, pattern = decoded
+    source = header("x86-64-arg64-mul-lea-cdecl", row) + "\n".join(
+        [
+            f"unsigned long long {c_name}(unsigned long long value) {{",
+            f"    return value * {multiplier}ull;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="x86-64-arg64-mul-lea-cdecl",
+            variant=f"sysv-o2-register-arg64-lea-mul-{multiplier}",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned long long",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": pattern,
+                "registerArg": "rdi",
+                "operator": "*",
+                "multiplier": multiplier,
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 X86_64_ARG_CONST_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str, bool]] = {
     0x42: ("uint-min", "<", "unsigned int", "cmovb", False),
     0x43: ("uint-max", ">", "unsigned int", "cmovae", True),
@@ -15186,6 +15234,7 @@ GENERATORS = [
     bounded_leading_return_slice_masm,
     extended_terminal_body_masm,
     short_direct_call_ret_masm,
+    x86_64_arg64_lea_multiply,
     x86_64_arg_imm32_binary_op64,
     compact_terminal_ret_masm,
     compact_import_call_ret_masm,
