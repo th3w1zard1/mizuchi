@@ -1839,6 +1839,88 @@ def x86_64_arg_narrow_imm8_compare(row: dict[str, Any], c_name: str, data: bytes
     ]
 
 
+def decode_x86_64_arg_narrow_movzx_imm8_compare(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 13 and body[:8] == b"\x40\x0f\xb6\xcf\x31\xc0\x83\xf9" and body[9] == 0x0F and body[11:] == b"\xc0\xc3":
+        width = 8
+        immediate = body[8]
+        setcc_opcode = body[10]
+        movzx = "movzx-ecx-dil"
+    elif len(body) == 12 and body[:7] == b"\x0f\xb7\xcf\x31\xc0\x83\xf9" and body[8] == 0x0F and body[10:] == b"\xc0\xc3":
+        width = 16
+        immediate = body[7]
+        setcc_opcode = body[9]
+        movzx = "movzx-ecx-di"
+    else:
+        return None
+    decoded = X86_64_UNSIGNED_COMPARE_SETCC.get(setcc_opcode)
+    if decoded is None:
+        return None
+    suffix, operator, setcc = decoded
+    if suffix not in {"lt", "ge"}:
+        return None
+    cast_type = "unsigned char" if width == 8 else "unsigned short"
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+        "width": width,
+        "castType": cast_type,
+        "valueType": "unsigned int",
+        "rawImmediate": immediate,
+        "pattern": f"{movzx}-xor-eax-cmp-ecx-imm8-setcc-al-ret",
+    }
+
+
+def x86_64_arg_narrow_movzx_imm8_compare(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    if not is_x86_64_row(row):
+        return []
+    decoded = decode_x86_64_arg_narrow_movzx_imm8_compare(data)
+    if decoded is None:
+        return []
+    width = int(decoded["width"])
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    cast_type = str(decoded["castType"])
+    value_type = str(decoded["valueType"])
+    immediate_expr = f"0x{int(decoded['rawImmediate']):02x}u"
+    rule = f"x86-64-uint{width}-{suffix}-movzx-imm8-cdecl"
+    source = header(rule, row) + "\n".join(
+        [
+            f"int {c_name}({value_type} value) {{",
+            f"    return ({cast_type})value {operator} {immediate_expr};",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule=rule,
+            variant=f"sysv-o2-register-arg-uint{width}-{suffix}-movzx-imm8",
+            c_name=c_name,
+            symbol=clang_c_symbol(row, c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="int",
+            extra_flags=x86_64_o2_leaf_flags_for_row(row, frame_pointer=False),
+            evidence={
+                "pattern": decoded["pattern"],
+                "registerArg": "edi",
+                "scratchRegister": "ecx",
+                "operator": operator,
+                "width": width,
+                "castType": cast_type,
+                "valueType": value_type,
+                "immediate": immediate_expr,
+                "rawImmediate": int(decoded["rawImmediate"]),
+                "setcc": decoded["setcc"],
+                "framePointer": False,
+                "targetFormat": row.get("targetFormat"),
+            },
+        )
+    ]
+
+
 def decode_x86_64_arg_imm8_compare(data: bytes, *, signed: bool) -> dict[str, Any] | None:
     body = strip_alignment_padding(data)
     immediate_bits = 0
@@ -14071,6 +14153,7 @@ GENERATORS = [
     x86_64_arg_unary_op,
     x86_64_arg_cast,
     x86_64_arg_narrow_imm8_compare,
+    x86_64_arg_narrow_movzx_imm8_compare,
     x86_64_arg_unsigned_imm8_compare,
     x86_64_arg_signed_imm8_compare,
     x86_64_two_args_unsigned_compare,

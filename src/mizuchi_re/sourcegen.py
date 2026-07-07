@@ -1732,6 +1732,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_arg_unary_op_candidate,
         x86_64_arg_cast_candidate,
         x86_64_arg_narrow_imm8_compare_candidate,
+        x86_64_arg_narrow_movzx_imm8_compare_candidate,
         x86_64_arg_unsigned_imm8_compare_candidate,
         x86_64_arg_signed_imm8_compare_candidate,
         x86_64_two_args_unsigned_compare_candidate,
@@ -4995,6 +4996,89 @@ def x86_64_arg_narrow_imm8_compare_candidate(task: dict[str, Any], data: bytes) 
             "width": width,
             "castType": cast_type,
             "valueType": value_type,
+            "immediate": immediate_expr,
+            "rawImmediate": int(decoded["rawImmediate"]),
+            "setcc": decoded["setcc"],
+            "pattern": decoded["pattern"],
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+def decode_x86_64_arg_narrow_movzx_imm8_compare(data: bytes) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    if len(body) == 13 and body[:8] == b"\x40\x0f\xb6\xcf\x31\xc0\x83\xf9" and body[9] == 0x0F and body[11:] == b"\xc0\xc3":
+        width = 8
+        immediate = body[8]
+        setcc_opcode = body[10]
+        movzx = "movzx-ecx-dil"
+    elif len(body) == 12 and body[:7] == b"\x0f\xb7\xcf\x31\xc0\x83\xf9" and body[8] == 0x0F and body[10:] == b"\xc0\xc3":
+        width = 16
+        immediate = body[7]
+        setcc_opcode = body[9]
+        movzx = "movzx-ecx-di"
+    else:
+        return None
+    decoded = X86_64_UNSIGNED_COMPARE_SETCC.get(setcc_opcode)
+    if decoded is None:
+        return None
+    suffix, operator, setcc = decoded
+    if suffix not in {"lt", "ge"}:
+        return None
+    cast_type = "unsigned char" if width == 8 else "unsigned short"
+    return {
+        "suffix": suffix,
+        "operator": operator,
+        "setcc": setcc,
+        "width": width,
+        "castType": cast_type,
+        "valueType": "unsigned int",
+        "rawImmediate": immediate,
+        "pattern": f"{movzx}-xor-eax-cmp-ecx-imm8-setcc-al-ret",
+    }
+
+
+def x86_64_arg_narrow_movzx_imm8_compare_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    decoded = decode_x86_64_arg_narrow_movzx_imm8_compare(data)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    width = int(decoded["width"])
+    suffix = str(decoded["suffix"])
+    operator = str(decoded["operator"])
+    cast_type = str(decoded["castType"])
+    immediate_expr = f"0x{int(decoded['rawImmediate']):02x}u"
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 {cast_type} movzx immediate comparison pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"int {c_name}(unsigned int value) {{",
+            f"    return ({cast_type})value {operator} {immediate_expr};",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-uint{width}-{suffix}-movzx-imm8-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "registerArg": "edi",
+            "scratchRegister": "ecx",
+            "operator": operator,
+            "width": width,
+            "castType": cast_type,
+            "valueType": decoded["valueType"],
             "immediate": immediate_expr,
             "rawImmediate": int(decoded["rawImmediate"]),
             "setcc": decoded["setcc"],
