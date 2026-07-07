@@ -6249,6 +6249,119 @@ def stack_arg_nonzero_cmov_const_select_stdcall(row: dict[str, Any], c_name: str
     ]
 
 
+def decode_stack_arg_nonzero_const_select(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 17 or core[:7] != b"\x31\xc0\x83\x7c\x24\x04\x00" or core[7] != 0x0F or core[9:12] != b"\xc0\x8d\x04":
+        return None
+    setcc_opcode = core[8]
+    if setcc_opcode not in {0x94, 0x95}:
+        return None
+    sib = core[12]
+    if sib & 0x07 != 0x05 or ((sib >> 3) & 0x07) != 0x00:
+        return None
+    scale = 1 << ((sib >> 6) & 0x03)
+    if scale not in {2, 4, 8}:
+        return None
+    base_value = int.from_bytes(core[13:17], "little", signed=False)
+    scaled_value = base_value + scale
+    if setcc_opcode == 0x95:
+        false_value = base_value
+        true_value = scaled_value
+        setcc = "setne"
+    else:
+        false_value = scaled_value
+        true_value = base_value
+        setcc = "sete"
+    return {
+        "trueValue": true_value,
+        "falseValue": false_value,
+        "baseValue": base_value,
+        "scale": scale,
+        "setcc": setcc,
+        "pattern": f"xor-eax-cmp-stack4-zero-{setcc}-al-lea-eax-eax{scale}-disp32",
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_nonzero_const_select(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_nonzero_const_select(data, stdcall=False)
+    if decoded is None:
+        return []
+    true_value = int(decoded["trueValue"])
+    false_value = int(decoded["falseValue"])
+    source = header("stack-arg-nonzero-const-select-cdecl", row) + "\n".join(
+        [
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value != 0 ? 0x{true_value:08x}u : 0x{false_value:08x}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-nonzero-const-select-cdecl",
+            variant=f"cdecl-o2-stack-arg-nonzero-const-select-{decoded['scale']}-{decoded['setcc']}",
+            c_name=c_name,
+            symbol=cdecl_symbol(c_name),
+            source=source,
+            callconv="cdecl",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "valueType": "unsigned int",
+                "returnType": "unsigned int",
+                "trueValue": f"0x{true_value:08x}",
+                "falseValue": f"0x{false_value:08x}",
+                "baseValue": int(decoded["baseValue"]),
+                "scale": int(decoded["scale"]),
+                "setcc": decoded["setcc"],
+            },
+        )
+    ]
+
+
+def stack_arg_nonzero_const_select_stdcall(row: dict[str, Any], c_name: str, data: bytes) -> list[GeneratedCandidate]:
+    decoded = decode_stack_arg_nonzero_const_select(data, stdcall=True)
+    if decoded is None:
+        return []
+    true_value = int(decoded["trueValue"])
+    false_value = int(decoded["falseValue"])
+    source = header("stack-arg-nonzero-const-select-stdcall", row) + "\n".join(
+        [
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value != 0 ? 0x{true_value:08x}u : 0x{false_value:08x}u;",
+            "}",
+            "",
+        ]
+    )
+    return [
+        GeneratedCandidate(
+            rule="stack-arg-nonzero-const-select-stdcall",
+            variant=f"stdcall4-o2-stack-arg-nonzero-const-select-{decoded['scale']}-{decoded['setcc']}",
+            c_name=c_name,
+            symbol=f"_{c_name}@4",
+            source=source,
+            callconv="stdcall",
+            return_type="unsigned int",
+            evidence={
+                "pattern": decoded["pattern"],
+                "valueType": "unsigned int",
+                "returnType": "unsigned int",
+                "trueValue": f"0x{true_value:08x}",
+                "falseValue": f"0x{false_value:08x}",
+                "baseValue": int(decoded["baseValue"]),
+                "scale": int(decoded["scale"]),
+                "setcc": decoded["setcc"],
+                "stackBytes": 4,
+            },
+        )
+    ]
+
+
 I386_STACK_ARG_CONST_MIN_MAX_CMOV: dict[int, tuple[str, str, str, str, bool]] = {
     0x42: ("uint-min", "<", "unsigned int", "cmovb", False),
     0x43: ("uint-max", ">", "unsigned int", "cmovae", True),
@@ -17699,6 +17812,8 @@ GENERATORS = [
     stack_arg_signed_zero_compare_stdcall,
     stack_arg_neg_cmov,
     stack_arg_neg_cmov_stdcall,
+    stack_arg_nonzero_const_select,
+    stack_arg_nonzero_const_select_stdcall,
     stack_arg_nonzero_cmov_const_select,
     stack_arg_nonzero_cmov_const_select_stdcall,
     stack_arg_const_min_max,

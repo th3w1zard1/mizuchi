@@ -1814,6 +1814,8 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         stack_arg_signed_zero_compare_stdcall_candidate,
         stack_arg_neg_cmov_candidate,
         stack_arg_neg_cmov_stdcall_candidate,
+        stack_arg_nonzero_const_select_candidate,
+        stack_arg_nonzero_const_select_stdcall_candidate,
         stack_arg_nonzero_cmov_const_select_candidate,
         stack_arg_nonzero_cmov_const_select_stdcall_candidate,
         stack_arg_const_min_max_candidate,
@@ -9684,6 +9686,127 @@ def stack_arg_nonzero_cmov_const_select_stdcall_candidate(task: dict[str, Any], 
         },
         "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
             "stdcall stack argument nonzero cmov constant-select is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def decode_stack_arg_nonzero_const_select(data: bytes, *, stdcall: bool) -> dict[str, Any] | None:
+    body = strip_alignment_padding(data)
+    ret = b"\xc2\x04\x00" if stdcall else b"\xc3"
+    if not body.endswith(ret):
+        return None
+    core = body[: -len(ret)]
+    if len(core) != 17 or core[:7] != b"\x31\xc0\x83\x7c\x24\x04\x00" or core[7] != 0x0F or core[9:12] != b"\xc0\x8d\x04":
+        return None
+    setcc_opcode = core[8]
+    if setcc_opcode not in {0x94, 0x95}:
+        return None
+    sib = core[12]
+    if sib & 0x07 != 0x05 or ((sib >> 3) & 0x07) != 0x00:
+        return None
+    scale = 1 << ((sib >> 6) & 0x03)
+    if scale not in {2, 4, 8}:
+        return None
+    base_value = int.from_bytes(core[13:17], "little", signed=False)
+    scaled_value = base_value + scale
+    if setcc_opcode == 0x95:
+        false_value = base_value
+        true_value = scaled_value
+        setcc = "setne"
+    else:
+        false_value = scaled_value
+        true_value = base_value
+        setcc = "sete"
+    return {
+        "trueValue": true_value,
+        "falseValue": false_value,
+        "baseValue": base_value,
+        "scale": scale,
+        "setcc": setcc,
+        "pattern": f"xor-eax-cmp-stack4-zero-{setcc}-al-lea-eax-eax{scale}-disp32",
+        "stackBytes": 4 if stdcall else 0,
+    }
+
+
+def stack_arg_nonzero_const_select_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_nonzero_const_select(data, stdcall=False)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    true_value = int(decoded["trueValue"])
+    false_value = int(decoded["falseValue"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stack-argument nonzero constant-select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int {c_name}(unsigned int value) {{",
+            f"    return value != 0 ? 0x{true_value:08x}u : 0x{false_value:08x}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-nonzero-const-select-cdecl",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "trueValue": f"0x{true_value:08x}",
+            "falseValue": f"0x{false_value:08x}",
+            "baseValue": int(decoded["baseValue"]),
+            "scale": int(decoded["scale"]),
+            "setcc": decoded["setcc"],
+            "pattern": decoded["pattern"],
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stack argument nonzero constant-select is a canonical clang i386 O2 leaf pattern"
+        ),
+    }
+
+
+def stack_arg_nonzero_const_select_stdcall_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    decoded = decode_stack_arg_nonzero_const_select(data, stdcall=True)
+    if decoded is None:
+        return None
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    true_value = int(decoded["trueValue"])
+    false_value = int(decoded["falseValue"])
+    source = "\n".join(
+        [
+            "/*",
+            " * Automatically generated from an x86 stdcall stack-argument nonzero constant-select pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"unsigned int __stdcall {c_name}(unsigned int value) {{",
+            f"    return value != 0 ? 0x{true_value:08x}u : 0x{false_value:08x}u;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": "stack-arg-nonzero-const-select-stdcall",
+            "bodyBytes": len(strip_alignment_padding(data)),
+            "trueValue": f"0x{true_value:08x}",
+            "falseValue": f"0x{false_value:08x}",
+            "baseValue": int(decoded["baseValue"]),
+            "scale": int(decoded["scale"]),
+            "setcc": decoded["setcc"],
+            "pattern": decoded["pattern"],
+            "stackBytes": 4,
+        },
+        "compilerProfileHints": i386_clang_o2_leaf_compiler_profile_hint(
+            "stdcall stack argument nonzero constant-select is a canonical clang i386 O2 leaf pattern"
         ),
     }
 
