@@ -1727,6 +1727,7 @@ def generated_candidate_from_target_bytes(task: dict[str, Any], data: bytes | No
         x86_64_two_args_binary_op_candidate,
         x86_64_two_args_binary_op64_candidate,
         x86_64_two_args_min_max_candidate,
+        x86_64_two_args_min_max64_candidate,
         x86_64_arg_lea_multiply_candidate,
         x86_64_arg64_lea_multiply_candidate,
         x86_64_arg_const_min_max_candidate,
@@ -4690,6 +4691,56 @@ def x86_64_two_args_min_max_candidate(task: dict[str, Any], data: bytes) -> dict
             "rule": f"x86-64-{suffix}-two-args-cdecl",
             "bodyBytes": len(body),
             "registerArgs": ["edi", "esi"],
+            "operator": operator,
+            "valueType": value_type,
+            "cmov": cmov,
+            "pattern": pattern,
+            "framePointer": False,
+            "targetFormat": task.get("targetFormat"),
+        },
+        "compilerProfileHints": x86_64_o2_leaf_compiler_profile_hint(task, frame_pointer=False),
+    }
+
+
+X86_64_TWO_ARG_MIN_MAX_OPS64: dict[bytes, tuple[str, str, str, str, str]] = {
+    b"\x48\x89\xf0\x48\x39\xf7\x48\x0f\x42\xc7\xc3": ("uint64-min", "<", "unsigned long long", "cmovb", "mov-rax-rsi-cmp-rdi-rsi-cmovb-rax-rdi-ret"),
+    b"\x48\x89\xf0\x48\x39\xf7\x48\x0f\x47\xc7\xc3": ("uint64-max", ">", "unsigned long long", "cmova", "mov-rax-rsi-cmp-rdi-rsi-cmova-rax-rdi-ret"),
+    b"\x48\x89\xf0\x48\x39\xf7\x48\x0f\x4c\xc7\xc3": ("int64-min", "<", "long long", "cmovl", "mov-rax-rsi-cmp-rdi-rsi-cmovl-rax-rdi-ret"),
+    b"\x48\x89\xf0\x48\x39\xf7\x48\x0f\x4f\xc7\xc3": ("int64-max", ">", "long long", "cmovg", "mov-rax-rsi-cmp-rdi-rsi-cmovg-rax-rdi-ret"),
+}
+
+
+def x86_64_two_args_min_max64_candidate(task: dict[str, Any], data: bytes) -> dict[str, Any] | None:
+    if not is_x86_64_task(task):
+        return None
+    body = strip_alignment_padding(data)
+    decoded = X86_64_TWO_ARG_MIN_MAX_OPS64.get(body)
+    if decoded is None:
+        return None
+    suffix, operator, value_type, cmov, pattern = decoded
+    c_name = c_identifier(str(task.get("name") or "recovered_function"))
+    source = "\n".join(
+        [
+            "/*",
+            f" * Automatically generated from an x86_64 64-bit two-argument {suffix} cmov pattern.",
+            f" * Target: {task.get('name')} at {task.get('address')}.",
+            " * This is an unverified semantic candidate; acceptance requires compiler/object comparison.",
+            " */",
+            f"{value_type} {c_name}({value_type} a, {value_type} b) {{",
+            f"    return a {operator} b ? a : b;",
+            "}",
+            "",
+        ]
+    )
+    return {
+        "source": source,
+        "extension": "c",
+        "language": "c",
+        "origin": "automatic x86_64 byte-pattern lift from target slice; not manually authored",
+        "generator": {
+            "rule": f"x86-64-{suffix}-two-args-cdecl",
+            "bodyBytes": len(body),
+            "registerArgs": ["rdi", "rsi"],
             "operator": operator,
             "valueType": value_type,
             "cmov": cmov,
